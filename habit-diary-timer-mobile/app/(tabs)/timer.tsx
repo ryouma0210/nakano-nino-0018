@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
 import { useTimerController } from "@/hooks/useTimerController";
@@ -29,7 +30,9 @@ export default function TimerScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">集中の部屋</AppText>
+      <AppText variant="title">お仕置き部屋</AppText>
+
+      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" lines={[{ text: "時間を決めるわ。プリセットを選んで。" }, { text: "開始したら、終わるまで集中しなさい。", event: "COUNTDOWN" }, { text: "完了した時間は履歴に残しておくわ。" }]} />
 
       <Card>
         <AppText variant="label">{timer.preset?.name ?? "プリセットを選択"}</AppText>

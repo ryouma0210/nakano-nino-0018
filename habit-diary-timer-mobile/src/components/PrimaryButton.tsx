@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet } from "react-native";
 import { AppText } from "./AppText";
-import { lightTheme } from "@/constants/theme";
 
 type Props = {
   title: string;
@@ -21,7 +20,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         pressed && !disabled && styles.pressed,
       ]}
     >
-      <AppText style={styles.text}>{title}</AppText>
+      <AppText style={[styles.text, tone === "danger" && styles.dangerText]}>{title}</AppText>
     </Pressable>
   );
 }
@@ -31,17 +30,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 46,
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 4,
     paddingHorizontal: 16,
   },
   primary: {
-    backgroundColor: lightTheme.primary,
+    backgroundColor: "#000",
   },
   secondary: {
-    backgroundColor: lightTheme.accent,
+    backgroundColor: "#000",
   },
   danger: {
-    backgroundColor: lightTheme.danger,
+    backgroundColor: "#000",
   },
   disabled: {
     opacity: 0.45,
@@ -52,5 +53,8 @@ const styles = StyleSheet.create({
   text: {
     color: "#fff",
     fontWeight: "800",
+  },
+  dangerText: {
+    color: "#ff3b45",
   },
 });

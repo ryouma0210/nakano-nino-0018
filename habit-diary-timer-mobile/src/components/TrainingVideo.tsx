@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { AppText } from "@/components/AppText";
+import { PrimaryButton } from "@/components/PrimaryButton";
+import { lightTheme } from "@/constants/theme";
+import { secondsToClock } from "@/utils/date";
+
+const source = require("../../assets/videos/habits_1.mp4");
+
+const modes = [
+  { key: "easy", label: "イージー", rate: 0.75 },
+  { key: "normal", label: "ノーマル", rate: 1 },
+  { key: "hard", label: "ハード", rate: 1.5 },
+] as const;
+
+type TrainingMode = (typeof modes)[number]["key"];
+
+export type TrainingResult = {
+  elapsedSeconds: number;
+  difficulty: string;
+};
+
+export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingResult) => void }) {
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [trackWidth, setTrackWidth] = useState(1);
+  const [mode, setMode] = useState<TrainingMode>("normal");
+  const elapsedMilliseconds = useRef(0);
+  const lastTick = useRef(0);
+  const player = useVideoPlayer(source, (instance) => {
+    instance.loop = true;
+  });
+
+  useEffect(() => {
+    lastTick.current = Date.now();
+    const timer = setInterval(() => {
+      const now = Date.now();
+      if (player.playing) elapsedMilliseconds.current += now - lastTick.current;
+      lastTick.current = now;
+      setCurrentTime(player.currentTime || 0);
+      setDuration(player.duration || 0);
+      setPlaying(player.playing);
+    }, 50);
+    return () => clearInterval(timer);
+  }, [player]);
+
+  useEffect(() => {
+    const selected = modes.find((item) => item.key === mode) ?? modes[1];
+    // expo-video exposes playbackRate as a mutable native-player property.
+    // eslint-disable-next-line react-hooks/immutability
+    player.playbackRate = selected.rate;
+  }, [mode, player]);
+
+  function togglePlayback() {
+    if (!started) return;
+    if (player.playing) player.pause();
+    else player.play();
+  }
+
+  function startTraining() {
+    elapsedMilliseconds.current = 0;
+    lastTick.current = Date.now();
+    setStarted(true);
+    player.play();
+    setPlaying(true);
+  }
+
+  function completeTraining() {
+    if (!started) return;
+    player.pause();
+    setPlaying(false);
+    const selected = modes.find((item) => item.key === mode) ?? modes[1];
+    onComplete({
+      elapsedSeconds: Math.max(1, Math.floor(elapsedMilliseconds.current / 1000)),
+      difficulty: selected.label,
+    });
+  }
+
+  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
+  const markerCount = 5;
+
+  return (
+    <View style={styles.wrap}>
+      <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
+      <View style={styles.modePanel}>
+        <AppText style={styles.modeLabel}>MODE / SPEED</AppText>
+        <View style={styles.modeButtons}>
+          {modes.map((item) => {
+            const selected = item.key === mode;
+            return (
+              <Pressable
+                key={item.key}
+                disabled={started}
+                onPress={() => setMode(item.key)}
+                style={[styles.modeButton, selected && styles.modeButtonSelected, started && !selected && styles.modeButtonDisabled]}
+              >
+                <AppText style={[styles.modeButtonText, selected && styles.modeButtonTextSelected]}>{item.label}</AppText>
+                <AppText style={[styles.rateText, selected && styles.modeButtonTextSelected]}>×{item.rate}</AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+        {!started ? (
+          <>
+            <AppText variant="muted">難易度を選択してから開始してください。</AppText>
+            <PrimaryButton title="調教開始" onPress={startTraining} />
+          </>
+        ) : (
+          <AppText style={styles.startedText}>調教中 / 難易度は変更できません</AppText>
+        )}
+      </View>
+      <View style={styles.rhythmFrame}>
+        <View style={styles.rhythmTitle}>
+          <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
+          <AppText style={styles.rhythmSubText}>赤いポイントで消滅</AppText>
+        </View>
+        <View
+          accessibilityLabel="動画に同期したリズムゲージ"
+          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+          style={styles.track}
+        >
+          <View style={styles.line} />
+          <View style={styles.hitGlow} />
+          <View style={styles.hitPoint} />
+          {Array.from({ length: markerCount }, (_, index) => {
+            const phase = (progress + index / markerCount) % 1;
+            const travelWidth = Math.max(0, trackWidth - 46);
+            const left = 26 + (1 - phase) * travelWidth;
+            const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
+            return <View key={index} style={[styles.rhythmMarker, { left, opacity }]} />;
+          })}
+        </View>
+      </View>
+      <View style={styles.controls}>
+        <Pressable disabled={!started} onPress={togglePlayback} style={[styles.playButton, !started && styles.controlDisabled]}>
+          <AppText style={styles.playText}>{!started ? "開始待ち" : playing ? "一時停止" : "再生"}</AppText>
+        </Pressable>
+        <AppText variant="muted">{secondsToClock(currentTime)} / {secondsToClock(duration)}</AppText>
+      </View>
+      {started ? <View style={styles.completeButton}><PrimaryButton title="射精しました" tone="danger" onPress={completeTraining} /></View> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { overflow: "hidden", borderWidth: 1, borderColor: "#fff", borderRadius: 4, backgroundColor: "#000" },
+  video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
+  modePanel: { gap: 7, paddingHorizontal: 14, paddingTop: 14 },
+  modeLabel: { color: lightTheme.muted, fontSize: 10, fontWeight: "900", letterSpacing: 2 },
+  modeButtons: { flexDirection: "row", gap: 7 },
+  modeButton: { flex: 1, alignItems: "center", borderWidth: 1, borderColor: "#777", paddingHorizontal: 4, paddingVertical: 8, backgroundColor: "#050505" },
+  modeButtonSelected: { borderColor: "#fff", backgroundColor: lightTheme.danger },
+  modeButtonDisabled: { opacity: 0.38 },
+  modeButtonText: { color: lightTheme.muted, fontSize: 12, fontWeight: "900" },
+  modeButtonTextSelected: { color: "#fff" },
+  rateText: { color: "#777", fontSize: 9, fontWeight: "800" },
+  startedText: { color: lightTheme.danger, fontSize: 11, fontWeight: "900", textAlign: "center" },
+  rhythmFrame: { marginHorizontal: 14, marginTop: 14, borderWidth: 1, borderColor: "#777", backgroundColor: "#151515" },
+  rhythmTitle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 9, paddingTop: 6 },
+  rhythmTitleText: { color: "#fff", fontSize: 11, fontWeight: "900", letterSpacing: 2 },
+  rhythmSubText: { color: lightTheme.muted, fontSize: 9 },
+  track: { overflow: "hidden", height: 44, justifyContent: "center", marginHorizontal: 8 },
+  line: { position: "absolute", right: 10, left: 20, height: 3, backgroundColor: "#ddd" },
+  hitGlow: { position: "absolute", left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,47,47,0.22)" },
+  hitPoint: { position: "absolute", left: 16, width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#ffb0a5", backgroundColor: "#ed3b35", zIndex: 3 },
+  rhythmMarker: { position: "absolute", width: 18, height: 18, marginLeft: -9, borderRadius: 9, borderWidth: 2, borderColor: "#fff1a3", backgroundColor: "#f1c84b", zIndex: 2 },
+  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14 },
+  completeButton: { paddingHorizontal: 14, paddingBottom: 14 },
+  playButton: { minWidth: 86, alignItems: "center", borderWidth: 1, borderColor: "#fff", paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#000" },
+  controlDisabled: { opacity: 0.4 },
+  playText: { fontWeight: "800" },
+});

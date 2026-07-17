@@ -1,21 +1,27 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
+import { TrainingVideo, type TrainingResult } from "@/components/TrainingVideo";
 import { lightTheme } from "@/constants/theme";
 import { habitRepository } from "@/repositories/habitRepository";
+import { journalRepository } from "@/repositories/journalRepository";
 import { habitFormSchema, type HabitFormValues } from "@/schemas/forms";
 import type { HabitWithToday } from "@/types/models";
+import { formatDateJa, toDateKey } from "@/utils/date";
 
 export default function HabitsScreen() {
   const [habits, setHabits] = useState<HabitWithToday[]>([]);
   const [formVisible, setFormVisible] = useState(false);
   const [selectedHabit, setSelectedHabit] = useState<HabitWithToday | null>(null);
+  const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
   const form = useForm<HabitFormValues>({
     resolver: zodResolver(habitFormSchema) as never,
     defaultValues: {
@@ -63,12 +69,28 @@ export default function HabitsScreen() {
     ]);
   }
 
+  function completeTraining(result: TrainingResult) {
+    const recordDate = toDateKey();
+    journalRepository.create({
+      recordDate,
+      title: "調教完了記録",
+      body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒`,
+      recordType: "diary",
+      tags: `調教,完了,射精記録,${result.difficulty}`,
+    });
+    setTrainingResult(result);
+  }
+
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText variant="title">習慣の部屋</AppText>
+        <AppText variant="title">調教部屋</AppText>
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
+
+      <RoomConversation roomName="調教部屋" lines={[{ text: "今日の課題を確認するわ。続けるものを選んで。" }, { text: "達成した課題は、忘れずに記録して。", event: "DAILY TRAINING" }, { text: "積み重ねた日数は、あなたが続けた証拠よ。" }]} />
+
+      <TrainingVideo onComplete={completeTraining} />
 
       {habits.map((habit) => {
         const streak = habitRepository.streak(habit.id);
@@ -164,6 +186,35 @@ export default function HabitsScreen() {
           ) : null}
         </Screen>
       </Modal>
+
+      <Modal visible={trainingResult !== null} animationType="fade" transparent statusBarTranslucent>
+        <View style={styles.completeBackdrop}>
+          <View style={styles.completeDialog}>
+            <AppText style={styles.completeEvent}>TRAINING COMPLETE</AppText>
+            <View style={styles.completePortrait}>
+              <View style={styles.completeHair} />
+              <View style={styles.completeFace} />
+            </View>
+            <AppText variant="subtitle">ニノ</AppText>
+            <AppText style={styles.completeMessage}>お疲れさま。今日の調教はここまでよ。ちゃんと記録しておくわ。</AppText>
+            <View style={styles.resultBox}>
+              <AppText variant="label">タイトル</AppText>
+              <AppText>調教完了記録</AppText>
+              <AppText variant="label">実施日</AppText>
+              <AppText>{formatDateJa(toDateKey())}</AppText>
+              <AppText variant="label">難易度</AppText>
+              <AppText>{trainingResult?.difficulty ?? "-"}</AppText>
+              <AppText variant="label">秒数</AppText>
+              <AppText style={styles.resultSeconds}>{trainingResult?.elapsedSeconds ?? 0}秒</AppText>
+              <AppText variant="muted">調教日記へ保存しました。</AppText>
+            </View>
+            <PrimaryButton title="ホームへ戻る" onPress={() => {
+              setTrainingResult(null);
+              router.replace("/(tabs)");
+            }} />
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -218,5 +269,70 @@ const styles = StyleSheet.create({
   graphBar: {
     height: 14,
     backgroundColor: lightTheme.primary,
+  },
+  completeBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "rgba(0,0,0,0.88)",
+  },
+  completeDialog: {
+    width: "100%",
+    maxWidth: 420,
+    alignItems: "center",
+    gap: 14,
+    borderWidth: 1,
+    borderColor: "#fff",
+    padding: 22,
+    backgroundColor: "#080808",
+  },
+  completeEvent: {
+    color: lightTheme.danger,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+  completePortrait: {
+    overflow: "hidden",
+    alignItems: "center",
+    width: 92,
+    height: 92,
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 46,
+    backgroundColor: "#1a1a1a",
+  },
+  completeHair: {
+    width: 72,
+    height: 58,
+    marginTop: 12,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    backgroundColor: "#d96d9d",
+  },
+  completeFace: {
+    width: 54,
+    height: 44,
+    marginTop: -35,
+    borderRadius: 24,
+    backgroundColor: "#ead0c2",
+  },
+  completeMessage: {
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  resultBox: {
+    width: "100%",
+    gap: 5,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#555",
+    paddingVertical: 12,
+  },
+  resultSeconds: {
+    color: lightTheme.danger,
+    fontSize: 26,
+    fontWeight: "900",
   },
 });
