@@ -64,3 +64,42 @@ jobs:
           name: habit-diary-timer-mobile-${{ github.ref_name }}-apk
           path: habit-diary-timer-mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+        working-directory: .
+
+      - name: Configure Google Drive upload
+        env:
+          RCLONE_CONFIG_BASE64: ${{ secrets.GDRIVE_RCLONE_CONFIG_BASE64 }}
+        run: |
+          if [ -z "$RCLONE_CONFIG_BASE64" ]; then
+            echo "GDRIVE_RCLONE_CONFIG_BASE64 is not configured."
+            exit 1
+          fi
+          mkdir -p "$HOME/.config/rclone"
+          echo "$RCLONE_CONFIG_BASE64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
+          chmod 600 "$HOME/.config/rclone/rclone.conf"
+        working-directory: .
+
+      - name: Select Google Drive destination
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "production" ]; then
+            echo "DRIVE_FOLDER_ID=11PgZdY2yScfPDu7UWO3MBRzF8-mwRdLX" >> "$GITHUB_ENV"
+            echo "DEPLOY_ENV=prd" >> "$GITHUB_ENV"
+          else
+            echo "DRIVE_FOLDER_ID=1it-Cj6d5LrjBNNM1FuGIakm23b5b5_4w" >> "$GITHUB_ENV"
+            echo "DEPLOY_ENV=stg" >> "$GITHUB_ENV"
+          fi
+        working-directory: .
+
+      - name: Upload APK to Google Drive
+        shell: bash
+        run: |
+          APK="habit-diary-timer-mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          rclone copyto "$APK" "gdrive:nino-${DEPLOY_ENV}.apk" \
+            --drive-root-folder-id "$DRIVE_FOLDER_ID" \
+            --progress
+        working-directory: .

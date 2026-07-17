@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Image, type ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
 import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 export type ConversationLine = {
   text: string;
@@ -21,11 +22,13 @@ const defaultLines: ConversationLine[] = [
 ];
 
 export function RoomConversation({ roomName, lines = defaultLines, characterSource }: Props) {
+  const { playEffect } = useAppAudio();
   const [index, setIndex] = useState(0);
   const current = lines[index];
   const isLast = index === lines.length - 1;
 
   function next() {
+    playEffect("dialogue");
     setIndex((value) => value >= lines.length - 1 ? 0 : value + 1);
   }
 
