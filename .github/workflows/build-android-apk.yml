@@ -54,15 +54,15 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Build standalone release APK
+        run: ./gradlew assembleRelease
         working-directory: habit-diary-timer-mobile/android
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: habit-diary-timer-mobile-${{ github.ref_name }}-apk
-          path: habit-diary-timer-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: habit-diary-timer-mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
       - name: Install rclone
@@ -98,7 +98,7 @@ jobs:
       - name: Upload APK to Google Drive
         shell: bash
         run: |
-          APK="habit-diary-timer-mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          APK="habit-diary-timer-mobile/android/app/build/outputs/apk/release/app-release.apk"
           rclone copyto "$APK" "gdrive:nino-${DEPLOY_ENV}.apk" \
             --drive-root-folder-id "$DRIVE_FOLDER_ID" \
             --progress
