@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "習慣・記録・タイマー",
+    "slug": "habit-diary-timer-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "habitdiarytimer",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-notifications"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "jp.local.habitdiarytimer"
+    },
+    "android": {
+      "package": "jp.local.habitdiarytimer",
+      "adaptiveIcon": {
+        "backgroundColor": "#eef7f1"
+      },
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "local-only"
+      }
+    }
+  }
+}

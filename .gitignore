@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+.expo-test/
+dist/
+build/
+.env
+.env.*
+
+# Incomplete scaffold created before the final app folder.
+habit-diary-timer-app/
