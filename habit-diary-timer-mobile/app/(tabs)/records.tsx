@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
@@ -97,9 +98,11 @@ export default function RecordsScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText variant="title">日記の部屋</AppText>
+        <AppText variant="title">調教日記部屋</AppText>
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
+
+      <RoomConversation roomName="調教日記部屋" lines={[{ text: "今日あったことを、ここに残して。" }, { text: "気持ちも評価も、正直に書けばいいわ。", event: "DIARY TIME" }, { text: "過去の記録は、いつでも読み返せるわよ。" }]} />
 
       <TextField label="検索" value={keyword} onChangeText={setKeyword} placeholder="タイトル・本文・タグ" />
 

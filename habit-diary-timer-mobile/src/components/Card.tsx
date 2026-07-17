@@ -11,7 +11,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 1,
     borderColor: lightTheme.border,
-    borderRadius: 10,
+    borderRadius: 4,
     padding: 14,
     backgroundColor: lightTheme.surface,
   },

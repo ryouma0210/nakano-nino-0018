@@ -12,7 +12,7 @@ export function TextField({ label, error, style, ...props }: Props) {
     <View style={styles.wrap}>
       <AppText variant="label">{label}</AppText>
       <TextInput
-        placeholderTextColor="#8a9994"
+        placeholderTextColor="#777"
         {...props}
         style={[styles.input, props.multiline && styles.multiline, style]}
       />
@@ -29,9 +29,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderWidth: 1,
     borderColor: lightTheme.border,
-    borderRadius: 8,
+    borderRadius: 4,
     paddingHorizontal: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#080808",
     color: lightTheme.text,
     fontSize: 15,
   },

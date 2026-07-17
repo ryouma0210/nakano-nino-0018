@@ -1,38 +1,22 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { lightTheme } from "@/constants/theme";
-
-const iconMap = {
-  index: "home-outline",
-  habits: "checkbox-outline",
-  records: "book-outline",
-  timer: "timer-outline",
-  settings: "settings-outline",
-} as const;
 
 export default function TabLayout() {
   return (
     <Tabs
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: lightTheme.primary,
-        tabBarInactiveTintColor: lightTheme.muted,
-        tabBarStyle: {
-          minHeight: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
-          borderTopColor: lightTheme.border,
-        },
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name={iconMap[route.name as keyof typeof iconMap]} size={size} color={color} />
-        ),
-      })}
+        tabBarStyle: { display: "none" },
+      }}
     >
       <Tabs.Screen name="index" options={{ title: "ホーム" }} />
-      <Tabs.Screen name="habits" options={{ title: "習慣の部屋" }} />
-      <Tabs.Screen name="records" options={{ title: "日記の部屋" }} />
-      <Tabs.Screen name="timer" options={{ title: "集中の部屋" }} />
-      <Tabs.Screen name="settings" options={{ title: "準備の部屋" }} />
+      <Tabs.Screen name="habits" options={{ title: "調教部屋" }} />
+      <Tabs.Screen name="records" options={{ title: "調教日記部屋" }} />
+      <Tabs.Screen name="timer" options={{ title: "お仕置き部屋" }} />
+      <Tabs.Screen name="preparation" options={{ title: "準備部屋" }} />
+      <Tabs.Screen name="release" options={{ title: "射精管理用部屋（貞操帯なし）" }} />
+      <Tabs.Screen name="chastity" options={{ title: "射精管理用部屋（貞操帯あり）" }} />
+      <Tabs.Screen name="files" options={{ title: "ファイル格納部屋" }} />
+      <Tabs.Screen name="settings" options={{ title: "設定" }} />
     </Tabs>
   );
 }
