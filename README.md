@@ -260,9 +260,9 @@ GitHubでの操作:
 3. `Build Android APK` を選択する。
 4. 自動実行されていない場合は `Run workflow` を押し、対象ブランチに `stg` または `production` を選ぶ。
 5. 実行完了後、画面下部の `Artifacts` から `habit-diary-timer-mobile-stg-apk` または `habit-diary-timer-mobile-production-apk` をダウンロードする。
-6. ZIPを展開し、`app-debug.apk` をAndroid端末へ入れる。
+6. ZIPを展開し、`app-release.apk` をAndroid端末へ入れる。
 
-このAPKは動作確認用のDebug APKです。
+このAPKはJavaScript bundleを同梱した単体起動可能なRelease APKです。
 Android端末へ入れる場合は、端末側で提供元不明アプリのインストール許可が必要です。
 
 GitHub Actionsは次のファイルで管理します。
