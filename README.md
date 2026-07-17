@@ -27,6 +27,29 @@ habit-diary-timer-mobile/
 - AndroidはAPK、iPhoneはTestFlight配布を想定します。
 - READMEはこの外側のファイルに集約し、各フォルダごとのREADMEは作成しません。
 
+## ブランチ運用
+
+| ブランチ | 用途 | APK作成 |
+|---|---|---|
+| `main` | ローカル開発用 | なし |
+| `stg` | STG確認用 | push時にGitHub Actionsで作成 |
+| `production` | 本番確認・配布用 | push時にGitHub Actionsで作成 |
+
+通常は `main` で開発します。
+STG確認する場合は `main` の内容を `stg` へ反映します。
+本番確認・配布する場合は確認済みの内容を `production` へ反映します。
+
+```powershell
+git checkout main
+git pull origin main
+git checkout stg
+git merge main
+git push origin stg
+```
+
+`stg` または `production` にpushすると、GitHub Actionsの `Build Android APK` が実行されます。
+`main` にpushしてもAPKは作成されません。
+
 ## 使用技術
 
 | 区分 | 内容 |
@@ -197,16 +220,16 @@ Android / iOS のビルド番号を運用する場合は、`android.versionCode`
 
 ### 3. APK作成
 
-APK確認は、まずGitHub Actionsで作成します。
-GitHub上でビルドを実行し、完了後にArtifactsからAPKをダウンロードできます。
+APK確認は、GitHub Actionsで作成します。
+`stg` または `production` にpushするとビルドが実行され、完了後にArtifactsからAPKをダウンロードできます。
 
 GitHubでの操作:
 
 1. GitHubのリポジトリを開く。
 2. `Actions` を開く。
 3. `Build Android APK` を選択する。
-4. `Run workflow` を押す。
-5. 実行完了後、画面下部の `Artifacts` から `habit-diary-timer-mobile-debug-apk` をダウンロードする。
+4. 自動実行されていない場合は `Run workflow` を押し、対象ブランチに `stg` または `production` を選ぶ。
+5. 実行完了後、画面下部の `Artifacts` から `habit-diary-timer-mobile-stg-apk` または `habit-diary-timer-mobile-production-apk` をダウンロードする。
 6. ZIPを展開し、`app-debug.apk` をAndroid端末へ入れる。
 
 このAPKは動作確認用のDebug APKです。
