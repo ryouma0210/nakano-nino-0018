@@ -11,13 +11,23 @@ type Props = {
 export function RoomCard({ room }: Props) {
   return (
     <Pressable onPress={() => router.push(room.href)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      <View style={[styles.ribbon, { backgroundColor: room.accent }]}>
+        <AppText style={styles.ribbonText}>LOCATION</AppText>
+      </View>
       <View style={[styles.roomScene, { backgroundColor: room.color }]}>
+        <View style={styles.wallPattern}>
+          <View style={[styles.wallLine, { backgroundColor: room.accent }]} />
+          <View style={[styles.wallLineSmall, { backgroundColor: room.accent }]} />
+        </View>
         <View style={[styles.window, { borderColor: room.accent }]} />
         <Furniture room={room} />
         <View style={[styles.floor, { backgroundColor: room.floor }]} />
       </View>
       <View style={styles.body}>
-        <AppText variant="subtitle">{room.name}</AppText>
+        <View style={styles.titleRow}>
+          <AppText variant="subtitle">{room.name}</AppText>
+          <AppText style={[styles.enterBadge, { borderColor: room.accent, color: room.accent }]}>入室</AppText>
+        </View>
         <AppText style={styles.roomTitle}>{room.title}</AppText>
         <AppText variant="muted">{room.description}</AppText>
       </View>
@@ -67,10 +77,15 @@ function Furniture({ room }: { room: AppRoom }) {
 const styles = StyleSheet.create({
   card: {
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: lightTheme.border,
-    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: lightTheme.primaryDark,
+    borderRadius: 18,
     backgroundColor: lightTheme.surface,
+    shadowColor: lightTheme.primaryDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
   },
   pressed: {
     transform: [{ scale: 0.99 }],
@@ -78,6 +93,40 @@ const styles = StyleSheet.create({
   roomScene: {
     minHeight: 132,
     padding: 14,
+  },
+  ribbon: {
+    position: "absolute",
+    top: 12,
+    left: -34,
+    zIndex: 2,
+    width: 132,
+    alignItems: "center",
+    paddingVertical: 4,
+    transform: [{ rotate: "-35deg" }],
+  },
+  ribbonText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  wallPattern: {
+    position: "absolute",
+    right: 18,
+    top: 14,
+    opacity: 0.26,
+  },
+  wallLine: {
+    width: 86,
+    height: 8,
+    borderRadius: 4,
+  },
+  wallLineSmall: {
+    width: 54,
+    height: 8,
+    marginTop: 8,
+    marginLeft: 32,
+    borderRadius: 4,
   },
   window: {
     width: 48,
@@ -159,6 +208,21 @@ const styles = StyleSheet.create({
   body: {
     gap: 6,
     padding: 14,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  enterBadge: {
+    overflow: "hidden",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    fontSize: 12,
+    fontWeight: "900",
   },
   roomTitle: {
     color: lightTheme.primaryDark,

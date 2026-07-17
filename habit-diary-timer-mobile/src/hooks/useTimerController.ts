@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { timerRepository } from "@/repositories/timerRepository";
 import { notificationService } from "@/services/notificationService";
@@ -38,7 +37,6 @@ export function useTimerController() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     if (currentPreset.sound_enabled) {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true }).catch(() => undefined);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   }

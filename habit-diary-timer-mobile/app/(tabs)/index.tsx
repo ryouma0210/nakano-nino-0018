@@ -4,6 +4,8 @@ import * as Haptics from "expo-haptics";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
+import { CharacterPanel } from "@/components/CharacterPanel";
+import { EventRouteStrip } from "@/components/EventRouteStrip";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomCard } from "@/components/RoomCard";
 import { Screen } from "@/components/Screen";
@@ -49,11 +51,20 @@ export default function HomeScreen() {
     <Screen>
       <View style={styles.header}>
         <View>
-          <AppText variant="title">ホーム</AppText>
+          <AppText variant="title">Nino Room</AppText>
           <AppText variant="muted">{formatDateJa(toDateKey())}</AppText>
         </View>
         <AppText style={styles.percent}>{achievementRate}%</AppText>
       </View>
+
+      <CharacterPanel
+        achievementRate={achievementRate}
+        completedCount={completedCount}
+        totalHabits={habits.length}
+        journalCount={todayJournalCount}
+      />
+
+      <EventRouteStrip progress={achievementRate} />
 
       <View style={styles.summaryGrid}>
         <Card>
@@ -72,8 +83,8 @@ export default function HomeScreen() {
 
       <View style={styles.roomSection}>
         <View>
-          <AppText variant="subtitle">部屋</AppText>
-          <AppText variant="muted">今日行きたい部屋を選んでください。</AppText>
+          <AppText variant="subtitle">行き先を選択</AppText>
+          <AppText variant="muted">シミュレーションゲームの場所選択のように、部屋から行動を選びます。</AppText>
         </View>
         {appRooms.map((room) => (
           <RoomCard key={room.key} room={room} />
