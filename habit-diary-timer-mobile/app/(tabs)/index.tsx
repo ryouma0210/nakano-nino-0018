@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
 
@@ -24,6 +25,15 @@ export default function HomeScreen() {
         <AppText variant="title">ホーム</AppText>
         <View style={styles.rule} />
       </View>
+      <RoomConversation
+        characterSource={require("../../assets/characters/home-nino.png")}
+        roomName="ホーム"
+        lines={[
+          { text: "おかえりなさい。今日はどの部屋へ行く？" },
+          { text: "準備ができたら、行き先を選んで。", event: "ROOM SELECT" },
+          { text: "あなたの記録は、私がここで見守っているわ。" },
+        ]}
+      />
       <View style={styles.rooms}>
         {rooms.map(([title, href], index) => (
           <View key={href} style={styles.roomRow}>

@@ -50,6 +50,36 @@ git push origin stg
 `stg` または `production` にpushすると、GitHub Actionsの `Build Android APK` が実行されます。
 `main` にpushしてもAPKは作成されません。
 
+ビルドしたAPKはGitHub ActionsのArtifactに加えて、Google Driveへ自動保存します。
+
+| ブランチ | Google Drive保存先 | APK名 |
+|---|---|---|
+| `stg` | `PC共有/Nino/STG` | `nino-stg.apk` |
+| `production` | `PC共有/Nino/PRD` | `nino-prd.apk` |
+
+各フォルダのAPKはビルドのたびに同じファイル名で上書きします。履歴用APKは作成しません。
+
+### Google Drive自動アップロードの初期設定
+
+GitHub ActionsからGoogle Driveへ接続するため、最初に一度だけrcloneの認証設定が必要です。
+
+1. PCへ[rclone](https://rclone.org/downloads/)をインストールする。
+2. `rclone config`を実行する。
+3. Google Driveのremoteを`gdrive`という名前で作成する。
+4. 作成された`rclone.conf`をBase64文字列へ変換する。
+5. GitHubリポジトリの`Settings > Secrets and variables > Actions`を開く。
+6. `GDRIVE_RCLONE_CONFIG_BASE64`というRepository secretへBase64文字列を登録する。
+
+Windows PowerShellでBase64文字列をクリップボードへコピーする例:
+
+```powershell
+$configPath = "$env:APPDATA\rclone\rclone.conf"
+$bytes = [System.IO.File]::ReadAllBytes($configPath)
+[Convert]::ToBase64String($bytes) | Set-Clipboard
+```
+
+Secretが未設定の場合、APKビルド後のDriveアップロード工程はエラーになります。
+
 ## 使用技術
 
 | 区分 | 内容 |

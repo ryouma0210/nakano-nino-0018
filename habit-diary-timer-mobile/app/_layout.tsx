@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { initializeDatabase } from "@/database/schema";
 import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/AppText";
+import { AudioProvider } from "@/audio/AudioProvider";
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -45,8 +46,10 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="auto" />
-        <Stack screenOptions={{ headerShown: false }} />
+        <AudioProvider>
+          <StatusBar style="light" />
+          <Stack screenOptions={{ headerShown: false }} />
+        </AudioProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet } from "react-native";
 import { AppText } from "./AppText";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 type Props = {
   title: string;
@@ -9,10 +10,15 @@ type Props = {
 };
 
 export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Props) {
+  const { playEffect } = useAppAudio();
+  function press() {
+    playEffect("button");
+    onPress();
+  }
   return (
     <Pressable
       disabled={disabled}
-      onPress={onPress}
+      onPress={press}
       style={({ pressed }) => [
         styles.button,
         styles[tone],

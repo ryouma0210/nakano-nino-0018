@@ -28,7 +28,7 @@ export default function FilesScreen() {
   return (
     <Screen>
       <AppText variant="title">ファイル格納部屋</AppText>
-      <RoomConversation roomName="ファイル格納部屋" lines={[{ text: "残しておきたいファイルは、ここへ格納して。" }, { text: "不要になったものは選んで削除できるわ。", event: "FILE STORAGE" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/files-nino.png")} roomName="ファイル格納部屋" lines={[{ text: "残しておきたいファイルは、ここへ格納して。" }, { text: "不要になったものは選んで削除できるわ。", event: "FILE STORAGE" }]} />
       <PrimaryButton title="ファイルを格納" onPress={upload} />
       <AppText variant="muted">使用量 {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}</AppText>
       {files.length === 0 ? <Card><AppText variant="muted">格納されたファイルはありません。</AppText></Card> : null}

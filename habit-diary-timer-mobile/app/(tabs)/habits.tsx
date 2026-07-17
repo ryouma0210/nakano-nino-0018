@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -16,12 +16,15 @@ import { journalRepository } from "@/repositories/journalRepository";
 import { habitFormSchema, type HabitFormValues } from "@/schemas/forms";
 import type { HabitWithToday } from "@/types/models";
 import { formatDateJa, toDateKey } from "@/utils/date";
+import { fileStorageService, type StoredFile } from "@/services/fileStorageService";
 
 export default function HabitsScreen() {
   const [habits, setHabits] = useState<HabitWithToday[]>([]);
   const [formVisible, setFormVisible] = useState(false);
   const [selectedHabit, setSelectedHabit] = useState<HabitWithToday | null>(null);
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
+  const [trainingImages, setTrainingImages] = useState<StoredFile[]>([]);
+  const [mediaMode, setMediaMode] = useState<"default" | "slides">("default");
   const form = useForm<HabitFormValues>({
     resolver: zodResolver(habitFormSchema) as never,
     defaultValues: {
@@ -42,6 +45,13 @@ export default function HabitsScreen() {
   }, []);
 
   useEffect(load, [load]);
+  useFocusEffect(useCallback(() => {
+    fileStorageService.list().then((files) => {
+      const images = files.filter((file) => /\.(png|jpe?g|webp|gif)$/i.test(file.name));
+      setTrainingImages(images);
+      if (images.length === 0) setMediaMode("default");
+    });
+  }, []));
 
   function openCreate() {
     form.reset();
@@ -88,9 +98,24 @@ export default function HabitsScreen() {
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
 
-      <RoomConversation roomName="調教部屋" lines={[{ text: "今日の課題を確認するわ。続けるものを選んで。" }, { text: "達成した課題は、忘れずに記録して。", event: "DAILY TRAINING" }, { text: "積み重ねた日数は、あなたが続けた証拠よ。" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/training-nino.png")} roomName="調教部屋" lines={[{ text: "今日の課題を確認するわ。続けるものを選んで。" }, { text: "達成した課題は、忘れずに記録して。", event: "DAILY TRAINING" }, { text: "積み重ねた日数は、あなたが続けた証拠よ。" }]} />
 
-      <TrainingVideo onComplete={completeTraining} />
+      <Card>
+        <AppText variant="subtitle">表示するファイル</AppText>
+        <View style={styles.mediaChoices}>
+          <View style={styles.mediaChoice}>
+            <PrimaryButton title="デフォルト動画" tone={mediaMode === "default" ? "primary" : "secondary"} onPress={() => setMediaMode("default")} />
+          </View>
+          {trainingImages.length > 0 ? (
+            <View style={styles.mediaChoice}>
+              <PrimaryButton title={`格納画像 (${trainingImages.length})`} tone={mediaMode === "slides" ? "primary" : "secondary"} onPress={() => setMediaMode("slides")} />
+            </View>
+          ) : null}
+        </View>
+        <AppText variant="muted">{trainingImages.length > 0 ? "格納画像を選ぶと、すべての画像を順番に繰り返し表示します。" : "ファイル格納部屋へ画像を追加すると、スライド表示を選択できます。"}</AppText>
+      </Card>
+
+      <TrainingVideo key={mediaMode} onComplete={completeTraining} slides={mediaMode === "slides" ? trainingImages : []} />
 
       {habits.map((habit) => {
         const streak = habitRepository.streak(habit.id);
@@ -259,6 +284,13 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     gap: 10,
+  },
+  mediaChoices: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  mediaChoice: {
+    flex: 1,
   },
   graphTrack: {
     overflow: "hidden",

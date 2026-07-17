@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { lightTheme } from "@/constants/theme";
 import { secondsToClock } from "@/utils/date";
+import { useAppAudio } from "@/audio/AudioProvider";
+import type { StoredFile } from "@/services/fileStorageService";
 
 const source = require("../../assets/videos/habits_1.mp4");
 
@@ -21,15 +23,19 @@ export type TrainingResult = {
   difficulty: string;
 };
 
-export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingResult) => void }) {
+export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result: TrainingResult) => void; slides?: StoredFile[] }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
   const [trackWidth, setTrackWidth] = useState(1);
   const [mode, setMode] = useState<TrainingMode>("normal");
+  const [slideIndex, setSlideIndex] = useState(0);
   const elapsedMilliseconds = useRef(0);
   const lastTick = useRef(0);
+  const lastBeat = useRef(-1);
+  const { playEffect } = useAppAudio();
+  const slideMode = slides.length > 0;
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = true;
   });
@@ -38,14 +44,25 @@ export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingRes
     lastTick.current = Date.now();
     const timer = setInterval(() => {
       const now = Date.now();
-      if (player.playing) elapsedMilliseconds.current += now - lastTick.current;
+      const activelyPlaying = slideMode ? playing : player.playing;
+      if (activelyPlaying) elapsedMilliseconds.current += now - lastTick.current;
       lastTick.current = now;
-      setCurrentTime(player.currentTime || 0);
-      setDuration(player.duration || 0);
-      setPlaying(player.playing);
+      const selectedMode = modes.find((item) => item.key === mode) ?? modes[1];
+      const elapsed = elapsedMilliseconds.current / 1000;
+      const mediaTime = slideMode ? elapsed * selectedMode.rate : player.currentTime || 0;
+      const mediaDuration = slideMode ? Math.max(1, slides.length * 3) : player.duration || 0;
+      setCurrentTime(mediaDuration > 0 ? mediaTime % mediaDuration : 0);
+      setDuration(mediaDuration);
+      if (slideMode) setSlideIndex(Math.floor(mediaTime / 3) % slides.length);
+      const beat = Math.floor(mediaTime);
+      if (activelyPlaying && beat !== lastBeat.current) {
+        lastBeat.current = beat;
+        playEffect("rhythm");
+      }
+      if (!slideMode) setPlaying(player.playing);
     }, 50);
     return () => clearInterval(timer);
-  }, [player]);
+  }, [mode, player, playEffect, playing, slideMode, slides.length]);
 
   useEffect(() => {
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
@@ -56,7 +73,8 @@ export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingRes
 
   function togglePlayback() {
     if (!started) return;
-    if (player.playing) player.pause();
+    if (slideMode) setPlaying((value) => !value);
+    else if (player.playing) player.pause();
     else player.play();
   }
 
@@ -64,14 +82,15 @@ export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingRes
     elapsedMilliseconds.current = 0;
     lastTick.current = Date.now();
     setStarted(true);
-    player.play();
+    if (!slideMode) player.play();
     setPlaying(true);
   }
 
   function completeTraining() {
     if (!started) return;
-    player.pause();
+    if (!slideMode) player.pause();
     setPlaying(false);
+    playEffect("complete");
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
     onComplete({
       elapsedSeconds: Math.max(1, Math.floor(elapsedMilliseconds.current / 1000)),
@@ -84,7 +103,12 @@ export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingRes
 
   return (
     <View style={styles.wrap}>
-      <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
+      {slideMode ? (
+        <Image source={{ uri: slides[slideIndex]?.uri }} style={styles.video} resizeMode="contain" />
+      ) : (
+        <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
+      )}
+      <View style={styles.mediaBadge}><AppText style={styles.mediaBadgeText}>{slideMode ? `SLIDE ${slideIndex + 1}/${slides.length}` : "DEFAULT VIDEO"}</AppText></View>
       <View style={styles.modePanel}>
         <AppText style={styles.modeLabel}>MODE / SPEED</AppText>
         <View style={styles.modeButtons}>
@@ -148,6 +172,8 @@ export function TrainingVideo({ onComplete }: { onComplete: (result: TrainingRes
 const styles = StyleSheet.create({
   wrap: { overflow: "hidden", borderWidth: 1, borderColor: "#fff", borderRadius: 4, backgroundColor: "#000" },
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
+  mediaBadge: { position: "absolute", top: 8, left: 8, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(0,0,0,0.78)" },
+  mediaBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   modePanel: { gap: 7, paddingHorizontal: 14, paddingTop: 14 },
   modeLabel: { color: lightTheme.muted, fontSize: 10, fontWeight: "900", letterSpacing: 2 },
   modeButtons: { flexDirection: "row", gap: 7 },
