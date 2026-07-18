@@ -39,7 +39,7 @@ export default function HomeScreen() {
           <View key={href} style={styles.roomRow}>
             <AppText style={styles.number}>{String(index + 1).padStart(2, "0")}</AppText>
             <View style={styles.button}>
-              <PrimaryButton title={title} onPress={() => router.push(href)} />
+              <PrimaryButton title={title} tone={href === "/(tabs)/timer" ? "danger" : "primary"} onPress={() => router.push(href)} />
             </View>
           </View>
         ))}

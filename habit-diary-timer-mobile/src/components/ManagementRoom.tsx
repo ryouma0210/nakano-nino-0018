@@ -67,8 +67,8 @@ export function ManagementRoom({ mode, title, characterSource }: { mode: Managem
 
 const styles = StyleSheet.create({
   dice: { alignItems: "center", justifyContent: "center", height: 110, borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
-  diceText: { fontSize: 58 },
+  diceText: { fontSize: 58, lineHeight: 76 },
   periodRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  diceResult: { color: lightTheme.danger, fontSize: 44, fontWeight: "900" },
+  diceResult: { color: lightTheme.danger, fontSize: 44, lineHeight: 60, fontWeight: "900", paddingVertical: 2 },
   instruction: { color: "#fff", fontSize: 22, fontWeight: "900", lineHeight: 34 },
 });

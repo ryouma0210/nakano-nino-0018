@@ -17,13 +17,16 @@ export function AppText({ variant = "body", style, children, ...props }: Props) 
 const styles = StyleSheet.create({
   base: {
     color: lightTheme.text,
+    includeFontPadding: true,
   },
   title: {
     fontSize: 24,
+    lineHeight: 34,
     fontWeight: "800",
   },
   subtitle: {
     fontSize: 18,
+    lineHeight: 27,
     fontWeight: "800",
   },
   body: {
@@ -38,6 +41,7 @@ const styles = StyleSheet.create({
   label: {
     color: lightTheme.primaryDark,
     fontSize: 13,
+    lineHeight: 20,
     fontWeight: "800",
   },
 });

@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Modal, StyleSheet, View } from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
@@ -18,6 +18,11 @@ import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
 export default function RecordsScreen() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [selectedDate, setSelectedDate] = useState(toDateKey());
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [formVisible, setFormVisible] = useState(false);
   const [editing, setEditing] = useState<Journal | null>(null);
   const form = useForm<JournalFormValues>({
@@ -39,10 +44,18 @@ export default function RecordsScreen() {
 
   useEffect(load, [load]);
 
-  const markedDates = useMemo(() => {
-    const set = new Set(journals.slice(0, 60).map((journal) => journal.record_date.slice(5)));
-    return Array.from(set).slice(0, 12);
-  }, [journals]);
+  const markedDates = useMemo(() => new Set(journals.map((journal) => journal.record_date)), [journals]);
+  const displayedJournals = useMemo(() => journals.filter((journal) => journal.record_date === selectedDate), [journals, selectedDate]);
+  const calendarDays = useMemo(() => {
+    const year = visibleMonth.getFullYear();
+    const month = visibleMonth.getMonth();
+    const leading = new Date(year, month, 1).getDay();
+    const count = new Date(year, month + 1, 0).getDate();
+    return [
+      ...Array.from({ length: leading }, () => null),
+      ...Array.from({ length: count }, (_, index) => toDateKey(new Date(year, month, index + 1))),
+    ];
+  }, [visibleMonth]);
 
   function openCreate() {
     setEditing(null);
@@ -53,7 +66,7 @@ export default function RecordsScreen() {
       recordType: "diary",
       isFavorite: false,
       tags: "",
-      recordDate: toDateKey(),
+      recordDate: selectedDate,
     });
     setFormVisible(true);
   }
@@ -109,22 +122,38 @@ export default function RecordsScreen() {
 
       <Card>
         <AppText variant="subtitle">記録カレンダー</AppText>
-        <View style={styles.markGrid}>
-          {markedDates.length ? markedDates.map((date) => (
-            <View key={date} style={styles.mark}>
-              <AppText variant="label">{date}</AppText>
-            </View>
-          )) : <AppText variant="muted">記録日はまだありません。</AppText>}
+        <View style={styles.monthHeader}>
+          <PrimaryButton title="‹" tone="secondary" onPress={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} />
+          <AppText style={styles.monthTitle}>{visibleMonth.getFullYear()}年{visibleMonth.getMonth() + 1}月</AppText>
+          <PrimaryButton title="›" tone="secondary" disabled={visibleMonth.getFullYear() === new Date().getFullYear() && visibleMonth.getMonth() === new Date().getMonth()} onPress={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} />
         </View>
+        <View style={styles.weekRow}>
+          {["日", "月", "火", "水", "木", "金", "土"].map((day) => <AppText key={day} style={styles.weekDay}>{day}</AppText>)}
+        </View>
+        <View style={styles.calendarGrid}>
+          {calendarDays.map((date, index) => {
+            if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
+            const future = date > toDateKey();
+            const selected = date === selectedDate;
+            const marked = markedDates.has(date);
+            return (
+              <Pressable key={date} disabled={future} onPress={() => setSelectedDate(date)} style={[styles.dayCell, selected && styles.selectedDay, future && styles.futureDay]}>
+                <AppText style={[styles.dayText, selected && styles.selectedDayText]}>{Number(date.slice(-2))}</AppText>
+                {marked ? <View style={[styles.recordDot, selected && styles.selectedRecordDot]} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+        <AppText variant="muted">選択中：{formatDateJa(selectedDate)}　●は記録のある日です。</AppText>
       </Card>
 
-      {journals.length === 0 ? (
-        <Card><AppText variant="muted">記録はまだありません。</AppText></Card>
+      {displayedJournals.length === 0 ? (
+        <Card><AppText variant="muted">選択した日の記録はありません。</AppText></Card>
       ) : null}
 
-      {journals.map((journal, index) => (
+      {displayedJournals.map((journal, index) => (
         <View key={journal.id} style={styles.dateGroup}>
-          {index === 0 || journals[index - 1].record_date !== journal.record_date ? <AppText style={styles.dateHeading}>{formatDateJa(journal.record_date)}</AppText> : null}
+          {index === 0 ? <AppText style={styles.dateHeading}>{formatDateJa(journal.record_date)}</AppText> : null}
         <Card>
           <View style={styles.journalHeader}>
             <View style={styles.grow}>
@@ -203,18 +232,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  markGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  mark: {
-    borderWidth: 1,
-    borderColor: lightTheme.primary,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+  monthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  monthTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "900" },
+  weekRow: { flexDirection: "row" },
+  weekDay: { width: `${100 / 7}%`, color: lightTheme.muted, textAlign: "center", fontSize: 12, fontWeight: "800" },
+  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
+  dayCell: { width: `${100 / 7}%`, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#242424" },
+  selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
+  futureDay: { opacity: 0.25 },
+  dayText: { fontWeight: "800" },
+  selectedDayText: { color: "#fff" },
+  recordDot: { position: "absolute", bottom: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: lightTheme.danger },
+  selectedRecordDot: { backgroundColor: "#fff" },
   journalHeader: {
     flexDirection: "row",
     alignItems: "flex-start",

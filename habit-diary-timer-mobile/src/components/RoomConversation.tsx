@@ -40,7 +40,7 @@ export function RoomConversation({ roomName, lines = defaultLines, characterSour
       </View>
 
       <View style={styles.stage}>
-        {characterSource ? <Image source={characterSource} style={styles.characterImage} resizeMode="cover" /> : (
+        {characterSource ? <Image source={characterSource} style={styles.characterImage} resizeMode="contain" /> : (
           <>
           <View style={styles.chainLeft} />
           <View style={styles.chainRight} />
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   roomBar: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#fff" },
   roomLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   counter: { color: lightTheme.muted, fontSize: 12 },
-  stage: { height: 210, alignItems: "center", justifyContent: "flex-end", backgroundColor: "#0c0c0c" },
+  stage: { height: 390, alignItems: "center", justifyContent: "center", backgroundColor: "#0c0c0c" },
   characterImage: { width: "100%", height: "100%" },
   chainLeft: { position: "absolute", left: 34, top: -20, width: 8, height: 150, borderLeftWidth: 2, borderRightWidth: 2, borderColor: "#444", transform: [{ rotate: "12deg" }] },
   chainRight: { position: "absolute", right: 34, top: -20, width: 8, height: 150, borderLeftWidth: 2, borderRightWidth: 2, borderColor: "#444", transform: [{ rotate: "-12deg" }] },

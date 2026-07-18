@@ -368,6 +368,7 @@ const styles = StyleSheet.create({
   resultSeconds: {
     color: lightTheme.danger,
     fontSize: 26,
+    lineHeight: 38,
     fontWeight: "900",
   },
 });
