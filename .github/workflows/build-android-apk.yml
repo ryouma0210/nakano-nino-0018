@@ -58,13 +58,29 @@ jobs:
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
           org.gradle.workers.max=2
           org.gradle.parallel=false
+          expo.inlineModules.watchedDirectories=[]
           EOF
+
+      - name: Validate Expo autolinking
+        shell: bash
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: |
+          EXPO_ANDROID="$PWD/node_modules/expo/android"
+          mkdir -p "$EXPO_ANDROID/src/main/java/inline/modules" "$EXPO_ANDROID/build/inline/modules"
+          node --no-warnings --eval "require('expo/bin/autolinking')" \
+            expo-modules-autolinking mirror-kotlin-inline-modules \
+            --kotlin-files-mirror-directory "$EXPO_ANDROID/src/main/java/inline/modules" \
+            --inline-modules-list-directory "$EXPO_ANDROID/build/inline/modules" \
+            --watched-directories-serialized '[]'
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
       - name: Build standalone release APK
-        run: ./gradlew assembleRelease --no-daemon --max-workers=2 --stacktrace
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: ./gradlew assembleRelease --no-daemon --max-workers=2 --stacktrace --info
         working-directory: habit-diary-timer-mobile/android
 
       - name: Upload APK
