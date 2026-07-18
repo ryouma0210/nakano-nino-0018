@@ -11,16 +11,13 @@ import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
 import { settingsService } from "@/services/settingsService";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { achievementRepository } from "@/repositories/achievementRepository";
 import { dailyOrderService } from "@/services/gameRoomService";
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
   const [cacheSize, setCacheSize] = useState(0);
-  const [achievements, setAchievements] = useState(() => achievementRepository.summary());
   const loadSize = useCallback(() => {
     fileStorageService.totalSize().then(setCacheSize);
-    setAchievements(achievementRepository.summary());
   }, []);
   useEffect(loadSize, [loadSize]);
   useFocusEffect(loadSize);
@@ -33,6 +30,8 @@ export default function SettingsScreen() {
         execute("DELETE FROM management_daily_tasks");
         execute("DELETE FROM management_cycles");
         execute("DELETE FROM preparation_records");
+        execute("DELETE FROM reward_redemptions");
+        execute("DELETE FROM point_transactions");
         execute("DELETE FROM journal_tags");
         execute("DELETE FROM tags");
         execute("DELETE FROM journals");
@@ -55,21 +54,6 @@ export default function SettingsScreen() {
     <Screen>
       <AppText variant="title">設定</AppText>
       <RoomConversation characterSource={require("../../assets/characters/settings-nino.png")} roomName="設定" lines={[{ text: "保存量の確認や初期化は、ここで行えるわ。" }, { text: "初期化したデータは戻せないから、よく確認して。" }]} />
-      <Card>
-        <AppText variant="subtitle">実績</AppText>
-        <View style={styles.achievementRow}>
-          <View style={styles.audioText}><AppText variant="label">お仕置き部屋</AppText><AppText variant="muted">受けた時間の総計</AppText></View>
-          <AppText style={styles.achievementValue}>{achievements.punishmentMinutes}分{achievements.punishmentSeconds % 60 ? ` ${achievements.punishmentSeconds % 60}秒` : ""}</AppText>
-        </View>
-        <View style={styles.achievementRow}>
-          <View style={styles.audioText}><AppText variant="label">調教部屋</AppText><AppText variant="muted">最速記録（早いほど上位）</AppText></View>
-          <AppText style={styles.achievementValue}>{achievements.bestTrainingSeconds === null ? "未記録" : `${achievements.bestTrainingSeconds}秒`}</AppText>
-        </View>
-        <View style={styles.achievementRow}>
-          <View style={styles.audioText}><AppText variant="label">射精管理部屋</AppText><AppText variant="muted">管理を受けた日数の総計</AppText></View>
-          <AppText style={styles.achievementValue}>{achievements.managementDays}日</AppText>
-        </View>
-      </Card>
       <Card>
         <AppText variant="subtitle">サウンド</AppText>
         <View style={styles.audioRow}>
@@ -114,6 +98,4 @@ const styles = StyleSheet.create({
   volumeRow: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: "#444", paddingVertical: 10 },
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
-  achievementRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderTopColor: "#444", paddingVertical: 12 },
-  achievementValue: { color: "#fff", fontSize: 22, lineHeight: 32, fontWeight: "900" },
 });

@@ -26,8 +26,10 @@ const items = [
 const preparationComments = [
   "ふぅ～～～～～～～♡",
   "ほら、早くを勃起させない♡",
+  "ふふ♡ビクビクさせてチョロすぎ♡",
   "まだ足りないの？欲張りね♡",
   "準備できるまで、何度でもしてあげる♡",
+  "勃起しろ♡チンピクしろ♡",
 ] as const;
 
 export default function PreparationScreen() {

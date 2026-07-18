@@ -17,6 +17,7 @@ import { habitFormSchema, type HabitFormValues } from "@/schemas/forms";
 import type { HabitWithToday } from "@/types/models";
 import { formatDateJa, toDateKey } from "@/utils/date";
 import { fileStorageService, type StoredFile } from "@/services/fileStorageService";
+import { pointRepository } from "@/repositories/rewardRepository";
 
 export default function HabitsScreen() {
   const [habits, setHabits] = useState<HabitWithToday[]>([]);
@@ -89,6 +90,7 @@ export default function HabitsScreen() {
       tags: `調教,完了,射精記録,${result.difficulty}`,
       durationSeconds: result.elapsedSeconds,
     });
+    pointRepository.award(`training:${recordDate}`, 5, "本日初回の調教を完了");
     setTrainingResult(result);
   }
 
@@ -113,7 +115,7 @@ export default function HabitsScreen() {
             </View>
           ) : null}
         </View>
-        <AppText variant="muted">{trainingImages.length > 0 ? "デフォルト動画または格納画像を、順番に繰り返し表示します。" : "6本のデフォルト動画を順番に繰り返します。ファイル格納部屋へ画像を追加するとスライド表示も選択できます。"}</AppText>
+        <AppText variant="muted">{trainingImages.length > 0 ? "デフォルト動画は各3回、格納画像は各10秒表示してから、次のファイルとコメントへ切り替わります。" : "6本のデフォルト動画を各3回再生してから、次の動画とコメントへ切り替えます。ファイル格納部屋へ画像を追加するとスライド表示も選択できます。"}</AppText>
       </Card>
 
       <TrainingVideo key={mediaMode} onComplete={completeTraining} slides={mediaMode === "slides" ? trainingImages : []} />

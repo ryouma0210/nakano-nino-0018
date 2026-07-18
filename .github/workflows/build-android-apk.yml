@@ -48,6 +48,15 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Select app environment
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "production" ]; then
+            echo "EXPO_PUBLIC_APP_ENV=prd" >> "$GITHUB_ENV"
+          else
+            echo "EXPO_PUBLIC_APP_ENV=stg" >> "$GITHUB_ENV"
+          fi
+
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean --non-interactive
 
