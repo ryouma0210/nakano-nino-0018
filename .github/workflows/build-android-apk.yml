@@ -51,11 +51,20 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean --non-interactive
 
+      - name: Configure Gradle memory
+        shell: bash
+        run: |
+          cat >> android/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
+          org.gradle.workers.max=2
+          org.gradle.parallel=false
+          EOF
+
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
       - name: Build standalone release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --no-daemon --max-workers=2 --stacktrace
         working-directory: habit-diary-timer-mobile/android
 
       - name: Upload APK
