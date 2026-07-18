@@ -11,6 +11,7 @@ type JournalInput = {
   rating?: number;
   isFavorite?: boolean;
   tags?: string;
+  durationSeconds?: number;
 };
 
 export const journalRepository = {
@@ -38,8 +39,8 @@ export const journalRepository = {
   create(input: JournalInput) {
     const now = toDateTimeKey();
     const result = execute(
-      `INSERT INTO journals(record_date, record_time, title, body, record_type, mood, rating, is_favorite, tags, created_at, updated_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO journals(record_date, record_time, title, body, record_type, mood, rating, is_favorite, duration_seconds, tags, created_at, updated_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.recordDate || toDateKey(),
         toTimeKey(),
@@ -49,6 +50,7 @@ export const journalRepository = {
         input.mood ?? null,
         input.rating ?? null,
         input.isFavorite ? 1 : 0,
+        input.durationSeconds ?? null,
         input.tags ?? null,
         now,
         now,

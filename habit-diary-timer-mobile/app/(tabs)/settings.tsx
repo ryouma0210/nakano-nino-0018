@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, BackHandler, Platform, StyleSheet, Switch, View } from "react-native";
+import { Alert, StyleSheet, Switch, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -11,11 +11,16 @@ import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
 import { settingsService } from "@/services/settingsService";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { achievementRepository } from "@/repositories/achievementRepository";
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
   const [cacheSize, setCacheSize] = useState(0);
-  const loadSize = useCallback(() => { fileStorageService.totalSize().then(setCacheSize); }, []);
+  const [achievements, setAchievements] = useState(() => achievementRepository.summary());
+  const loadSize = useCallback(() => {
+    fileStorageService.totalSize().then(setCacheSize);
+    setAchievements(achievementRepository.summary());
+  }, []);
   useEffect(loadSize, [loadSize]);
   useFocusEffect(loadSize);
 
@@ -24,6 +29,9 @@ export default function SettingsScreen() {
       { text: "キャンセル", style: "cancel" },
       { text: "全て削除", style: "destructive", onPress: async () => {
         execute("DELETE FROM timer_histories");
+        execute("DELETE FROM management_daily_tasks");
+        execute("DELETE FROM management_cycles");
+        execute("DELETE FROM preparation_records");
         execute("DELETE FROM journal_tags");
         execute("DELETE FROM tags");
         execute("DELETE FROM journals");
@@ -41,15 +49,25 @@ export default function SettingsScreen() {
     ]);
   }
 
-  function exitGame() {
-    if (Platform.OS === "android") BackHandler.exitApp();
-    else Alert.alert("ゲーム終了", "iOSではアプリを閉じる操作は端末側から行ってください。");
-  }
-
   return (
     <Screen>
       <AppText variant="title">設定</AppText>
       <RoomConversation characterSource={require("../../assets/characters/settings-nino.png")} roomName="設定" lines={[{ text: "保存量の確認や初期化は、ここで行えるわ。" }, { text: "初期化したデータは戻せないから、よく確認して。", event: "SYSTEM MENU" }]} />
+      <Card>
+        <AppText variant="subtitle">実績</AppText>
+        <View style={styles.achievementRow}>
+          <View style={styles.audioText}><AppText variant="label">お仕置き部屋</AppText><AppText variant="muted">受けた時間の総計</AppText></View>
+          <AppText style={styles.achievementValue}>{achievements.punishmentMinutes}分{achievements.punishmentSeconds % 60 ? ` ${achievements.punishmentSeconds % 60}秒` : ""}</AppText>
+        </View>
+        <View style={styles.achievementRow}>
+          <View style={styles.audioText}><AppText variant="label">調教部屋</AppText><AppText variant="muted">最速記録（早いほど上位）</AppText></View>
+          <AppText style={styles.achievementValue}>{achievements.bestTrainingSeconds === null ? "未記録" : `${achievements.bestTrainingSeconds}秒`}</AppText>
+        </View>
+        <View style={styles.achievementRow}>
+          <View style={styles.audioText}><AppText variant="label">射精管理部屋</AppText><AppText variant="muted">管理を受けた日数の総計</AppText></View>
+          <AppText style={styles.achievementValue}>{achievements.managementDays}日</AppText>
+        </View>
+      </Card>
       <Card>
         <AppText variant="subtitle">サウンド</AppText>
         <View style={styles.audioRow}>
@@ -67,7 +85,7 @@ export default function SettingsScreen() {
       <PrimaryButton title="ファイル格納部屋を開く" onPress={() => router.push("/(tabs)/files")} />
       <PrimaryButton title="全データを初期化" tone="danger" onPress={resetAll} />
       <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
-      <PrimaryButton title="ゲーム終了" tone="danger" onPress={exitGame} />
+      <PrimaryButton title="スタート画面に移動" tone="danger" onPress={() => router.replace("/")} />
     </Screen>
   );
 }
@@ -90,4 +108,6 @@ const styles = StyleSheet.create({
   volumeRow: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: "#444", paddingVertical: 10 },
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
+  achievementRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderTopColor: "#444", paddingVertical: 12 },
+  achievementValue: { color: "#fff", fontSize: 22, fontWeight: "900" },
 });

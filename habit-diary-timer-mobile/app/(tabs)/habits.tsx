@@ -87,6 +87,7 @@ export default function HabitsScreen() {
       body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒`,
       recordType: "diary",
       tags: `調教,完了,射精記録,${result.difficulty}`,
+      durationSeconds: result.elapsedSeconds,
     });
     setTrainingResult(result);
   }
@@ -104,7 +105,7 @@ export default function HabitsScreen() {
         <AppText variant="subtitle">表示するファイル</AppText>
         <View style={styles.mediaChoices}>
           <View style={styles.mediaChoice}>
-            <PrimaryButton title="デフォルト動画" tone={mediaMode === "default" ? "primary" : "secondary"} onPress={() => setMediaMode("default")} />
+            <PrimaryButton title="デフォルト動画 (6)" tone={mediaMode === "default" ? "primary" : "secondary"} onPress={() => setMediaMode("default")} />
           </View>
           {trainingImages.length > 0 ? (
             <View style={styles.mediaChoice}>
@@ -112,7 +113,7 @@ export default function HabitsScreen() {
             </View>
           ) : null}
         </View>
-        <AppText variant="muted">{trainingImages.length > 0 ? "格納画像を選ぶと、すべての画像を順番に繰り返し表示します。" : "ファイル格納部屋へ画像を追加すると、スライド表示を選択できます。"}</AppText>
+        <AppText variant="muted">{trainingImages.length > 0 ? "デフォルト動画または格納画像を、順番に繰り返し表示します。" : "6本のデフォルト動画を順番に繰り返します。ファイル格納部屋へ画像を追加するとスライド表示も選択できます。"}</AppText>
       </Card>
 
       <TrainingVideo key={mediaMode} onComplete={completeTraining} slides={mediaMode === "slides" ? trainingImages : []} />
@@ -143,6 +144,8 @@ export default function HabitsScreen() {
           </Pressable>
         );
       })}
+
+      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
 
       <Modal visible={formVisible} animationType="slide" presentationStyle="pageSheet">
         <Screen>
