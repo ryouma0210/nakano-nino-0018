@@ -6,7 +6,6 @@ import { useAppAudio } from "@/audio/AudioProvider";
 
 export type ConversationLine = {
   text: string;
-  event?: string;
 };
 
 type Props = {
@@ -17,7 +16,7 @@ type Props = {
 
 const defaultLines: ConversationLine[] = [
   { text: "来たのね。ここで何をするか、まず決めましょう。" },
-  { text: "準備ができたら、下のメニューから選んで。", event: "ROOM START" },
+  { text: "準備ができたら、下のメニューから選んで。" },
   { text: "焦らなくていいわ。記録を一つずつ残していきましょう。" },
 ];
 
@@ -40,7 +39,7 @@ export function RoomConversation({ roomName, lines = defaultLines, characterSour
       </View>
 
       <View style={styles.stage}>
-        {characterSource ? <Image source={characterSource} style={styles.characterImage} resizeMode="cover" /> : (
+        {characterSource ? <Image source={characterSource} style={styles.characterImage} resizeMode="contain" /> : (
           <>
           <View style={styles.chainLeft} />
           <View style={styles.chainRight} />
@@ -55,11 +54,6 @@ export function RoomConversation({ roomName, lines = defaultLines, characterSour
           </View>
           </>
         )}
-        {current.event ? (
-          <View style={styles.eventBadge}>
-            <AppText style={styles.eventText}>EVENT  {current.event}</AppText>
-          </View>
-        ) : null}
       </View>
 
       <View style={styles.dialogue}>
@@ -77,7 +71,7 @@ const styles = StyleSheet.create({
   roomBar: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#fff" },
   roomLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   counter: { color: lightTheme.muted, fontSize: 12 },
-  stage: { height: 210, alignItems: "center", justifyContent: "flex-end", backgroundColor: "#0c0c0c" },
+  stage: { height: 390, alignItems: "center", justifyContent: "center", backgroundColor: "#0c0c0c" },
   characterImage: { width: "100%", height: "100%" },
   chainLeft: { position: "absolute", left: 34, top: -20, width: 8, height: 150, borderLeftWidth: 2, borderRightWidth: 2, borderColor: "#444", transform: [{ rotate: "12deg" }] },
   chainRight: { position: "absolute", right: 34, top: -20, width: 8, height: 150, borderLeftWidth: 2, borderRightWidth: 2, borderColor: "#444", transform: [{ rotate: "-12deg" }] },
@@ -89,8 +83,6 @@ const styles = StyleSheet.create({
   mouth: { width: 18, height: 7, marginTop: 9, borderBottomWidth: 2, borderBottomColor: "#1b1118", borderRadius: 8 },
   neckBand: { zIndex: 2, width: 48, height: 8, marginTop: -2, backgroundColor: lightTheme.danger },
   body: { width: 104, height: 76, marginTop: -2, borderTopLeftRadius: 35, borderTopRightRadius: 35, backgroundColor: "#1d1d1d", borderWidth: 1, borderColor: "#555" },
-  eventBadge: { position: "absolute", top: 14, right: 12, borderWidth: 1, borderColor: lightTheme.danger, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: "#000" },
-  eventText: { color: "#ff4b55", fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   dialogue: { minHeight: 126, padding: 14, borderTopWidth: 1, borderTopColor: "#fff", backgroundColor: "#050505" },
   namePlate: { alignSelf: "flex-start", marginBottom: 9, borderLeftWidth: 3, borderLeftColor: lightTheme.danger, paddingLeft: 8 },
   name: { fontWeight: "900" },

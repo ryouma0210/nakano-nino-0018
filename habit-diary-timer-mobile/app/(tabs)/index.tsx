@@ -8,12 +8,15 @@ import { lightTheme } from "@/constants/theme";
 
 const rooms = [
   ["準備部屋", "/(tabs)/preparation"],
+  ["本日の命令部屋", "/(tabs)/orders"],
   ["調教部屋", "/(tabs)/habits"],
+  ["ご褒美部屋", "/(tabs)/rewards"],
   ["お仕置き部屋", "/(tabs)/timer"],
-  ["射精管理用部屋（貞操帯なし）", "/(tabs)/release"],
-  ["射精管理用部屋（貞操帯あり）", "/(tabs)/chastity"],
+  ["射精管理部屋", "/(tabs)/management"],
+  ["契約部屋", "/(tabs)/contract"],
   ["調教日記部屋", "/(tabs)/records"],
   ["ファイル格納部屋", "/(tabs)/files"],
+  ["称号・実績部屋", "/(tabs)/achievements"],
   ["設定", "/(tabs)/settings"],
 ] as const;
 
@@ -30,16 +33,16 @@ export default function HomeScreen() {
         roomName="ホーム"
         lines={[
           { text: "おかえりなさい。今日はどの部屋へ行く？" },
-          { text: "準備ができたら、行き先を選んで。", event: "ROOM SELECT" },
+          { text: "準備ができたら、行き先を選んで。" },
           { text: "あなたの記録は、私がここで見守っているわ。" },
+          { text: "なに興奮しているのかしら？気持ち悪いわ。" },
         ]}
       />
       <View style={styles.rooms}>
-        {rooms.map(([title, href], index) => (
+        {rooms.map(([title, href]) => (
           <View key={href} style={styles.roomRow}>
-            <AppText style={styles.number}>{String(index + 1).padStart(2, "0")}</AppText>
             <View style={styles.button}>
-              <PrimaryButton title={title} onPress={() => router.push(href)} />
+              <PrimaryButton title={title} tone={href === "/(tabs)/timer" ? "danger" : "primary"} onPress={() => router.push(href)} />
             </View>
           </View>
         ))}
@@ -53,7 +56,6 @@ const styles = StyleSheet.create({
   kicker: { color: lightTheme.danger, fontSize: 12, fontWeight: "900", letterSpacing: 3 },
   rule: { height: 1, backgroundColor: "#fff" },
   rooms: { gap: 12 },
-  roomRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  number: { width: 28, color: lightTheme.muted, fontWeight: "900" },
+  roomRow: { flexDirection: "row", alignItems: "center" },
   button: { flex: 1 },
 });

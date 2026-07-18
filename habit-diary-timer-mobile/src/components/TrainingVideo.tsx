@@ -8,6 +8,7 @@ import { lightTheme } from "@/constants/theme";
 import { secondsToClock } from "@/utils/date";
 import { useAppAudio } from "@/audio/AudioProvider";
 import type { StoredFile } from "@/services/fileStorageService";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const defaultVideos = [
   require("../../assets/videos/habits_1.mp4"),
@@ -24,6 +25,16 @@ const modes = [
   { key: "hard", label: "ハード", rate: 5 },
 ] as const;
 
+const trainingComments = [
+  "ほら、もっとマゾらしくアヘアへしながら腰振りなさい♡",
+  "なに、手緩めているのかしら？もっと強く握りしめて♡",
+  "０♡ゼロ♡ほら、出せよ♡漏らせ♡逝け♡",
+  "ざぁ～こ♡しぃ～ね♡まぁ～ぞ♡",
+  "聞こえないわよ？もっと「二ノ様好き♡」って連呼しなさい♡",
+  "なに？もう逝きそうなの？我慢しろ♡変態♡",
+  "カウントダウンしてあげる♡３、２、１…♡",
+] as const;
+
 type TrainingMode = (typeof modes)[number]["key"];
 
 export type TrainingResult = {
@@ -32,6 +43,7 @@ export type TrainingResult = {
 };
 
 export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result: TrainingResult) => void; slides?: StoredFile[] }) {
+  const insets = useSafeAreaInsets();
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [gaugeProgress, setGaugeProgress] = useState(0);
@@ -41,6 +53,7 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
   const [mode, setMode] = useState<TrainingMode>("normal");
   const [slideIndex, setSlideIndex] = useState(0);
   const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
+  const [commentIndex, setCommentIndex] = useState(0);
   const elapsedMilliseconds = useRef(0);
   const lastTick = useRef(0);
   const lastBeat = useRef(-1);
@@ -51,10 +64,19 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
     instance.playbackRate = 1;
   });
 
+  function showRandomComment() {
+    setCommentIndex((current) => {
+      if (trainingComments.length < 2) return 0;
+      const offset = Math.floor(Math.random() * (trainingComments.length - 1)) + 1;
+      return (current + offset) % trainingComments.length;
+    });
+  }
+
   useEventListener(player, "playToEnd", () => {
     if (slideMode) return;
     const nextIndex = (defaultVideoIndex + 1) % defaultVideos.length;
     setDefaultVideoIndex(nextIndex);
+    showRandomComment();
     player.replaceAsync(defaultVideos[nextIndex]).then(() => {
       player.playbackRate = 1;
       player.play();
@@ -87,10 +109,17 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
     return () => clearInterval(timer);
   }, [mode, player, playEffect, playing, slideMode, slides.length]);
 
+  useEffect(() => {
+    if (started && slideMode) showRandomComment();
+    // The comment follows the current stored-image slide.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideIndex]);
+
   function startTraining() {
     elapsedMilliseconds.current = 0;
     lastTick.current = Date.now();
     lastBeat.current = -1;
+    showRandomComment();
     setStarted(true);
     if (!slideMode) player.play();
     setPlaying(true);
@@ -100,6 +129,7 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
     if (!started) return;
     if (!slideMode) player.pause();
     setPlaying(false);
+    setStarted(false);
     playEffect("ejaculation");
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
     onComplete({
@@ -140,8 +170,12 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
   if (started) {
     return (
       <Modal visible animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
-        <View style={styles.fullscreenWrap}>
+        <View style={[styles.fullscreenWrap, { paddingTop: Math.max(12, insets.top), paddingBottom: Math.max(12, insets.bottom) }]}>
           <View style={styles.fullscreenMediaFrame}>{media}</View>
+          <View style={styles.trainingComment}>
+            <AppText style={styles.trainingCommentName}>ニノ</AppText>
+            <AppText style={styles.trainingCommentText}>{trainingComments[commentIndex]}</AppText>
+          </View>
           {rhythmGauge}
           <View style={styles.fullscreenCompleteButton}>
             <PrimaryButton title="射精しました" tone="danger" onPress={completeTraining} />
@@ -190,9 +224,12 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
 const styles = StyleSheet.create({
   wrap: { overflow: "hidden", borderWidth: 1, borderColor: "#fff", borderRadius: 4, backgroundColor: "#000" },
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
-  fullscreenWrap: { flex: 1, paddingTop: 28, paddingBottom: 18, backgroundColor: "#000" },
+  fullscreenWrap: { flex: 1, backgroundColor: "#000" },
   fullscreenMediaFrame: { flex: 1, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#000" },
   fullscreenMedia: { width: "100%", height: "100%", backgroundColor: "#000" },
+  trainingComment: { marginHorizontal: 10, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "#080808" },
+  trainingCommentName: { marginBottom: 4, color: lightTheme.danger, fontSize: 11, fontWeight: "900", letterSpacing: 2 },
+  trainingCommentText: { color: "#fff", fontSize: 16, fontWeight: "900", lineHeight: 23 },
   mediaBadge: { position: "absolute", top: 8, left: 8, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(0,0,0,0.78)" },
   mediaBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   modePanel: { gap: 7, paddingHorizontal: 14, paddingTop: 14 },

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, Image, Modal, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -10,6 +12,7 @@ import { fileStorageService, formatBytes, type StoredFile } from "@/services/fil
 
 export default function FilesScreen() {
   const [files, setFiles] = useState<StoredFile[]>([]);
+  const [selected, setSelected] = useState<StoredFile | null>(null);
   const load = useCallback(() => { fileStorageService.list().then(setFiles); }, []);
   useEffect(load, [load]);
   useFocusEffect(load);
@@ -28,12 +31,15 @@ export default function FilesScreen() {
   return (
     <Screen>
       <AppText variant="title">ファイル格納部屋</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/files-nino.png")} roomName="ファイル格納部屋" lines={[{ text: "残しておきたいファイルは、ここへ格納して。" }, { text: "不要になったものは選んで削除できるわ。", event: "FILE STORAGE" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/files-nino.png")} roomName="ファイル格納部屋" lines={[{ text: "残しておきたいファイルは、ここへ格納して。" }, { text: "不要になったものは選んで削除できるわ。" }]} />
       <PrimaryButton title="ファイルを格納" onPress={upload} />
       <AppText variant="muted">使用量 {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}</AppText>
       {files.length === 0 ? <Card><AppText variant="muted">格納されたファイルはありません。</AppText></Card> : null}
       {files.map((file) => (
         <Card key={file.uri}>
+          <Pressable onPress={() => setSelected(file)} style={styles.preview}>
+            {/\.(png|jpe?g|webp|gif)$/i.test(file.name) ? <Image source={{ uri: file.uri }} style={styles.thumbnail} resizeMode="contain" /> : <View style={styles.fileBadge}><AppText style={styles.fileBadgeText}>{/\.mp4$/i.test(file.name) ? "▶ VIDEO" : "FILE"}</AppText></View>}
+          </Pressable>
           <View style={styles.row}>
             <View style={styles.grow}><AppText>{file.name}</AppText><AppText variant="muted">{formatBytes(file.size)}</AppText></View>
             <PrimaryButton title="削除" tone="danger" onPress={() => remove(file)} />
@@ -41,8 +47,34 @@ export default function FilesScreen() {
         </Card>
       ))}
       <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
+      {selected ? <FileViewer file={selected} onClose={() => setSelected(null)} /> : null}
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({ row: { flexDirection: "row", alignItems: "center", gap: 12 }, grow: { flex: 1 } });
+function FileViewer({ file, onClose }: { file: StoredFile; onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  const video = /\.mp4$/i.test(file.name);
+  const player = useVideoPlayer(video ? { uri: file.uri } : null, (instance) => { instance.loop = true; if (video) instance.play(); });
+  return (
+    <Modal visible animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <View style={[styles.viewer, { paddingTop: Math.max(12, insets.top), paddingBottom: Math.max(12, insets.bottom) }]}>
+        <AppText variant="subtitle">{file.name}</AppText>
+        <View style={styles.viewerMedia}>{video ? <VideoView player={player} style={styles.fullMedia} nativeControls contentFit="contain" /> : <Image source={{ uri: file.uri }} style={styles.fullMedia} resizeMode="contain" />}</View>
+        <PrimaryButton title="閉じる" tone="secondary" onPress={onClose} />
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  grow: { flex: 1 },
+  preview: { width: "100%", height: 180, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#555", backgroundColor: "#000" },
+  thumbnail: { width: "100%", height: "100%" },
+  fileBadge: { alignItems: "center", justifyContent: "center" },
+  fileBadgeText: { color: "#fff", fontSize: 20, fontWeight: "900", letterSpacing: 2 },
+  viewer: { flex: 1, gap: 12, paddingHorizontal: 10, backgroundColor: "#000" },
+  viewerMedia: { flex: 1, alignItems: "center", justifyContent: "center" },
+  fullMedia: { width: "100%", height: "100%", backgroundColor: "#000" },
+});

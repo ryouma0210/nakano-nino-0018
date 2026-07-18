@@ -10,7 +10,7 @@ import { managementRepository, type ManagementCycle, type ManagementDailyTask, t
 import { formatDateJa } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 
-export function ManagementRoom({ mode, title, characterSource }: { mode: ManagementMode; title: string; characterSource: ImageSourcePropType }) {
+export function ManagementRoom({ mode, title, characterSource, onChangeMode }: { mode: ManagementMode; title: string; characterSource: ImageSourcePropType; onChangeMode?: () => void }) {
   const initialCycle = managementRepository.active(mode);
   const [cycle, setCycle] = useState<ManagementCycle | null>(initialCycle);
   const [task, setTask] = useState<ManagementDailyTask | null>(() => initialCycle ? managementRepository.todayTask(initialCycle) : null);
@@ -37,7 +37,8 @@ export function ManagementRoom({ mode, title, characterSource }: { mode: Managem
   return (
     <Screen>
       <AppText variant="title">{title}</AppText>
-      <RoomConversation characterSource={characterSource} roomName={title} lines={[{ text: "まずサイコロで管理期間を決めるわ。" }, { text: "最終日までは、毎日違う指示を確認して。", event: "DAILY ORDER" }]} />
+      <RoomConversation characterSource={characterSource} roomName={title} lines={[{ text: "まずサイコロで管理期間を決めるわ。" }, { text: "最終日までは、毎日違う指示を確認して。" }]} />
+      <Card><AppText variant="label">選択中</AppText><AppText variant="subtitle">{mode === "release" ? "貞操帯なし" : "貞操帯あり"}</AppText>{onChangeMode ? <PrimaryButton title="管理方法を選び直す" tone="secondary" onPress={onChangeMode} /> : null}</Card>
       {!cycle ? (
         <Card>
           <AppText variant="subtitle">射精管理期間を決める</AppText>
@@ -67,8 +68,8 @@ export function ManagementRoom({ mode, title, characterSource }: { mode: Managem
 
 const styles = StyleSheet.create({
   dice: { alignItems: "center", justifyContent: "center", height: 110, borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
-  diceText: { fontSize: 58 },
+  diceText: { fontSize: 58, lineHeight: 76 },
   periodRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  diceResult: { color: lightTheme.danger, fontSize: 44, fontWeight: "900" },
+  diceResult: { color: lightTheme.danger, fontSize: 44, lineHeight: 60, fontWeight: "900", paddingVertical: 2 },
   instruction: { color: "#fff", fontSize: 22, fontWeight: "900", lineHeight: 34 },
 });

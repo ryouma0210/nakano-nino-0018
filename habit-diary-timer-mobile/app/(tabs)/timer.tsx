@@ -11,17 +11,28 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { secondsToClock } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { achievementRepository } from "@/repositories/achievementRepository";
+import { contractService } from "@/services/gameRoomService";
 
 export default function TimerScreen() {
   const [minutes, setMinutes] = useState("10");
   const [totalSeconds, setTotalSeconds] = useState(600);
   const [remaining, setRemaining] = useState(600);
   const [running, setRunning] = useState(false);
+  const [gaugeElapsed, setGaugeElapsed] = useState(0);
+  const [maxMinutes, setMaxMinutes] = useState(30);
   const [trackWidth, setTrackWidth] = useState(1);
   const [target, setTarget] = useState<"チンポ" | "金玉">("チンポ");
   const lastBeat = useRef(-1);
   const sessionRecorded = useRef(false);
+  const startedAt = useRef(0);
   const { playEffect } = useAppAudio();
+  useEffect(() => { contractService.load().then((contract) => setMaxMinutes(contract.maxPunishmentMinutes)); }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    const animation = setInterval(() => setGaugeElapsed((Date.now() - startedAt.current) / 1000), 50);
+    return () => clearInterval(animation);
+  }, [running]);
 
   useEffect(() => {
     if (!running) return;
@@ -41,18 +52,20 @@ export default function TimerScreen() {
     setRunning(false);
   }, [playEffect, remaining, running, totalSeconds]);
 
-  const elapsed = totalSeconds - remaining;
+  const gaugeBeat = Math.floor(gaugeElapsed);
   useEffect(() => {
-    if (!running || elapsed === lastBeat.current) return;
-    lastBeat.current = elapsed;
-    setTarget(Math.random() < 0.5 ? "チンポ" : "金玉");
+    if (!running || gaugeBeat === lastBeat.current) return;
+    lastBeat.current = gaugeBeat;
+    setTarget(Math.random() < 5 ? "チンポ" : "金玉");
     playEffect("punishmentHit");
-  }, [elapsed, playEffect, running]);
+  }, [gaugeBeat, playEffect, running]);
 
   function start() {
-    const duration = Math.max(1, Math.min(999, Number(minutes) || 1)) * 60;
+    const duration = Math.max(1, Math.min(maxMinutes, Number(minutes) || 1)) * 60;
     setTotalSeconds(duration);
     setRemaining(duration);
+    setGaugeElapsed(0);
+    startedAt.current = Date.now();
     lastBeat.current = 0;
     sessionRecorded.current = false;
     setRunning(true);
@@ -66,17 +79,17 @@ export default function TimerScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">お仕置き部屋</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" lines={[{ text: "時間は自分で決めなさい。" }, { text: "黄色が赤へ到達したら、表示された場所へビンタよ。", event: "PUNISHMENT RHYTHM" }]} />
+      <AppText variant="title" style={styles.roomTitle}>お仕置き部屋</AppText>
+      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" lines={[{ text: "時間は自分で決めなさい。" }, { text: "黄色が赤へ到達したら、表示された場所へビンタよ。" }]} />
       <Card>
-        <TextField label="時間（分）" value={minutes} onChangeText={setMinutes} keyboardType="number-pad" editable={!running} />
+        <TextField label={`時間（分）・契約上限 ${maxMinutes}分`} value={minutes} onChangeText={setMinutes} keyboardType="number-pad" editable={!running} />
         <AppText style={styles.clock}>{secondsToClock(remaining)}</AppText>
         <View style={styles.rhythmFrame}>
           <View style={styles.rhythmHeader}><AppText variant="label">RHYTHM</AppText><AppText style={styles.target}>{target}にビンタ</AppText></View>
           <View onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} style={styles.track}>
             <View style={styles.line} /><View style={styles.hitGlow} /><View style={styles.hitPoint} />
             {Array.from({ length: 5 }, (_, index) => {
-              const phase = (elapsed / 5 + index / 5) % 1;
+              const phase = (gaugeElapsed / 5 + index / 5) % 1;
               const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
               const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
               return <View key={index} style={[styles.marker, { left, opacity }]} />;
@@ -91,7 +104,8 @@ export default function TimerScreen() {
 }
 
 const styles = StyleSheet.create({
-  clock: { color: "#fff", fontSize: 54, fontWeight: "900", textAlign: "center" },
+  roomTitle: { color: lightTheme.danger },
+  clock: { color: "#fff", fontSize: 54, lineHeight: 72, fontWeight: "900", textAlign: "center", paddingVertical: 4 },
   rhythmFrame: { borderWidth: 1, borderColor: "#777", backgroundColor: "#151515" },
   rhythmHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, paddingTop: 8 },
   target: { color: lightTheme.danger, fontSize: 18, fontWeight: "900" },

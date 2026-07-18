@@ -58,11 +58,11 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!settings) return;
+    bgm.pause();
     bgm.replace(bgmSources[bgmKey]);
     bgm.loop = true;
     bgm.volume = settings.musicVolume;
     if (settings.backgroundMusicEnabled) bgm.play();
-    else bgm.pause();
     return () => bgm.pause();
   }, [bgm, bgmKey, settings]);
 
