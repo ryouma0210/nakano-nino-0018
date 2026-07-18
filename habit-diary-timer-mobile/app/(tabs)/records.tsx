@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Modal, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -121,8 +122,10 @@ export default function RecordsScreen() {
         <Card><AppText variant="muted">記録はまだありません。</AppText></Card>
       ) : null}
 
-      {journals.map((journal) => (
-        <Card key={journal.id}>
+      {journals.map((journal, index) => (
+        <View key={journal.id} style={styles.dateGroup}>
+          {index === 0 || journals[index - 1].record_date !== journal.record_date ? <AppText style={styles.dateHeading}>{formatDateJa(journal.record_date)}</AppText> : null}
+        <Card>
           <View style={styles.journalHeader}>
             <View style={styles.grow}>
               <AppText variant="subtitle">{journal.title}</AppText>
@@ -141,7 +144,10 @@ export default function RecordsScreen() {
             <PrimaryButton title="削除" tone="danger" onPress={() => remove(journal)} />
           </View>
         </Card>
+        </View>
       ))}
+
+      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
 
       <Modal visible={formVisible} animationType="slide" presentationStyle="pageSheet">
         <Screen>
@@ -239,4 +245,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  dateGroup: { gap: 8 },
+  dateHeading: { borderBottomWidth: 1, borderBottomColor: "#fff", paddingBottom: 6, fontSize: 18, fontWeight: "900" },
 });

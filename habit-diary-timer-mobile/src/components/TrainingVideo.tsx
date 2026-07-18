@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -8,12 +9,19 @@ import { secondsToClock } from "@/utils/date";
 import { useAppAudio } from "@/audio/AudioProvider";
 import type { StoredFile } from "@/services/fileStorageService";
 
-const source = require("../../assets/videos/habits_1.mp4");
+const defaultVideos = [
+  require("../../assets/videos/habits_1.mp4"),
+  require("../../assets/videos/habits_2.mp4"),
+  require("../../assets/videos/habits_3.mp4"),
+  require("../../assets/videos/habits_4.mp4"),
+  require("../../assets/videos/habits_5.mp4"),
+  require("../../assets/videos/habits_6.mp4"),
+];
 
 const modes = [
-  { key: "easy", label: "イージー", rate: 0.75 },
-  { key: "normal", label: "ノーマル", rate: 1 },
-  { key: "hard", label: "ハード", rate: 1.5 },
+  { key: "easy", label: "イージー", rate: 1 },
+  { key: "normal", label: "ノーマル", rate: 3 },
+  { key: "hard", label: "ハード", rate: 5 },
 ] as const;
 
 type TrainingMode = (typeof modes)[number]["key"];
@@ -26,18 +34,31 @@ export type TrainingResult = {
 export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result: TrainingResult) => void; slides?: StoredFile[] }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [gaugeProgress, setGaugeProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
   const [trackWidth, setTrackWidth] = useState(1);
   const [mode, setMode] = useState<TrainingMode>("normal");
   const [slideIndex, setSlideIndex] = useState(0);
+  const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
   const elapsedMilliseconds = useRef(0);
   const lastTick = useRef(0);
   const lastBeat = useRef(-1);
   const { playEffect } = useAppAudio();
   const slideMode = slides.length > 0;
-  const player = useVideoPlayer(source, (instance) => {
-    instance.loop = true;
+  const player = useVideoPlayer(defaultVideos[0], (instance) => {
+    instance.loop = false;
+    instance.playbackRate = 1;
+  });
+
+  useEventListener(player, "playToEnd", () => {
+    if (slideMode) return;
+    const nextIndex = (defaultVideoIndex + 1) % defaultVideos.length;
+    setDefaultVideoIndex(nextIndex);
+    player.replaceAsync(defaultVideos[nextIndex]).then(() => {
+      player.playbackRate = 1;
+      player.play();
+    }).catch(console.error);
   });
 
   useEffect(() => {
@@ -49,38 +70,27 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
       lastTick.current = now;
       const selectedMode = modes.find((item) => item.key === mode) ?? modes[1];
       const elapsed = elapsedMilliseconds.current / 1000;
-      const mediaTime = slideMode ? elapsed * selectedMode.rate : player.currentTime || 0;
+      const mediaTime = slideMode ? elapsed : player.currentTime || 0;
       const mediaDuration = slideMode ? Math.max(1, slides.length * 3) : player.duration || 0;
+      const rhythmTime = elapsed * selectedMode.rate;
       setCurrentTime(mediaDuration > 0 ? mediaTime % mediaDuration : 0);
       setDuration(mediaDuration);
+      setGaugeProgress((rhythmTime % 5) / 5);
       if (slideMode) setSlideIndex(Math.floor(mediaTime / 3) % slides.length);
-      const beat = Math.floor(mediaTime);
+      const beat = Math.floor(rhythmTime);
       if (activelyPlaying && beat !== lastBeat.current) {
+        if (lastBeat.current >= 0) playEffect("trainingRhythm");
         lastBeat.current = beat;
-        playEffect("rhythm");
       }
       if (!slideMode) setPlaying(player.playing);
     }, 50);
     return () => clearInterval(timer);
   }, [mode, player, playEffect, playing, slideMode, slides.length]);
 
-  useEffect(() => {
-    const selected = modes.find((item) => item.key === mode) ?? modes[1];
-    // expo-video exposes playbackRate as a mutable native-player property.
-    // eslint-disable-next-line react-hooks/immutability
-    player.playbackRate = selected.rate;
-  }, [mode, player]);
-
-  function togglePlayback() {
-    if (!started) return;
-    if (slideMode) setPlaying((value) => !value);
-    else if (player.playing) player.pause();
-    else player.play();
-  }
-
   function startTraining() {
     elapsedMilliseconds.current = 0;
     lastTick.current = Date.now();
+    lastBeat.current = -1;
     setStarted(true);
     if (!slideMode) player.play();
     setPlaying(true);
@@ -90,7 +100,7 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
     if (!started) return;
     if (!slideMode) player.pause();
     setPlaying(false);
-    playEffect("complete");
+    playEffect("ejaculation");
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
     onComplete({
       elapsedSeconds: Math.max(1, Math.floor(elapsedMilliseconds.current / 1000)),
@@ -98,19 +108,55 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
     });
   }
 
-  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
   const markerCount = 5;
+
+  const media = slideMode ? (
+    <Image source={{ uri: slides[slideIndex]?.uri }} style={started ? styles.fullscreenMedia : styles.video} resizeMode="contain" />
+  ) : (
+    <VideoView player={player} style={started ? styles.fullscreenMedia : styles.video} nativeControls={false} contentFit="contain" />
+  );
+
+  const rhythmGauge = (
+    <View style={[styles.rhythmFrame, started && styles.fullscreenRhythm]}>
+      <View style={styles.rhythmTitle}>
+        <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
+        <AppText style={styles.rhythmSubText}>赤いポイントで消滅</AppText>
+      </View>
+      <View accessibilityLabel="動画に同期したリズムゲージ" onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} style={styles.track}>
+        <View style={styles.line} />
+        <View style={styles.hitGlow} />
+        <View style={styles.hitPoint} />
+        {Array.from({ length: markerCount }, (_, index) => {
+          const phase = (gaugeProgress + index / markerCount) % 1;
+          const travelWidth = Math.max(0, trackWidth - 46);
+          const left = 26 + (1 - phase) * travelWidth;
+          const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
+          return <View key={index} style={[styles.rhythmMarker, { left, opacity }]} />;
+        })}
+      </View>
+    </View>
+  );
+
+  if (started) {
+    return (
+      <Modal visible animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
+        <View style={styles.fullscreenWrap}>
+          <View style={styles.fullscreenMediaFrame}>{media}</View>
+          {rhythmGauge}
+          <View style={styles.fullscreenCompleteButton}>
+            <PrimaryButton title="射精しました" tone="danger" onPress={completeTraining} />
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
-      {slideMode ? (
-        <Image source={{ uri: slides[slideIndex]?.uri }} style={styles.video} resizeMode="contain" />
-      ) : (
-        <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
-      )}
-      <View style={styles.mediaBadge}><AppText style={styles.mediaBadgeText}>{slideMode ? `SLIDE ${slideIndex + 1}/${slides.length}` : "DEFAULT VIDEO"}</AppText></View>
+      {media}
+      <View style={styles.mediaBadge}><AppText style={styles.mediaBadgeText}>{slideMode ? `SLIDE ${slideIndex + 1}/${slides.length}` : `DEFAULT VIDEO ${defaultVideoIndex + 1}/${defaultVideos.length}`}</AppText></View>
       <View style={styles.modePanel}>
-        <AppText style={styles.modeLabel}>MODE / SPEED</AppText>
+        <AppText style={styles.modeLabel}>MODE / GAUGE SPEED</AppText>
         <View style={styles.modeButtons}>
           {modes.map((item) => {
             const selected = item.key === mode;
@@ -136,35 +182,7 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
           <AppText style={styles.startedText}>調教中 / 難易度は変更できません</AppText>
         )}
       </View>
-      <View style={styles.rhythmFrame}>
-        <View style={styles.rhythmTitle}>
-          <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
-          <AppText style={styles.rhythmSubText}>赤いポイントで消滅</AppText>
-        </View>
-        <View
-          accessibilityLabel="動画に同期したリズムゲージ"
-          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-          style={styles.track}
-        >
-          <View style={styles.line} />
-          <View style={styles.hitGlow} />
-          <View style={styles.hitPoint} />
-          {Array.from({ length: markerCount }, (_, index) => {
-            const phase = (progress + index / markerCount) % 1;
-            const travelWidth = Math.max(0, trackWidth - 46);
-            const left = 26 + (1 - phase) * travelWidth;
-            const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
-            return <View key={index} style={[styles.rhythmMarker, { left, opacity }]} />;
-          })}
-        </View>
-      </View>
-      <View style={styles.controls}>
-        <Pressable disabled={!started} onPress={togglePlayback} style={[styles.playButton, !started && styles.controlDisabled]}>
-          <AppText style={styles.playText}>{!started ? "開始待ち" : playing ? "一時停止" : "再生"}</AppText>
-        </Pressable>
-        <AppText variant="muted">{secondsToClock(currentTime)} / {secondsToClock(duration)}</AppText>
-      </View>
-      {started ? <View style={styles.completeButton}><PrimaryButton title="射精しました" tone="danger" onPress={completeTraining} /></View> : null}
+      <View style={styles.waitingTime}><AppText variant="muted">{secondsToClock(currentTime)} / {secondsToClock(duration)}</AppText></View>
     </View>
   );
 }
@@ -172,6 +190,9 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
 const styles = StyleSheet.create({
   wrap: { overflow: "hidden", borderWidth: 1, borderColor: "#fff", borderRadius: 4, backgroundColor: "#000" },
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
+  fullscreenWrap: { flex: 1, paddingTop: 28, paddingBottom: 18, backgroundColor: "#000" },
+  fullscreenMediaFrame: { flex: 1, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#000" },
+  fullscreenMedia: { width: "100%", height: "100%", backgroundColor: "#000" },
   mediaBadge: { position: "absolute", top: 8, left: 8, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(0,0,0,0.78)" },
   mediaBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   modePanel: { gap: 7, paddingHorizontal: 14, paddingTop: 14 },
@@ -185,6 +206,7 @@ const styles = StyleSheet.create({
   rateText: { color: "#777", fontSize: 9, fontWeight: "800" },
   startedText: { color: lightTheme.danger, fontSize: 11, fontWeight: "900", textAlign: "center" },
   rhythmFrame: { marginHorizontal: 14, marginTop: 14, borderWidth: 1, borderColor: "#777", backgroundColor: "#151515" },
+  fullscreenRhythm: { marginTop: 8, marginHorizontal: 10 },
   rhythmTitle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 9, paddingTop: 6 },
   rhythmTitleText: { color: "#fff", fontSize: 11, fontWeight: "900", letterSpacing: 2 },
   rhythmSubText: { color: lightTheme.muted, fontSize: 9 },
@@ -193,9 +215,6 @@ const styles = StyleSheet.create({
   hitGlow: { position: "absolute", left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,47,47,0.22)" },
   hitPoint: { position: "absolute", left: 16, width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#ffb0a5", backgroundColor: "#ed3b35", zIndex: 3 },
   rhythmMarker: { position: "absolute", width: 18, height: 18, marginLeft: -9, borderRadius: 9, borderWidth: 2, borderColor: "#fff1a3", backgroundColor: "#f1c84b", zIndex: 2 },
-  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14 },
-  completeButton: { paddingHorizontal: 14, paddingBottom: 14 },
-  playButton: { minWidth: 86, alignItems: "center", borderWidth: 1, borderColor: "#fff", paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#000" },
-  controlDisabled: { opacity: 0.4 },
-  playText: { fontWeight: "800" },
+  waitingTime: { alignItems: "flex-end", paddingHorizontal: 14, paddingVertical: 10 },
+  fullscreenCompleteButton: { paddingHorizontal: 10, paddingTop: 10 },
 });
