@@ -1,5 +1,6 @@
 import { Alert, BackHandler, Image, Platform, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
+import Constants from "expo-constants";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
@@ -20,6 +21,7 @@ export default function Index() {
           <PrimaryButton title="始める" onPress={() => router.replace("/(tabs)")} />
           <PrimaryButton title="ゲーム終了" onPress={exitGame} tone="danger" />
         </View>
+        <AppText style={styles.version}>Ver:{Constants.expoConfig?.version ?? "-"}</AppText>
       </View>
     </Screen>
   );
@@ -30,4 +32,5 @@ const styles = StyleSheet.create({
   title: { color: lightTheme.text, fontSize: 34, fontWeight: "900", letterSpacing: 5, textAlign: "center" },
   hero: { width: "100%", height: 330, borderWidth: 1, borderColor: "#fff", borderRadius: 4 },
   menu: { gap: 16 },
+  version: { position: "absolute", right: 0, bottom: 0, color: lightTheme.muted, fontSize: 12, fontWeight: "700" },
 });
