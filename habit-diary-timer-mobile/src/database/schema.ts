@@ -28,7 +28,6 @@ function setVersion(nextVersion: number) {
 
 function migrateToV1() {
   db.execSync(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS habits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -186,6 +185,7 @@ function seedInitialData() {
 }
 
 export function initializeDatabase() {
+  db.execSync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
   createMetaTable();
   transaction(() => {
     if (version() < 1) {
