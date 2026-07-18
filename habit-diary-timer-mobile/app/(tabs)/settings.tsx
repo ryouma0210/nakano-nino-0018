@@ -12,6 +12,7 @@ import { notificationService } from "@/services/notificationService";
 import { settingsService } from "@/services/settingsService";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { achievementRepository } from "@/repositories/achievementRepository";
+import { dailyOrderService } from "@/services/gameRoomService";
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
@@ -41,6 +42,7 @@ export default function SettingsScreen() {
         execute("DELETE FROM timer_presets");
         execute("DELETE FROM app_settings");
         await settingsService.reset();
+        await dailyOrderService.clearAll();
         await notificationService.cancelAll();
         await fileStorageService.clear();
         loadSize();
@@ -52,7 +54,7 @@ export default function SettingsScreen() {
   return (
     <Screen>
       <AppText variant="title">設定</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/settings-nino.png")} roomName="設定" lines={[{ text: "保存量の確認や初期化は、ここで行えるわ。" }, { text: "初期化したデータは戻せないから、よく確認して。", event: "SYSTEM MENU" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/settings-nino.png")} roomName="設定" lines={[{ text: "保存量の確認や初期化は、ここで行えるわ。" }, { text: "初期化したデータは戻せないから、よく確認して。" }]} />
       <Card>
         <AppText variant="subtitle">実績</AppText>
         <View style={styles.achievementRow}>

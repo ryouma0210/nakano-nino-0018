@@ -116,7 +116,7 @@ export default function RecordsScreen() {
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
 
-      <RoomConversation characterSource={require("../../assets/characters/diary-nino.png")} roomName="調教日記部屋" lines={[{ text: "今日あったことを、ここに残して。" }, { text: "気持ちも評価も、正直に書けばいいわ。", event: "DIARY TIME" }, { text: "過去の記録は、いつでも読み返せるわよ。" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/diary-nino.png")} roomName="調教日記部屋" lines={[{ text: "今日あったことを、ここに残して。" }, { text: "気持ちも評価も、正直に書けばいいわ。" }, { text: "過去の記録は、いつでも読み返せるわよ。" }]} />
 
       <TextField label="検索" value={keyword} onChangeText={setKeyword} placeholder="タイトル・本文・タグ" />
 

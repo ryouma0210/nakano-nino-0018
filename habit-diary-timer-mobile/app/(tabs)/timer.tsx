@@ -11,6 +11,7 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { secondsToClock } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { achievementRepository } from "@/repositories/achievementRepository";
+import { contractService } from "@/services/gameRoomService";
 
 export default function TimerScreen() {
   const [minutes, setMinutes] = useState("10");
@@ -18,12 +19,14 @@ export default function TimerScreen() {
   const [remaining, setRemaining] = useState(600);
   const [running, setRunning] = useState(false);
   const [gaugeElapsed, setGaugeElapsed] = useState(0);
+  const [maxMinutes, setMaxMinutes] = useState(30);
   const [trackWidth, setTrackWidth] = useState(1);
   const [target, setTarget] = useState<"チンポ" | "金玉">("チンポ");
   const lastBeat = useRef(-1);
   const sessionRecorded = useRef(false);
   const startedAt = useRef(0);
   const { playEffect } = useAppAudio();
+  useEffect(() => { contractService.load().then((contract) => setMaxMinutes(contract.maxPunishmentMinutes)); }, []);
 
   useEffect(() => {
     if (!running) return;
@@ -58,7 +61,7 @@ export default function TimerScreen() {
   }, [gaugeBeat, playEffect, running]);
 
   function start() {
-    const duration = Math.max(1, Math.min(999, Number(minutes) || 1)) * 60;
+    const duration = Math.max(1, Math.min(maxMinutes, Number(minutes) || 1)) * 60;
     setTotalSeconds(duration);
     setRemaining(duration);
     setGaugeElapsed(0);
@@ -77,9 +80,9 @@ export default function TimerScreen() {
   return (
     <Screen>
       <AppText variant="title" style={styles.roomTitle}>お仕置き部屋</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" lines={[{ text: "時間は自分で決めなさい。" }, { text: "黄色が赤へ到達したら、表示された場所へビンタよ。", event: "PUNISHMENT RHYTHM" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" lines={[{ text: "時間は自分で決めなさい。" }, { text: "黄色が赤へ到達したら、表示された場所へビンタよ。" }]} />
       <Card>
-        <TextField label="時間（分）" value={minutes} onChangeText={setMinutes} keyboardType="number-pad" editable={!running} />
+        <TextField label={`時間（分）・契約上限 ${maxMinutes}分`} value={minutes} onChangeText={setMinutes} keyboardType="number-pad" editable={!running} />
         <AppText style={styles.clock}>{secondsToClock(remaining)}</AppText>
         <View style={styles.rhythmFrame}>
           <View style={styles.rhythmHeader}><AppText variant="label">RHYTHM</AppText><AppText style={styles.target}>{target}にビンタ</AppText></View>

@@ -99,7 +99,7 @@ export default function HabitsScreen() {
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
 
-      <RoomConversation characterSource={require("../../assets/characters/training-nino.png")} roomName="調教部屋" lines={[{ text: "今日の課題を確認するわ。続けるものを選んで。" }, { text: "達成した課題は、忘れずに記録して。", event: "DAILY TRAINING" }, { text: "積み重ねた日数は、あなたが続けた証拠よ。" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/training-nino.png")} roomName="調教部屋" lines={[{ text: "今日の課題を確認するわ。続けるものを選んで。" }, { text: "達成した課題は、忘れずに記録して。" }, { text: "積み重ねた日数は、あなたが続けた証拠よ。" }]} />
 
       <Card>
         <AppText variant="subtitle">表示するファイル</AppText>

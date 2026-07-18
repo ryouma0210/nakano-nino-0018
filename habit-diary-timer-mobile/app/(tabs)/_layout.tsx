@@ -13,8 +13,11 @@ export default function TabLayout() {
       <Tabs.Screen name="records" options={{ title: "調教日記部屋" }} />
       <Tabs.Screen name="timer" options={{ title: "お仕置き部屋" }} />
       <Tabs.Screen name="preparation" options={{ title: "準備部屋" }} />
-      <Tabs.Screen name="release" options={{ title: "射精管理用部屋（貞操帯なし）" }} />
-      <Tabs.Screen name="chastity" options={{ title: "射精管理用部屋（貞操帯あり）" }} />
+      <Tabs.Screen name="management" options={{ title: "射精管理部屋" }} />
+      <Tabs.Screen name="rewards" options={{ title: "ご褒美部屋" }} />
+      <Tabs.Screen name="orders" options={{ title: "本日の命令部屋" }} />
+      <Tabs.Screen name="achievements" options={{ title: "称号・実績部屋" }} />
+      <Tabs.Screen name="contract" options={{ title: "契約部屋" }} />
       <Tabs.Screen name="files" options={{ title: "ファイル格納部屋" }} />
       <Tabs.Screen name="settings" options={{ title: "設定" }} />
     </Tabs>

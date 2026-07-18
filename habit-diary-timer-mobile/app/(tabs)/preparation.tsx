@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const items = [
   { text: "全裸の状態であること。", required: true },
   { text: "土下座の状態であること。", required: true },
-  { text: "お貢ぎ用意したこと。", required: true },
+  { text: "お貢ぎ用意していること。", required: true },
   { text: "発情状態であること。", required: true },
   { text: "3日間以上オナ禁したこと。", required: false },
   { text: "首輪（犬用でも可）を装着していること。", required: false },
@@ -70,7 +70,7 @@ export default function PreparationScreen() {
   return (
     <Screen>
       <AppText variant="title">準備部屋</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/preparation-nino.png")} roomName="準備部屋" lines={[{ text: "今日の準備を一つずつ確認して。" }, { text: "必須項目を全部済ませたら、最後の挨拶よ。", event: "PREPARATION" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/preparation-nino.png")} roomName="準備部屋" lines={[{ text: "今日の準備を一つずつ確認して。" }, { text: "必須項目を全部済ませたら、最後の挨拶よ。" }]} />
       <Card>
         <AppText variant="subtitle">発情してない人向け</AppText>
         {!fullscreen ? (
