@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { toDateKey } from "@/utils/date";
+import { pointRepository } from "@/repositories/rewardRepository";
 
 const CONTRACT_KEY = "nino-room:contract";
 const ORDER_PREFIX = "nino-room:daily-order:";
@@ -86,6 +87,7 @@ export const dailyOrderService = {
   async complete(order: DailyOrder) {
     const next = { ...order, completed: true };
     await AsyncStorage.setItem(`${ORDER_PREFIX}${order.date}`, JSON.stringify(next));
+    pointRepository.award(`daily-order:${order.date}`, 1, "本日の命令を完了");
     return next;
   },
   async clearAll() {

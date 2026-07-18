@@ -10,14 +10,10 @@ const rooms = [
   ["準備部屋", "/(tabs)/preparation"],
   ["本日の命令部屋", "/(tabs)/orders"],
   ["調教部屋", "/(tabs)/habits"],
-  ["ご褒美部屋", "/(tabs)/rewards"],
-  ["お仕置き部屋", "/(tabs)/timer"],
   ["射精管理部屋", "/(tabs)/management"],
+  ["お仕置き部屋", "/(tabs)/timer"],
   ["契約部屋", "/(tabs)/contract"],
-  ["調教日記部屋", "/(tabs)/records"],
-  ["ファイル格納部屋", "/(tabs)/files"],
-  ["称号・実績部屋", "/(tabs)/achievements"],
-  ["設定", "/(tabs)/settings"],
+  ["記録・管理メニュー", "/(tabs)/menu"],
 ] as const;
 
 export default function HomeScreen() {

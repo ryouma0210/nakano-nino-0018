@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, View, type ImageSourcePropType } from "react-native";
+import { Alert, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -9,6 +9,7 @@ import { Screen } from "@/components/Screen";
 import { managementRepository, type ManagementCycle, type ManagementDailyTask, type ManagementMode } from "@/repositories/roomRepository";
 import { formatDateJa } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
+import { pointRepository } from "@/repositories/rewardRepository";
 
 export function ManagementRoom({ mode, title, characterSource, onChangeMode }: { mode: ManagementMode; title: string; characterSource: ImageSourcePropType; onChangeMode?: () => void }) {
   const initialCycle = managementRepository.active(mode);
@@ -30,8 +31,35 @@ export function ManagementRoom({ mode, title, characterSource, onChangeMode }: {
   function complete() {
     if (!task || !cycle) return;
     managementRepository.complete(task.id);
+    pointRepository.award(`management-task:${task.id}`, 10, "射精管理の本日の命令を完了");
     setTask({ ...task, completed_at: new Date().toISOString() });
     if (task.instruction === "本日は射精日") managementRepository.finish(cycle.id);
+  }
+
+  function confirmReroll() {
+    if (!cycle || rolling) return;
+    Alert.alert(
+      "サイコロを振り直しますか？",
+      "現在の管理期間と、この期間に記録された実績・完了記録はすべて削除されます。",
+      [
+        { text: "キャンセル", style: "cancel" },
+        {
+          text: "削除して振り直す",
+          style: "destructive",
+          onPress: () => {
+            const currentCycleId = cycle.id;
+            setRolling(true);
+            setTimeout(() => {
+              const dice = Math.floor(Math.random() * 6) + 1;
+              const next = managementRepository.reroll(currentCycleId, mode, dice);
+              setCycle(next);
+              setTask(managementRepository.todayTask(next));
+              setRolling(false);
+            }, 650);
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -49,9 +77,10 @@ export function ManagementRoom({ mode, title, characterSource, onChangeMode }: {
       ) : (
         <>
           <Card>
-            <View style={styles.periodRow}><AppText variant="label">サイコロ</AppText><AppText style={styles.diceResult}>{cycle.dice}</AppText></View>
+            <View style={styles.periodRow}><AppText variant="label">サイコロ</AppText><AppText style={styles.diceResult}>{rolling ? "…" : cycle.dice}</AppText></View>
             <AppText>管理期間：{cycle.dice * 3}日間</AppText>
             <AppText variant="muted">{formatDateJa(cycle.start_date)} ～ {formatDateJa(cycle.end_date)}</AppText>
+            <PrimaryButton title={rolling ? "サイコロを振っています" : "サイコロを振り直す"} tone="danger" disabled={rolling} onPress={confirmReroll} />
           </Card>
           <Card>
             <AppText variant="label">本日の調教指示</AppText>

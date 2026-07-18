@@ -9,6 +9,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "ホーム" }} />
+      <Tabs.Screen name="menu" options={{ title: "記録・管理メニュー" }} />
       <Tabs.Screen name="habits" options={{ title: "調教部屋" }} />
       <Tabs.Screen name="records" options={{ title: "調教日記部屋" }} />
       <Tabs.Screen name="timer" options={{ title: "お仕置き部屋" }} />

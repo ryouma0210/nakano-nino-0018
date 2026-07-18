@@ -99,6 +99,25 @@ export const managementRepository = {
     return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
   },
 
+  reroll(cycleId: number, mode: ManagementMode, dice: number) {
+    const startDate = toDateKey();
+    const endDate = addDays(startDate, dice * 3 - 1);
+    const now = toDateTimeKey();
+    let id = 0;
+    transaction(() => {
+      // Deleting the cycle also deletes every daily task and removes this period from achievements.
+      execute("DELETE FROM management_daily_tasks WHERE cycle_id=?", [cycleId]);
+      execute("DELETE FROM management_cycles WHERE id=?", [cycleId]);
+      execute("UPDATE management_cycles SET is_active=0 WHERE mode=?", [mode]);
+      const result = execute(
+        "INSERT INTO management_cycles(mode, dice, start_date, end_date, is_active, created_at) VALUES(?, ?, ?, ?, 1, ?)",
+        [mode, dice, startDate, endDate, now],
+      );
+      id = Number(result.lastInsertRowId);
+    });
+    return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+  },
+
   todayTask(cycle: ManagementCycle) {
     const today = toDateKey();
     const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?", [cycle.id, today]);

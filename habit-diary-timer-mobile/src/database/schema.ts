@@ -1,7 +1,7 @@
 import { db, execute, queryOne, transaction } from "./client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 4;
 
 function createMetaTable() {
   execute(`
@@ -177,6 +177,34 @@ function migrateToV2() {
   `);
 }
 
+function migrateToV3() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS reward_redemptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reward_key TEXT NOT NULL,
+      reward_name TEXT NOT NULL,
+      points_spent INTEGER NOT NULL,
+      redeemed_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reward_redemptions_date ON reward_redemptions(redeemed_at);
+  `);
+}
+
+function migrateToV4() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS point_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_key TEXT NOT NULL UNIQUE,
+      points INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    ALTER TABLE reward_redemptions ADD COLUMN reward_content TEXT;
+    ALTER TABLE reward_redemptions ADD COLUMN file_uri TEXT;
+    CREATE INDEX IF NOT EXISTS idx_point_transactions_date ON point_transactions(created_at);
+  `);
+}
+
 function seedInitialData() {
   const now = toDateTimeKey();
   const today = toDateKey();
@@ -212,6 +240,14 @@ export function initializeDatabase() {
     }
     if (version() < 2) {
       migrateToV2();
+      setVersion(2);
+    }
+    if (version() < 3) {
+      migrateToV3();
+      setVersion(3);
+    }
+    if (version() < 4) {
+      migrateToV4();
       setVersion(DATABASE_VERSION);
     }
     seedInitialData();

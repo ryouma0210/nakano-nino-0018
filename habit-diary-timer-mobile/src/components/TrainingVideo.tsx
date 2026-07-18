@@ -57,6 +57,7 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
   const elapsedMilliseconds = useRef(0);
   const lastTick = useRef(0);
   const lastBeat = useRef(-1);
+  const videoLoopCount = useRef(0);
   const { playEffect } = useAppAudio();
   const slideMode = slides.length > 0;
   const player = useVideoPlayer(defaultVideos[0], (instance) => {
@@ -73,7 +74,13 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
   }
 
   useEventListener(player, "playToEnd", () => {
-    if (slideMode) return;
+    if (slideMode || !started) return;
+    if (videoLoopCount.current < 2) {
+      videoLoopCount.current += 1;
+      player.replay();
+      return;
+    }
+    videoLoopCount.current = 0;
     const nextIndex = (defaultVideoIndex + 1) % defaultVideos.length;
     setDefaultVideoIndex(nextIndex);
     showRandomComment();
@@ -93,12 +100,12 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
       const selectedMode = modes.find((item) => item.key === mode) ?? modes[1];
       const elapsed = elapsedMilliseconds.current / 1000;
       const mediaTime = slideMode ? elapsed : player.currentTime || 0;
-      const mediaDuration = slideMode ? Math.max(1, slides.length * 3) : player.duration || 0;
+      const mediaDuration = slideMode ? Math.max(1, slides.length * 10) : player.duration || 0;
       const rhythmTime = elapsed * selectedMode.rate;
       setCurrentTime(mediaDuration > 0 ? mediaTime % mediaDuration : 0);
       setDuration(mediaDuration);
       setGaugeProgress((rhythmTime % 5) / 5);
-      if (slideMode) setSlideIndex(Math.floor(mediaTime / 3) % slides.length);
+      if (slideMode) setSlideIndex(Math.floor(mediaTime / 10) % slides.length);
       const beat = Math.floor(rhythmTime);
       if (activelyPlaying && beat !== lastBeat.current) {
         if (lastBeat.current >= 0) playEffect("trainingRhythm");
@@ -119,9 +126,10 @@ export function TrainingVideo({ onComplete, slides = [] }: { onComplete: (result
     elapsedMilliseconds.current = 0;
     lastTick.current = Date.now();
     lastBeat.current = -1;
+    videoLoopCount.current = 0;
     showRandomComment();
     setStarted(true);
-    if (!slideMode) player.play();
+    if (!slideMode) player.replay();
     setPlaying(true);
   }
 

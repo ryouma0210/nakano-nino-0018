@@ -32,5 +32,5 @@ const styles = StyleSheet.create({
   title: { color: lightTheme.text, fontSize: 34, lineHeight: 46, fontWeight: "900", letterSpacing: 5, textAlign: "center" },
   hero: { width: "100%", height: 430, borderWidth: 1, borderColor: "#fff", borderRadius: 4, backgroundColor: "#000" },
   menu: { gap: 16 },
-  version: { position: "absolute", right: 0, bottom: 0, color: lightTheme.muted, fontSize: 12, fontWeight: "700" },
+  version: { alignSelf: "flex-end", color: lightTheme.muted, fontSize: 12, lineHeight: 18, fontWeight: "700" },
 });
