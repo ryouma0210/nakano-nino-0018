@@ -93,6 +93,45 @@ export const journalRepository = {
     });
   },
 
+  removeDate(recordDate: string) {
+    const likeDate = `${recordDate}%`;
+    const managementTasks = query<{ id: number }>(
+      "SELECT id FROM management_daily_tasks WHERE record_date = ?",
+      [recordDate],
+    );
+    transaction(() => {
+      managementTasks.forEach((task) => {
+        execute("DELETE FROM point_transactions WHERE source_key = ?", [
+          `management-task:${task.id}`,
+        ]);
+      });
+      execute("DELETE FROM point_transactions WHERE source_key = ?", [
+        `training:${recordDate}`,
+      ]);
+      execute("DELETE FROM point_transactions WHERE source_key = ?", [
+        `daily-order:${recordDate}`,
+      ]);
+      execute("DELETE FROM point_transactions WHERE created_at LIKE ?", [
+        likeDate,
+      ]);
+      execute("DELETE FROM reward_redemptions WHERE redeemed_at LIKE ?", [
+        likeDate,
+      ]);
+      execute("DELETE FROM management_daily_tasks WHERE record_date = ?", [
+        recordDate,
+      ]);
+      execute("DELETE FROM preparation_records WHERE record_date = ?", [
+        recordDate,
+      ]);
+      execute("DELETE FROM habit_records WHERE record_date = ?", [recordDate]);
+      execute("DELETE FROM timer_histories WHERE started_at LIKE ?", [likeDate]);
+      execute("DELETE FROM journals WHERE record_date = ?", [recordDate]);
+      execute(
+        "DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM journal_tags)",
+      );
+    });
+  },
+
   countToday() {
     return queryOne<{ count: number }>("SELECT COUNT(*) AS count FROM journals WHERE record_date = ?", [toDateKey()])?.count ?? 0;
   },

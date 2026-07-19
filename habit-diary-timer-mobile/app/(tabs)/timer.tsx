@@ -18,6 +18,7 @@ import {
   type StoredFile,
 } from "@/services/fileStorageService";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppModal } from "@/components/AppModalProvider";
 
 const gaugeSpeeds = [
   { label: "ゆっくり", value: 0.5 },
@@ -28,9 +29,11 @@ const gaugeSpeeds = [
 
 const punishmentComments = [
   "リズムが変わっても逃げちゃダメよ♡",
-  "痛い？♡辛い？♡知らないわ、もっと強くやれよ。変態",
+  "痛い？辛い？知らないわ、もっと強くやれよ。変態",
   "何、緩めているの？ちゃんとリズム通りにしなさい♡",
   "死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡",
+  "精子死ね♡チンポ死ね♡金玉死ね♡マゾ死ね♡",
+  "まさかこんなのでお漏らししないわよね♡",
   "ギブアップしたい？最後まで耐えてみなさい♡",
   "もっと正確に♡強く狙え♡",
   "痛がるだけじゃダメ。きちんと回数を声に出して数えなさい♡",
@@ -89,6 +92,7 @@ export default function TimerScreen() {
   const lastGaugeTick = useRef(0);
   const nextSpeedChangeAt = useRef(0);
   const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
+  const { showNotice } = useAppModal();
 
   useEffect(
     () => () => {
@@ -194,9 +198,14 @@ export default function TimerScreen() {
 
   function start() {
     const enteredMinutes = Number(minutes);
-    const normalizedMinutes = Number.isFinite(enteredMinutes)
-      ? Math.max(minMinutes, Math.floor(enteredMinutes))
-      : minMinutes;
+    if (!Number.isFinite(enteredMinutes) || enteredMinutes < minMinutes) {
+      showNotice(
+        "時間を確認してください",
+        `お仕置き時間は${minMinutes}分以上で設定してください。`,
+      );
+      return;
+    }
+    const normalizedMinutes = Math.floor(enteredMinutes);
     const duration = normalizedMinutes * 60;
     setMinutes(String(normalizedMinutes));
     setTotalSeconds(duration);
@@ -319,7 +328,7 @@ export default function TimerScreen() {
             <AppText style={styles.punishmentCommentName}>ニノ</AppText>
             <AppText style={styles.punishmentCommentText}>
               {settings?.playerName.trim()
-                ? `${settings.playerName.trim()}、${punishmentComment}`
+                ? `${settings.playerName.trim()}。${punishmentComment}`
                 : punishmentComment}
             </AppText>
           </View>

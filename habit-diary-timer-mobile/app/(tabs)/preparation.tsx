@@ -12,6 +12,7 @@ import { preparationRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 const items = [
   { text: "全裸の状態であること。", required: true },
@@ -34,10 +35,14 @@ const preparationComments = [
 
 export default function PreparationScreen() {
   const insets = useSafeAreaInsets();
+  const { settings, playEffect, stopEffect, setSessionAudioActive } = useAppAudio();
+  const playerName = settings?.playerName.trim() ?? "";
   const preparationPlayer = useVideoPlayer(
     require("../../assets/videos/preparation_1.mp4"),
     (player) => {
       player.loop = true;
+      player.muted = true;
+      player.volume = 0;
       player.play();
     },
   );
@@ -47,6 +52,18 @@ export default function PreparationScreen() {
   const [completed, setCompleted] = useState(Boolean(saved));
   const [fullscreen, setFullscreen] = useState(false);
   const [commentIndex, setCommentIndex] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      const enabled = Boolean(settings?.soundEnabled);
+      setSessionAudioActive(enabled);
+      if (enabled) playEffect("preparationLoop");
+      return () => {
+        stopEffect("preparationLoop");
+        setSessionAudioActive(false);
+      };
+    }, [playEffect, setSessionAudioActive, settings?.soundEnabled, stopEffect]),
+  );
 
   useFocusEffect(useCallback(() => {
     const current = preparationRepository.find();
@@ -123,7 +140,9 @@ export default function PreparationScreen() {
           </View>
         )}
         <AppText style={styles.breath}>
-          {preparationComments[commentIndex]}
+          {playerName
+            ? `${playerName}。${preparationComments[commentIndex]}`
+            : preparationComments[commentIndex]}
         </AppText>
       </Card>
       <Card>
@@ -155,7 +174,7 @@ export default function PreparationScreen() {
         </Card>
       ) : (
         <PrimaryButton
-          title="準備完了♡本日も調教\nよろしくお願いいたします♡"
+          title={"準備完了♡本日も調教\nよろしくお願いいたします♡"}
           disabled={!requiredComplete}
           onPress={complete}
         />
@@ -187,7 +206,9 @@ export default function PreparationScreen() {
             contentFit="contain"
           />
           <AppText style={styles.fullscreenBreath}>
-            {preparationComments[commentIndex]}
+            {playerName
+              ? `${playerName}。${preparationComments[commentIndex]}`
+              : preparationComments[commentIndex]}
           </AppText>
           <PrimaryButton
             title="閉じる"

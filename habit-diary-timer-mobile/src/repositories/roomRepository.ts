@@ -92,13 +92,32 @@ const instructions: Record<ManagementMode, string[]> = {
     "ゴミ箱に向けて寸止め3回",
     "土下座の状態で寸止め5回",
     "ヨダレを大量に付けた状態で寸止め10回",
+    "好きな態勢の状態で寸止め5回",
+    "チングリ返しで寸止め3回",
   ],
   chastity: [
-    "アナル責め30分",
-    "乳首責めカリカリ60分",
-    "貞操帯越しにシコシコ10分",
-    "乳首責めしながらチンピク30分",
-    "金玉叩き10分＆金玉潰し10分",
+    "お仕置き30分＆アナル責め30分",
+    "お仕置き40分＆乳首責めカリカリ20分",
+    "お仕置き30分＆貞操帯越しにシコシコ30分",
+    "お仕置き30分＆乳首責めしながらチンピク30分",
+    "お仕置き30分＆金玉潰し10分",
+    "お仕置き60分",
+    "お仕置き60分＆乳首責めしながらチンピク60分",
+  ],
+};
+
+const finalDayInstructions: Record<ManagementMode, string[]> = {
+  release: [
+    "本日は射精日よ。土下座の姿勢で寸止めを3回してから射精しなさい♡",
+    "本日は射精日よ。四つん這いで寸止めを5回してから射精しなさい♡",
+    "本日は射精日よ。鏡の前でアヘ顔で射精しなさい♡",
+    "本日は射精日よ。乳首をいじめながら足ピンの状態で射精しなさい♡",
+  ],
+  chastity: [
+    "本日は射精日よ。貞操帯を外し、寸止めを3回してから射精しなさい♡\n射精後は貞操帯を再度装着すること。♡",
+    "本日は射精日よ。貞操帯を外して四つん這いになり、最後に射精しなさい♡\n射精後は貞操帯を再度装着すること。♡",
+    "本日は射精日よ。貞操帯を外して許可をお願いし、寸止め後に射精しなさい\n射精後は貞操帯を再度装着すること。♡",
+    "本日は射精日よ。貞操帯付けたまま、射精しなさい。電マでもアナルでもなんでもいいわよ♡\nこれで射精できたら永久に貞操帯付けたままでいいわね♡",
   ],
 };
 
@@ -147,12 +166,25 @@ export const managementRepository = {
 
   todayTask(cycle: ManagementCycle) {
     const today = toDateKey();
-    const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?", [cycle.id, today]);
-    if (existing) return existing;
     const isFinalDay = today >= cycle.end_date;
-    const choices = instructions[cycle.mode];
     const seed = Number(today.replaceAll("-", "")) + cycle.id * 17;
-    const instruction = isFinalDay ? "本日は射精日" : choices[seed % choices.length];
+    const finalChoices = finalDayInstructions[cycle.mode];
+    const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?", [cycle.id, today]);
+    if (existing) {
+      if (isFinalDay && existing.instruction === "本日は射精日") {
+        const instruction = finalChoices[seed % finalChoices.length];
+        execute("UPDATE management_daily_tasks SET instruction=? WHERE id=?", [
+          instruction,
+          existing.id,
+        ]);
+        return { ...existing, instruction };
+      }
+      return existing;
+    }
+    const choices = instructions[cycle.mode];
+    const instruction = isFinalDay
+      ? finalChoices[seed % finalChoices.length]
+      : choices[seed % choices.length];
     const result = execute(
       "INSERT INTO management_daily_tasks(cycle_id, record_date, instruction) VALUES(?, ?, ?)",
       [cycle.id, today, instruction],

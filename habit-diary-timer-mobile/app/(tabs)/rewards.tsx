@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -15,6 +15,8 @@ import {
   type RandomRewardKey,
   type RewardRedemption,
 } from "@/repositories/rewardRepository";
+import { useAppModal } from "@/components/AppModalProvider";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 const rewardVideos = [
   {
@@ -43,13 +45,7 @@ async function bundledVideoUri(module: number) {
 
 async function saveVideoToLibrary(uri: string) {
   const permission = await MediaLibrary.requestPermissionsAsync(true, ["video"]);
-  if (!permission.granted) {
-    Alert.alert(
-      "保存権限が必要です",
-      "動画を直接保存するには、写真と動画への保存を許可してください。",
-    );
-    return false;
-  }
+  if (!permission.granted) return false;
   await MediaLibrary.saveToLibraryAsync(uri);
   return true;
 }
@@ -59,6 +55,9 @@ function getErrorMessage(error: unknown) {
 }
 
 export default function RewardsScreen() {
+  const { showNotice } = useAppModal();
+  const { settings } = useAppAudio();
+  const playerName = settings?.playerName.trim() ?? "";
   const [balance, setBalance] = useState(() => rewardRepository.balance());
   const [acquired, setAcquired] = useState<RewardRedemption[]>(() =>
     rewardRepository.acquired(),
@@ -92,7 +91,7 @@ export default function RewardsScreen() {
       onConfirm: () => {
         const content = rewardRepository.redeemRandom(key);
         if (!content) {
-          Alert.alert(
+          showNotice(
             "交換できません",
             rewardRepository.remaining(key).length === 0
               ? "このご褒美は全種類獲得済みです。"
@@ -101,7 +100,12 @@ export default function RewardsScreen() {
           return;
         }
         reload();
-        Alert.alert("ご褒美獲得♡", content);
+        showNotice(
+          "ご褒美獲得♡",
+          key === "praise" && playerName
+            ? `${playerName}。${content}`
+            : content,
+        );
       },
     });
   }
@@ -114,9 +118,9 @@ export default function RewardsScreen() {
       onConfirm: () => {
         const content = rewardRepository.redeemSecret();
         if (!content)
-          return Alert.alert("ポイント不足", "所持ポイントが足りません。");
+          return showNotice("ポイント不足", "所持ポイントが足りません。");
         reload();
-        Alert.alert("秘密のご褒美♡", content);
+        showNotice("秘密のご褒美♡", content);
       },
     });
   }
@@ -130,13 +134,18 @@ export default function RewardsScreen() {
         try {
           const uri = await bundledVideoUri(video.module);
           if (!rewardRepository.redeemVideo(video.name))
-            return Alert.alert("ポイント不足", "所持ポイントが足りません。");
+            return showNotice("ポイント不足", "所持ポイントが足りません。");
           reload();
           if (await saveVideoToLibrary(uri)) {
-            Alert.alert("動画を獲得しました♡", "端末のギャラリーへ保存しました。");
+            showNotice("動画を獲得しました♡", "端末のギャラリーへ保存しました。");
+          } else {
+            showNotice(
+              "保存権限が必要です",
+              "動画を直接保存するには、写真と動画への保存を許可してください。",
+            );
           }
         } catch (error) {
-          Alert.alert(
+          showNotice(
             "動画を準備できません",
             `動画の読み込みまたは保存に失敗しました。\n\n${getErrorMessage(error)}`,
           );
@@ -155,10 +164,15 @@ export default function RewardsScreen() {
         : item.file_uri;
       if (!uri) throw new Error("Video not found");
       if (await saveVideoToLibrary(uri)) {
-        Alert.alert("保存完了", "動画を端末のギャラリーへ保存しました。");
+        showNotice("保存完了", "動画を端末のギャラリーへ保存しました。");
+      } else {
+        showNotice(
+          "保存権限が必要です",
+          "動画を直接保存するには、写真と動画への保存を許可してください。",
+        );
       }
     } catch (error) {
-      Alert.alert(
+      showNotice(
         "動画を保存できません",
         `同梱動画の読み込みまたは端末への保存に失敗しました。\n\n${getErrorMessage(error)}`,
       );
@@ -259,7 +273,9 @@ export default function RewardsScreen() {
             <View key={item.id} style={styles.acquiredRow}>
               <View style={styles.grow}>
                 <AppText style={styles.acquiredContent}>
-                  {item.reward_content}
+                  {item.reward_key === "praise" && playerName
+                    ? `${playerName}。${item.reward_content ?? ""}`
+                    : item.reward_content}
                 </AppText>
                 <AppText style={styles.acquiredMeta}>
                   {item.reward_name} / 使用：{item.points_spent}pt

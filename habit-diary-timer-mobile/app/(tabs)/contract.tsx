@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
@@ -15,6 +15,7 @@ import {
   type ContractSettings,
 } from "@/services/gameRoomService";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { useAppModal } from "@/components/AppModalProvider";
 
 const contractRules = [
   { text: "私の命令は絶対服従すること。", required: true },
@@ -36,6 +37,7 @@ function formatContractDate(value?: string) {
 
 export default function ContractScreen() {
   const { settings } = useAppAudio();
+  const { showNotice } = useAppModal();
   const playerName = settings?.playerName.trim() ?? "";
   const [contract, setContract] = useState<ContractSettings | null>(null);
   const [checked, setChecked] = useState(() => new Set<string>());
@@ -108,7 +110,7 @@ export default function ContractScreen() {
     const next: ContractSettings = { ...current, signature: nextSignature };
     await contractService.save(next);
     setContract(next);
-    Alert.alert(
+    showNotice(
       "変更完了",
       "契約者サインを変更しました。契約内容と契約状態は変更されません。",
     );
@@ -129,7 +131,7 @@ export default function ContractScreen() {
               contentFit="contain"
             />
             <AppText style={styles.completedMessage}>
-              {`契約成立♡\n${playerName ? `${playerName}、` : ""}アンタは私の奴隷♡\nこれからよろしくね♡\nATMマゾ君♡`}
+              {`契約成立♡\n${playerName ? `${playerName}。` : ""}アンタは私の奴隷♡\nこれからよろしくね♡\nATMマゾ君♡`}
             </AppText>
           </Card>
           <Card style={styles.contractCard}>

@@ -16,7 +16,6 @@ import {
 import { formatDateJa } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { pointRepository } from "@/repositories/rewardRepository";
-import { useAppAudio } from "@/audio/AudioProvider";
 
 export function ManagementRoom({
   mode,
@@ -29,8 +28,6 @@ export function ManagementRoom({
   characterSource: ImageSourcePropType;
   onChangeMode?: () => void;
 }) {
-  const { settings } = useAppAudio();
-  const playerName = settings?.playerName.trim() ?? "";
   const initialCycle = managementRepository.active(mode);
   const [cycle, setCycle] = useState<ManagementCycle | null>(initialCycle);
   const [task, setTask] = useState<ManagementDailyTask | null>(() =>
@@ -60,7 +57,7 @@ export function ManagementRoom({
       "射精管理の本日の命令を完了",
     );
     setTask({ ...task, completed_at: new Date().toISOString() });
-    if (task.instruction === "本日は射精日")
+    if (task.record_date >= cycle.end_date)
       managementRepository.finish(cycle.id);
   }
 
@@ -161,7 +158,6 @@ export function ManagementRoom({
           <Card>
             <AppText variant="label">本日の調教指示</AppText>
             <AppText style={styles.instruction}>
-              {playerName ? `${playerName}、` : ""}
               {task?.instruction ?? "指示を準備中"}よ。
             </AppText>
             <AppText>実施完了次第、完了ボタンを押してね。</AppText>

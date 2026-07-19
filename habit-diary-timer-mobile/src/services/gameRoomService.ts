@@ -90,6 +90,9 @@ export const dailyOrderService = {
     pointRepository.award(`daily-order:${order.date}`, 1, "本日の命令を完了");
     return next;
   },
+  async remove(date = toDateKey()) {
+    await AsyncStorage.removeItem(`${ORDER_PREFIX}${date}`);
+  },
   async clearAll() {
     const keys = await AsyncStorage.getAllKeys();
     const targets = keys.filter((key) => key.startsWith(ORDER_PREFIX) || key === CONTRACT_KEY);

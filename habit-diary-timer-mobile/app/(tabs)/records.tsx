@@ -15,6 +15,7 @@ import { journalRepository } from "@/repositories/journalRepository";
 import { journalFormSchema, type JournalFormValues } from "@/schemas/forms";
 import type { Journal } from "@/types/models";
 import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
+import { dailyOrderService } from "@/services/gameRoomService";
 
 export default function RecordsScreen() {
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -27,6 +28,7 @@ export default function RecordsScreen() {
   const [formVisible, setFormVisible] = useState(false);
   const [editing, setEditing] = useState<Journal | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Journal | null>(null);
+  const [pendingDateDelete, setPendingDateDelete] = useState(false);
   const form = useForm<JournalFormValues>({
     resolver: zodResolver(journalFormSchema) as never,
     defaultValues: {
@@ -214,19 +216,23 @@ export default function RecordsScreen() {
         </AppText>
       </Card>
 
+      <View style={styles.dateHeadingRow}>
+        <AppText style={styles.dateHeading}>{formatDateJa(selectedDate)}</AppText>
+        <PrimaryButton
+          title="この日を削除"
+          tone="danger"
+          onPress={() => setPendingDateDelete(true)}
+        />
+      </View>
+
       {displayedJournals.length === 0 ? (
         <Card>
           <AppText variant="muted">選択した日の記録はありません。</AppText>
         </Card>
       ) : null}
 
-      {displayedJournals.map((journal, index) => (
+      {displayedJournals.map((journal) => (
         <View key={journal.id} style={styles.dateGroup}>
-          {index === 0 ? (
-            <AppText style={styles.dateHeading}>
-              {formatDateJa(journal.record_date)}
-            </AppText>
-          ) : null}
           <Card>
             <View style={styles.journalHeader}>
               <View style={styles.grow}>
@@ -347,6 +353,20 @@ export default function RecordsScreen() {
         </Screen>
       </Modal>
       <ConfirmModal
+        visible={pendingDateDelete}
+        title="この日のデータをすべて削除しますか？"
+        message={`${formatDateJa(selectedDate)}\n\nこの日に記録された日記・準備・調教・お仕置き・射精管理・ポイントなどをすべて削除します。\n\nこの操作は元に戻せません。`}
+        confirmLabel="すべて削除"
+        confirmTone="danger"
+        onCancel={() => setPendingDateDelete(false)}
+        onConfirm={async () => {
+          setPendingDateDelete(false);
+          journalRepository.removeDate(selectedDate);
+          await dailyOrderService.remove(selectedDate);
+          load();
+        }}
+      />
+      <ConfirmModal
         visible={pendingDelete !== null}
         title="記録を削除しますか？"
         message={`${pendingDelete?.title ?? ""}\n\n削除した記録は元に戻せません。`}
@@ -439,7 +459,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   dateGroup: { gap: 8 },
+  dateHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   dateHeading: {
+    flex: 1,
     borderBottomWidth: 1,
     borderBottomColor: "#fff",
     paddingBottom: 6,

@@ -139,7 +139,7 @@ export default function HabitsScreen() {
 
   const resultJudgement = trainingResult?.judgement ?? "";
   const namedResultJudgement = playerName
-    ? `${playerName}、${resultJudgement}`
+    ? `${playerName}。${resultJudgement}`
     : resultJudgement;
 
   return (

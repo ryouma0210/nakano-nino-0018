@@ -8,11 +8,12 @@ type Props = {
   message: string;
   confirmLabel?: string;
   confirmTone?: "primary" | "danger";
+  showCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-export function ConfirmModal({ visible, title, message, confirmLabel = "確認", confirmTone = "primary", onConfirm, onCancel }: Props) {
+export function ConfirmModal({ visible, title, message, confirmLabel = "確認", confirmTone = "primary", showCancel = true, onConfirm, onCancel }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
       <View style={styles.backdrop}>
@@ -20,7 +21,9 @@ export function ConfirmModal({ visible, title, message, confirmLabel = "確認",
           <AppText variant="subtitle">{title}</AppText>
           <AppText style={styles.message}>{message}</AppText>
           <View style={styles.actions}>
-            <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" onPress={onCancel} /></View>
+            {showCancel ? (
+              <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" onPress={onCancel} /></View>
+            ) : null}
             <View style={styles.action}><PrimaryButton title={confirmLabel} tone={confirmTone} onPress={onConfirm} /></View>
           </View>
         </View>

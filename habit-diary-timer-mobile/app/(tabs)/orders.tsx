@@ -36,7 +36,7 @@ export default function OrdersScreen() {
           <>
             <AppText variant="subtitle">本日の命令</AppText>
             <AppText>
-              {playerName ? `${playerName}、${order.text}` : order.text}
+              {playerName ? `${playerName}。${order.text}` : order.text}
             </AppText>
             <PrimaryButton
               title={order.completed ? "完了済み" : "命令完了"}
