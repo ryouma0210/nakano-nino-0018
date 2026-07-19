@@ -14,6 +14,8 @@ import { contractService } from "@/services/gameRoomService";
 
 export type ConversationLine = {
   text: string;
+  /** true: 設定名を先頭に付ける、false: 名前を付けない（省略時はtrue） */
+  withName?: boolean;
 };
 
 type Props = {
@@ -58,7 +60,10 @@ export function RoomConversation({
   const isContractLine = contractSigned && safeIndex >= lines.length;
   const isContractRoom = roomName === "契約部屋";
   const playerName = settings?.playerName.trim() ?? "";
-  const message = playerName ? `${playerName}。${current.text}` : current.text;
+  const message =
+    current.withName !== false && playerName
+      ? `${playerName}。${current.text}`
+      : current.text;
 
   function next() {
     playEffect("dialogue");

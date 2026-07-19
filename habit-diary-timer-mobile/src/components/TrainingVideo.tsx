@@ -5,6 +5,11 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { lightTheme } from "@/constants/theme";
+import {
+  formatConfiguredMessage,
+  trainingStageMessages,
+  type ConfigurableMessage,
+} from "@/constants/messages";
 import { secondsToClock } from "@/utils/date";
 import { useAppAudio } from "@/audio/AudioProvider";
 import type { StoredFile } from "@/services/fileStorageService";
@@ -56,52 +61,10 @@ const modes = [
   { key: "hard", label: "ハード", rate: 5 },
 ] as const;
 
-const warmupComments = [
-  "リズムを守りなさい♡",
-  "四つん這いで受けると気持ちいいわよ♡",
-  "姿勢を崩さないで♡ゆっくり丁寧に続けなさい♡",
-  "私に集中しなさい♡",
-] as const;
-
-const trainingComments = [
-  "もっとマゾらしくアヘアへしながら腰振りなさい♡",
-  "根本から先端まで♡カリ首引っ掛けて♡",
-  "何、手緩めているのかしら？もっと強く握りしめて♡",
-  "ばぁ～か♡あぁ～ほ♡ざぁ～こ♡まぁ～ぞ♡変態マゾ死ね♡",
-  "聞こえないわよ？もっと『二ノ様好き♡』って連呼しなさい♡",
-  "なに？もう逝きそうなの？我慢しろ♡変態♡",
-  "ダ～メ♡まだ我慢♡『乳首』もいじりなさい♡カリカリカリ…♡",
-  "ふふ♡情けない顔ね♡もっと舌出して、白目向いて『アヘ顔』晒しなさい♡",
-  "我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしなさい♡",
-  "もっと一定の速さで腰を振って、私のリズムについてきなさい♡",
-  "手を止める許可なんて出してないわよ♡そのまま続けなさい♡",
-  "先端ばかり触ってないで♡根元からゆっくり扱いなさい♡",
-  "もっと声を出して♡誰の命令で動いているのか言ってみなさい♡",
-  "その情けない顔、ちゃんと私に見せなさい♡隠したらダメよ♡",
-  "右手が疲れたなら左手に替えなさい♡休憩とは言ってないわ♡",
-  "速く♡ゆっくり♡また速く♡私の言葉どおりに切り替えなさい♡",
-  "もう震えているの？まだ終わりじゃないわ♡しっかり耐えなさい♡",
-  "もっと腰を前に出して♡一回ずつ丁寧に数えながら続けなさい♡",
-  "目を逸らさないで♡私を見ながら『もっとください』って懇願しなさい♡",
-] as const;
-
-const intensiveComments = [
-  "カウントダウンしてあげる♡",
-  "５…♡",
-  "４…♡",
-  "３…♡",
-  "２…♡",
-  "１～…♡",
-  "１～…♡♡♡",
-  "１～…♡♡♡♡♡",
-  "ゼ～…♡w",
-  "オ・ア・ズ・ケ♡寸・止・め♡",
-] as const;
-
-const finishingComments = [
-  "０♡ゼロ♡ほら、出せよ♡漏らせ♡逝け♡",
-  "びゅるるる～♡びゅるびゅる♡",
-] as const;
+const warmupComments = trainingStageMessages.warmup;
+const trainingComments = trainingStageMessages.training;
+const intensiveComments = trainingStageMessages.intensive;
+const finishingComments = trainingStageMessages.finishing;
 
 const warmupDurationSeconds = 30;
 const intensiveStartSeconds = 300;
@@ -133,7 +96,7 @@ export function TrainingVideo({
   const [mode, setMode] = useState<TrainingMode>("normal");
   const [slideIndex, setSlideIndex] = useState(0);
   const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
-  const [trainingComment, setTrainingComment] = useState<string>(warmupComments[0]);
+  const [trainingComment, setTrainingComment] = useState<ConfigurableMessage>(warmupComments[0]);
   const elapsedMilliseconds = useRef(0);
   const lastTick = useRef(0);
   const previousGaugeProgress = useRef(0);
@@ -360,10 +323,10 @@ export function TrainingVideo({
           <View style={styles.trainingComment}>
             <AppText style={styles.trainingCommentName}>ニノ</AppText>
             <AppText style={styles.trainingCommentText}>
-              {sessionElapsedSeconds < intensiveStartSeconds &&
-              settings?.playerName.trim()
-                ? `${settings.playerName.trim()}。${trainingComment}`
-                : trainingComment}
+              {formatConfiguredMessage(
+                trainingComment,
+                settings?.playerName.trim() ?? "",
+              )}
             </AppText>
           </View>
           {rhythmGauge}

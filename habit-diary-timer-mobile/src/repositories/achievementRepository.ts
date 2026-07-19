@@ -42,7 +42,9 @@ export const achievementRepository = {
     return {
       punishmentMinutes: Math.floor(punishmentSeconds / 60),
       punishmentSeconds,
+      trainingCount: training.length,
       bestTrainingSeconds: trainingSeconds.length ? Math.min(...trainingSeconds) : null,
+      longestTrainingSeconds: trainingSeconds.length ? Math.max(...trainingSeconds) : null,
       managementDays,
     };
   },

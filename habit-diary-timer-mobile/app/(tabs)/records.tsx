@@ -8,6 +8,7 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
+import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
@@ -16,6 +17,7 @@ import { journalFormSchema, type JournalFormValues } from "@/schemas/forms";
 import type { Journal } from "@/types/models";
 import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
 import { dailyOrderService } from "@/services/gameRoomService";
+import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
 
 export default function RecordsScreen() {
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -121,14 +123,8 @@ export default function RecordsScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/diary-nino.png")}
         roomName="調教日記部屋"
-        lines={[
-          { text: "今日あったことを、ここに残して。" },
-          { text: "気持ちも評価も、正直に書けばいいわ。" },
-          { text: "過去の記録は、いつでも読み返せるわよ。" },
-        ]}
-        contractLines={[
-          { text: "奴隷として何をされたか、恥ずかしいことまで全部正直に残しなさい♡"},
-        ]}
+        lines={roomMessages.records.lines}
+        contractLines={roomMessages.records.contractLines}
       />
 
       <TextField
@@ -138,8 +134,8 @@ export default function RecordsScreen() {
         placeholder="タイトル・本文・タグ"
       />
 
-      <Card>
-        <AppText variant="subtitle">記録カレンダー</AppText>
+      <Card style={styles.calendarCard}>
+        <AppText variant="subtitle" style={styles.calendarTitle}>記録カレンダー</AppText>
         <View style={styles.monthHeader}>
           <PrimaryButton
             title="‹"
@@ -151,7 +147,7 @@ export default function RecordsScreen() {
               )
             }
           />
-          <AppText style={styles.monthTitle}>
+          <AppText style={[styles.monthTitle, styles.calendarText]}>
             {visibleMonth.getFullYear()}年{visibleMonth.getMonth() + 1}月
           </AppText>
           <PrimaryButton
@@ -170,8 +166,8 @@ export default function RecordsScreen() {
           />
         </View>
         <View style={styles.weekRow}>
-          {["日", "月", "火", "水", "木", "金", "土"].map((day) => (
-            <AppText key={day} style={styles.weekDay}>
+          {["日", "月", "火", "水", "木", "金", "土"].map((day, index) => (
+            <AppText key={day} style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}>
               {day}
             </AppText>
           ))}
@@ -183,6 +179,8 @@ export default function RecordsScreen() {
             const future = date > toDateKey();
             const selected = date === selectedDate;
             const marked = markedDates.has(date);
+            const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
+            const holiday = isJapaneseHoliday(date);
             return (
               <Pressable
                 key={date}
@@ -195,7 +193,12 @@ export default function RecordsScreen() {
                 ]}
               >
                 <AppText
-                  style={[styles.dayText, selected && styles.selectedDayText]}
+                  style={[
+                    styles.dayText,
+                    dayOfWeek === 6 && styles.saturdayText,
+                    (dayOfWeek === 0 || holiday) && styles.holidayText,
+                    selected && styles.selectedDayText,
+                  ]}
                 >
                   {Number(date.slice(-2))}
                 </AppText>
@@ -211,7 +214,7 @@ export default function RecordsScreen() {
             );
           })}
         </View>
-        <AppText variant="muted">
+        <AppText style={styles.calendarHelp}>
           選択中：{formatDateJa(selectedDate)}　●は記録のある日です。
         </AppText>
       </Card>
@@ -398,10 +401,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   monthTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "900" },
+  calendarCard: { backgroundColor: "#fff", borderColor: "#fff" },
+  calendarTitle: { color: "#111" },
+  calendarText: { color: "#111" },
   weekRow: { flexDirection: "row" },
   weekDay: {
     width: `${100 / 7}%`,
-    color: lightTheme.muted,
+    color: "#111",
     textAlign: "center",
     fontSize: 12,
     fontWeight: "800",
@@ -413,12 +419,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#242424",
+    borderColor: "#d7d7d7",
+    backgroundColor: "#fff",
   },
   selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
   futureDay: { opacity: 0.25 },
-  dayText: { fontWeight: "800" },
+  dayText: { color: "#111", fontWeight: "800" },
+  saturdayText: { color: "#1667c7" },
+  holidayText: { color: "#d92332" },
   selectedDayText: { color: "#fff" },
+  calendarHelp: { color: "#555" },
   recordDot: {
     position: "absolute",
     bottom: 4,

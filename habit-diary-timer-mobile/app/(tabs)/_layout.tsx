@@ -17,7 +17,8 @@ export default function TabLayout() {
       <Tabs.Screen name="management" options={{ title: "射精管理部屋" }} />
       <Tabs.Screen name="rewards" options={{ title: "ご褒美部屋" }} />
       <Tabs.Screen name="orders" options={{ title: "本日の命令部屋" }} />
-      <Tabs.Screen name="achievements" options={{ title: "称号・実績部屋" }} />
+      <Tabs.Screen name="collection" options={{ title: "コレクション部屋" }} />
+      <Tabs.Screen name="report" options={{ title: "週間報告部屋" }} />
       <Tabs.Screen name="contract" options={{ title: "契約部屋" }} />
       <Tabs.Screen name="files" options={{ title: "ファイル格納部屋" }} />
       <Tabs.Screen name="settings" options={{ title: "設定" }} />

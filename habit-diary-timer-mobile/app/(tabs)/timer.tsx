@@ -5,6 +5,12 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
+import {
+  formatConfiguredMessage,
+  punishmentSessionMessages,
+  roomMessages,
+  type ConfigurableMessage,
+} from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { PunishmentMedia } from "@/components/PunishmentMedia";
@@ -27,18 +33,7 @@ const gaugeSpeeds = [
   { label: "急加速", value: 5 },
 ] as const;
 
-const punishmentComments = [
-  "リズムが変わっても逃げちゃダメよ♡",
-  "痛い？辛い？知らないわ、もっと強くやれよ。変態",
-  "何、緩めているの？ちゃんとリズム通りにしなさい♡",
-  "死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡",
-  "精子死ね♡チンポ死ね♡金玉死ね♡マゾ死ね♡",
-  "まさかこんなのでお漏らししないわよね♡",
-  "ギブアップしたい？最後まで耐えてみなさい♡",
-  "もっと正確に♡強く狙え♡",
-  "痛がるだけじゃダメ。きちんと回数を声に出して数えなさい♡",
-  "私が終わりと言うまで、お仕置きは続くわよ♡",
-] as const;
+const punishmentComments = punishmentSessionMessages;
 
 const markerCount = 3;
 
@@ -80,7 +75,7 @@ export default function TimerScreen() {
   const [speedLabel, setSpeedLabel] = useState("ゆっくり");
   const [punishmentFiles, setPunishmentFiles] = useState<StoredFile[]>([]);
   const [mediaMode, setMediaMode] = useState<"default" | "stored">("default");
-  const [punishmentComment, setPunishmentComment] = useState<string>(
+  const [punishmentComment, setPunishmentComment] = useState<ConfigurableMessage>(
     punishmentComments[0],
   );
   const previousGaugeProgress = useRef(0);
@@ -247,14 +242,8 @@ export default function TimerScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/punishment-nino.png")}
         roomName="お仕置き部屋"
-        lines={[
-          { text: "時間は自分で決めなさい。" },
-          { text: "黒いスペードがピンクの丸へ到達したら、表示された場所へビンタよ。"},
-        ]}
-        contractLines={[
-          { text: "契約済みの奴隷なら、最低30分以上。お仕置きから逃げずに最後まで受けなさい♡"},
-          { text: "貞操帯着用している人は、金玉ビンタのみよ♡" },
-        ]}
+        lines={roomMessages.punishment.lines}
+        contractLines={roomMessages.punishment.contractLines}
       />
       <Card>
         <AppText variant="subtitle">表示するファイル</AppText>
@@ -327,9 +316,10 @@ export default function TimerScreen() {
           <View style={styles.punishmentComment}>
             <AppText style={styles.punishmentCommentName}>ニノ</AppText>
             <AppText style={styles.punishmentCommentText}>
-              {settings?.playerName.trim()
-                ? `${settings.playerName.trim()}。${punishmentComment}`
-                : punishmentComment}
+              {formatConfiguredMessage(
+                punishmentComment,
+                settings?.playerName.trim() ?? "",
+              )}
             </AppText>
           </View>
           <View style={styles.rhythmFrame}>

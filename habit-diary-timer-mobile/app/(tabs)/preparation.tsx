@@ -7,6 +7,12 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
+import {
+  formatConfiguredMessage,
+  preparationChecklistMessages,
+  preparationLoopMessages,
+  roomMessages,
+} from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { preparationRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
@@ -14,24 +20,9 @@ import { lightTheme } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 
-const items = [
-  { text: "全裸の状態であること。", required: true },
-  { text: "土下座の状態であること。", required: true },
-  { text: "お貢ぎ用意していること。", required: true },
-  { text: "発情状態であること。", required: true },
-  { text: "3日間以上オナ禁したこと。", required: false },
-  { text: "首輪（犬用でも可）を装着していること。", required: false },
-  { text: "貞操帯を装着していること。", required: false },
-];
+const items = preparationChecklistMessages;
 
-const preparationComments = [
-  "ふぅ～～～～～～～♡",
-  "ほら、早く勃起させなさい♡",
-  "ふふ♡ビクビクさせてチョロすぎ♡",
-  "まだ足りないの？欲張りね♡",
-  "準備できるまで、何度でもしてあげる♡",
-  "勃起しろ♡チンピクしろ♡",
-] as const;
+const preparationComments = preparationLoopMessages;
 
 export default function PreparationScreen() {
   const insets = useSafeAreaInsets();
@@ -105,14 +96,8 @@ export default function PreparationScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/preparation-nino.png")}
         roomName="準備部屋"
-        lines={[
-          { text: "今日の準備を一つずつ確認して。" },
-          { text: "必須項目を全部済ませたら、最後の挨拶よ。" },
-        ]}
-        contractLines={[
-          { text: "契約した奴隷なら、首輪を着けて土下座で私を待つのが当然よね♡"},
-          { text: "貞操帯辛い？何もしていないのに、中でパンパンね♡"},
-        ]}
+        lines={roomMessages.preparation.lines}
+        contractLines={roomMessages.preparation.contractLines}
       />
       <Card>
         <AppText variant="subtitle">発情してない人向け</AppText>
@@ -140,9 +125,7 @@ export default function PreparationScreen() {
           </View>
         )}
         <AppText style={styles.breath}>
-          {playerName
-            ? `${playerName}。${preparationComments[commentIndex]}`
-            : preparationComments[commentIndex]}
+          {formatConfiguredMessage(preparationComments[commentIndex], playerName)}
         </AppText>
       </Card>
       <Card>
@@ -206,9 +189,7 @@ export default function PreparationScreen() {
             contentFit="contain"
           />
           <AppText style={styles.fullscreenBreath}>
-            {playerName
-              ? `${playerName}。${preparationComments[commentIndex]}`
-              : preparationComments[commentIndex]}
+            {formatConfiguredMessage(preparationComments[commentIndex], playerName)}
           </AppText>
           <PrimaryButton
             title="閉じる"

@@ -5,11 +5,13 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
+import { roomMessages } from "@/constants/messages";
 
 const menuItems = [
+  ["週間報告", "/(tabs)/report"],
   ["調教日記", "/(tabs)/records"],
   ["ファイル格納", "/(tabs)/files"],
-  ["称号・実績", "/(tabs)/achievements"],
+  ["コレクション", "/(tabs)/collection"],
   ["ご褒美", "/(tabs)/rewards"],
   ["設定", "/(tabs)/settings"],
 ] as const;
@@ -25,13 +27,8 @@ export default function MenuScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/settings-nino.png")}
         roomName="管理メニュー"
-        lines={[
-          { text: "記録の確認や設定は、ここから選びなさい。" },
-          { text: "ご褒美の交換も忘れないでね。" },
-        ]}
-        contractLines={[
-          { text: "奴隷としての記録もご褒美も、全部ここで私に管理されるのよ♡" },
-        ]}
+        lines={roomMessages.menu.lines}
+        contractLines={roomMessages.menu.contractLines}
       />
       <View style={styles.items}>
         {menuItems.map(([title, href]) => (
@@ -41,9 +38,9 @@ export default function MenuScreen() {
             tone={
               title === "設定"
                 ? "secondary"
-                : title === "調教日記" || title === "ファイル格納"
+                : title === "週間報告" || title === "調教日記" || title === "ファイル格納"
                   ? "record"
-                  : title === "称号・実績" || title === "ご褒美"
+                  : title === "コレクション" || title === "ご褒美"
                     ? "reward"
                     : "primary"
             }

@@ -4,6 +4,11 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
+import {
+  findDailyOrderMessage,
+  formatConfiguredMessage,
+  roomMessages,
+} from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { dailyOrderService, type DailyOrder } from "@/services/gameRoomService";
 import { formatDateJa, toDateKey } from "@/utils/date";
@@ -22,13 +27,8 @@ export default function OrdersScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/orders-nino.png")}
         roomName="本日の命令部屋"
-        lines={[
-          { text: "今日の命令は一度だけ抽選できるわ。" },
-          { text: "決まったら、最後まで実行して。" },
-        ]}
-        contractLines={[
-          { text: "契約したんだから、どんな命令でも絶対服従でしょ。返事は『はい、二ノ様』でしょ♡"},
-        ]}
+        lines={roomMessages.orders.lines}
+        contractLines={roomMessages.orders.contractLines}
       />
       <Card>
         <AppText variant="label">{formatDateJa(toDateKey())}</AppText>
@@ -36,7 +36,12 @@ export default function OrdersScreen() {
           <>
             <AppText variant="subtitle">本日の命令</AppText>
             <AppText>
-              {playerName ? `${playerName}。${order.text}` : order.text}
+              {findDailyOrderMessage(order.text)
+                ? formatConfiguredMessage(
+                    findDailyOrderMessage(order.text)!,
+                    playerName,
+                  )
+                : order.text}
             </AppText>
             <PrimaryButton
               title={order.completed ? "完了済み" : "命令完了"}

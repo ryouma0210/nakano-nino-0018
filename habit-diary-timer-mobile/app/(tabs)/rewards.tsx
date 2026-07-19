@@ -17,6 +17,11 @@ import {
 } from "@/repositories/rewardRepository";
 import { useAppModal } from "@/components/AppModalProvider";
 import { useAppAudio } from "@/audio/AudioProvider";
+import {
+  findRewardMessage,
+  formatConfiguredMessage,
+  roomMessages,
+} from "@/constants/messages";
 
 const rewardVideos = [
   {
@@ -102,8 +107,8 @@ export default function RewardsScreen() {
         reload();
         showNotice(
           "ご褒美獲得♡",
-          key === "praise" && playerName
-            ? `${playerName}。${content}`
+          findRewardMessage(key, content)
+            ? formatConfiguredMessage(findRewardMessage(key, content)!, playerName)
             : content,
         );
       },
@@ -154,44 +159,14 @@ export default function RewardsScreen() {
     });
   }
 
-  async function exportVideo(item: RewardRedemption) {
-    try {
-      const bundled = rewardVideos.find(
-        (video) => video.name === item.reward_content,
-      );
-      const uri = bundled
-        ? await bundledVideoUri(bundled.module)
-        : item.file_uri;
-      if (!uri) throw new Error("Video not found");
-      if (await saveVideoToLibrary(uri)) {
-        showNotice("保存完了", "動画を端末のギャラリーへ保存しました。");
-      } else {
-        showNotice(
-          "保存権限が必要です",
-          "動画を直接保存するには、写真と動画への保存を許可してください。",
-        );
-      }
-    } catch (error) {
-      showNotice(
-        "動画を保存できません",
-        `同梱動画の読み込みまたは端末への保存に失敗しました。\n\n${getErrorMessage(error)}`,
-      );
-    }
-  }
-
   return (
     <Screen>
       <AppText variant="title">ご褒美</AppText>
       <RoomConversation
         characterSource={require("../../assets/characters/home-nino.png")}
         roomName="ご褒美"
-        lines={[
-          { text: "命令を達成した分だけポイントをあげる。" },
-          { text: "貯めたポイントで、好きなご褒美を選びなさい♡" },
-        ]}
-        contractLines={[
-          { text: "契約した奴隷にも、ご主人様からのご褒美は必要よね♡" },
-        ]}
+        lines={roomMessages.rewards.lines}
+        contractLines={roomMessages.rewards.contractLines}
       />
       <Card>
         <AppText variant="label">所持ポイント</AppText>
@@ -266,32 +241,6 @@ export default function RewardsScreen() {
         />
       </Card>
 
-      {acquired.length > 0 ? (
-        <Card style={styles.acquiredCard}>
-          <AppText variant="subtitle">獲得済みのご褒美</AppText>
-          {acquired.map((item) => (
-            <View key={item.id} style={styles.acquiredRow}>
-              <View style={styles.grow}>
-                <AppText style={styles.acquiredContent}>
-                  {item.reward_key === "praise" && playerName
-                    ? `${playerName}。${item.reward_content ?? ""}`
-                    : item.reward_content}
-                </AppText>
-                <AppText style={styles.acquiredMeta}>
-                  {item.reward_name} / 使用：{item.points_spent}pt
-                </AppText>
-              </View>
-              {item.reward_key === "video" ? (
-                <PrimaryButton
-                  title="保存"
-                  tone="secondary"
-                  onPress={() => exportVideo(item)}
-                />
-              ) : null}
-            </View>
-          ))}
-        </Card>
-      ) : null}
       <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
@@ -328,16 +277,5 @@ const styles = StyleSheet.create({
     borderTopColor: "#444",
     paddingVertical: 10,
   },
-  acquiredCard: { borderWidth: 2, borderColor: "#ffd54a" },
-  acquiredRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#444",
-    paddingVertical: 12,
-  },
-  acquiredContent: { fontSize: 16, lineHeight: 24, fontWeight: "800" },
-  acquiredMeta: { color: "#888", fontSize: 11, lineHeight: 17 },
   grow: { flex: 1 },
 });

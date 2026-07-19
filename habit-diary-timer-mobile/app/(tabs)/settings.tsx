@@ -6,6 +6,7 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
+import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { execute } from "@/database/client";
@@ -65,13 +66,8 @@ export default function SettingsScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/settings-nino.png")}
         roomName="設定"
-        lines={[
-          { text: "保存量の確認や初期化は、ここで行えるわ。" },
-          { text: "初期化したデータは戻せないから、よく確認して。" },
-        ]}
-        contractLines={[
-          { text: "奴隷として積み上げた記録、勝手に消す前によく考えなさい。" },
-        ]}
+        lines={roomMessages.settings.lines}
+        contractLines={roomMessages.settings.contractLines}
       />
       <Card>
         <AppText variant="subtitle">呼ばれたい名前</AppText>
