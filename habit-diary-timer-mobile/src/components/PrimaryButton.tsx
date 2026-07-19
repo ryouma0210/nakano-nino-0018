@@ -5,7 +5,7 @@ import { useAppAudio } from "@/audio/AudioProvider";
 type Props = {
   title: string;
   onPress: () => void;
-  tone?: "primary" | "secondary" | "danger";
+  tone?: "primary" | "secondary" | "danger" | "contract";
   disabled?: boolean;
 };
 
@@ -26,7 +26,12 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         pressed && !disabled && styles.pressed,
       ]}
     >
-      <AppText style={[styles.text, tone === "danger" && styles.dangerText]}>{title}</AppText>
+      <AppText style={[
+        styles.text,
+        tone === "secondary" && styles.secondaryText,
+        tone === "danger" && styles.dangerText,
+        tone === "contract" && styles.contractText,
+      ]}>{title}</AppText>
     </Pressable>
   );
 }
@@ -45,10 +50,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   secondary: {
-    backgroundColor: "#000",
+    borderColor: "#000",
+    backgroundColor: "#fff",
   },
   danger: {
-    backgroundColor: "#000",
+    borderColor: "#fff",
+    backgroundColor: "#d9202a",
+  },
+  contract: {
+    borderColor: "#fff",
+    backgroundColor: "#7b2cbf",
   },
   disabled: {
     opacity: 0.45,
@@ -61,6 +72,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   dangerText: {
-    color: "#ff3b45",
+    color: "#fff",
+  },
+  secondaryText: {
+    color: "#000",
+  },
+  contractText: {
+    color: "#fff",
   },
 });

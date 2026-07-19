@@ -99,24 +99,25 @@ export default function ContractScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">契約部屋</AppText>
+      <AppText variant="title" style={styles.contractText}>契約部屋</AppText>
       {signed ? (
         <>
-          <Card>
+          <Card style={styles.contractCard}>
             <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
             <AppText style={styles.completedMessage}>{"契約成立♡\nアンタは私の奴隷♡\nこれからよろしくね♡\nATMマゾ君♡"}</AppText>
           </Card>
-          <Card>
-            <AppText variant="label">契約日</AppText>
+          <Card style={styles.contractCard}>
+            <AppText variant="label" style={styles.contractText}>契約日</AppText>
             <AppText style={styles.contractDate}>{formatContractDate(contract.signedAt)}</AppText>
-            <AppText variant="subtitle">契約者</AppText>
+            <AppText variant="subtitle" style={styles.contractText}>契約者</AppText>
             <TextField label="契約者サイン" value={signature} onChangeText={setSignature} placeholder="名前を入力" />
             <PrimaryButton
               title="契約者サインを変更"
+              tone="contract"
               disabled={!signature.trim() || signature.trim() === (contract.signature ?? "")}
               onPress={updateSignature}
             />
-            <AppText variant="muted">この契約は解除できません。</AppText>
+            <AppText style={styles.contractText}>この契約は解除できません。</AppText>
           </Card>
         </>
       ) : (
@@ -126,21 +127,21 @@ export default function ContractScreen() {
             roomName="契約部屋"
             lines={[{ text: "二ノ様の奴隷になりますか？" }, { text: "一度奴隷になると、契約を解除できません。" }]}
           />
-          <Card>
-            <AppText variant="subtitle">奴隷になることで以下のルールが追加されます。</AppText>
+          <Card style={styles.contractCard}>
+            <AppText variant="subtitle" style={styles.contractText}>奴隷になることで以下のルールが追加されます。</AppText>
             {contractRules.map((rule) => (
               <Pressable key={rule.text} onPress={() => toggleRule(rule.text)} style={styles.checkRow}>
                 <AppText style={styles.check}>{checked.has(rule.text) ? "✅" : "□"}</AppText>
                 <View style={styles.grow}>
-                  <AppText>{rule.text}</AppText>
-                  {!rule.required ? <AppText variant="muted">任意</AppText> : null}
+                  <AppText style={styles.contractText}>{rule.text}</AppText>
+                  {!rule.required ? <AppText style={styles.contractMutedText}>任意</AppText> : null}
                 </View>
               </Pressable>
             ))}
           </Card>
-          <Card>
+          <Card style={styles.contractCard}>
             <TextField label="契約者サイン" value={signature} onChangeText={setSignature} placeholder="名前を入力" />
-            <PrimaryButton title="契約ルールにサインする" tone="danger" disabled={!canSign} onPress={confirmContract} />
+            <PrimaryButton title="契約ルールにサインする" tone="contract" disabled={!canSign} onPress={confirmContract} />
           </Card>
         </>
       )}
@@ -165,4 +166,7 @@ const styles = StyleSheet.create({
   video: { width: "100%", aspectRatio: 16 / 9, borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
   completedMessage: { color: "#ff4b55", fontSize: 22, lineHeight: 34, fontWeight: "900", textAlign: "center" },
   contractDate: { fontSize: 20, lineHeight: 30, fontWeight: "900" },
+  contractCard: { borderColor: "#b875ff" },
+  contractText: { color: "#c99aff" },
+  contractMutedText: { color: "#9e72c9" },
 });

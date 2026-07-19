@@ -38,6 +38,7 @@ export default function MenuScreen() {
           <PrimaryButton
             key={href}
             title={title}
+            tone={title === "設定" ? "secondary" : "primary"}
             onPress={() => router.push(href)}
           />
         ))}
