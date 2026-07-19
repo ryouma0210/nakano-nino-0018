@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -7,17 +7,9 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import type { ManagementMode } from "@/repositories/roomRepository";
-import {
-  contractService,
-  type ContractSettings,
-} from "@/services/gameRoomService";
 
 export default function ManagementScreen() {
   const [mode, setMode] = useState<ManagementMode | null>(null);
-  const [contract, setContract] = useState<ContractSettings | null>(null);
-  useEffect(() => {
-    contractService.load().then(setContract);
-  }, []);
 
   if (mode) {
     return (
@@ -53,19 +45,12 @@ export default function ManagementScreen() {
         <AppText variant="subtitle">管理方法を選択</AppText>
         <PrimaryButton
           title="貞操帯なし"
-          disabled={contract?.allowRelease === false}
           onPress={() => setMode("release")}
         />
         <PrimaryButton
           title="貞操帯あり"
-          disabled={contract?.allowChastity === false}
           onPress={() => setMode("chastity")}
         />
-        {contract && !contract.allowRelease && !contract.allowChastity ? (
-          <AppText variant="muted">
-            契約部屋で利用する管理方法を許可してください。
-          </AppText>
-        ) : null}
       </Card>
       <PrimaryButton
         title="ホームへ戻る"

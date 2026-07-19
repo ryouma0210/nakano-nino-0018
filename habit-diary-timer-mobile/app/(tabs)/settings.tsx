@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, Switch, View } from "react-native";
+import { StyleSheet, Switch, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -14,12 +14,15 @@ import { notificationService } from "@/services/notificationService";
 import { settingsService } from "@/services/settingsService";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { dailyOrderService } from "@/services/gameRoomService";
+import { useAppModal } from "@/components/AppModalProvider";
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
+  const { showNotice } = useAppModal();
   const [playerName, setPlayerName] = useState("");
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const loadSize = useCallback(() => {
     fileStorageService.totalSize().then(setCacheSize);
   }, []);
@@ -53,7 +56,7 @@ export default function SettingsScreen() {
     await notificationService.cancelAll();
     await fileStorageService.clear();
     loadSize();
-    Alert.alert("初期化完了", "すべてのデータを初期化しました。");
+    showNotice("初期化完了", "すべてのデータを初期化しました。");
   }
 
   return (
@@ -89,8 +92,7 @@ export default function SettingsScreen() {
             const normalized = playerName.trim();
             setPlayerName(normalized);
             await updateAudioSettings({ playerName: normalized });
-            Alert.alert(
-              "保存しました",
+            setSavedMessage(
               normalized
                 ? `これから「${normalized}」と呼びます。`
                 : "名前の呼びかけを解除しました。",
@@ -162,6 +164,15 @@ export default function SettingsScreen() {
         title="全データを初期化"
         tone="danger"
         onPress={resetAll}
+      />
+      <ConfirmModal
+        visible={savedMessage !== null}
+        title="保存しました"
+        message={savedMessage ?? ""}
+        confirmLabel="閉じる"
+        showCancel={false}
+        onCancel={() => setSavedMessage(null)}
+        onConfirm={() => setSavedMessage(null)}
       />
       <ConfirmModal
         visible={resetConfirmation}

@@ -57,23 +57,23 @@ const modes = [
 ] as const;
 
 const warmupComments = [
-  "ほら、リズムを守りなさい♡",
+  "リズムを守りなさい♡",
   "四つん這いで受けると気持ちいいわよ♡",
   "姿勢を崩さないで♡ゆっくり丁寧に続けなさい♡",
   "私に集中しなさい♡",
 ] as const;
 
 const trainingComments = [
-  "ほら、もっとマゾらしくアヘアへしながら腰振りなさい♡",
+  "もっとマゾらしくアヘアへしながら腰振りなさい♡",
   "根本から先端まで♡カリ首引っ掛けて♡",
   "何、手緩めているのかしら？もっと強く握りしめて♡",
   "ばぁ～か♡あぁ～ほ♡ざぁ～こ♡まぁ～ぞ♡変態マゾ死ね♡",
   "聞こえないわよ？もっと『二ノ様好き♡』って連呼しなさい♡",
   "なに？もう逝きそうなの？我慢しろ♡変態♡",
-  "ダメ♡まだ我慢♡『乳首』もいじりなさい♡カリカリカリ…♡",
+  "ダ～メ♡まだ我慢♡『乳首』もいじりなさい♡カリカリカリ…♡",
   "ふふ♡情けない顔ね♡もっと舌出して、白目向いて『アヘ顔』晒しなさい♡",
-  "我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしないさい♡",
-  "ほら♡もっと一定の速さで腰を振って、私のリズムについてきなさい♡",
+  "我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしなさい♡",
+  "もっと一定の速さで腰を振って、私のリズムについてきなさい♡",
   "手を止める許可なんて出してないわよ♡そのまま続けなさい♡",
   "先端ばかり触ってないで♡根元からゆっくり扱いなさい♡",
   "もっと声を出して♡誰の命令で動いているのか言ってみなさい♡",
@@ -144,6 +144,7 @@ export function TrainingVideo({
   const player = useVideoPlayer(defaultVideos[0], (instance) => {
     instance.loop = false;
     instance.muted = true;
+    instance.volume = 0;
     instance.playbackRate = 1;
   });
 
@@ -192,6 +193,8 @@ export function TrainingVideo({
     player
       .replaceAsync(defaultVideos[nextIndex])
       .then(() => {
+        player.muted = true;
+        player.volume = 0;
         player.playbackRate = 1;
         player.play();
       })
@@ -256,6 +259,8 @@ export function TrainingVideo({
       player
         .replaceAsync(defaultVideos[firstVideoIndex])
         .then(() => {
+          player.muted = true;
+          player.volume = 0;
           player.playbackRate = 1;
           player.play();
         })
@@ -355,8 +360,9 @@ export function TrainingVideo({
           <View style={styles.trainingComment}>
             <AppText style={styles.trainingCommentName}>ニノ</AppText>
             <AppText style={styles.trainingCommentText}>
-              {settings?.playerName.trim()
-                ? `${settings.playerName.trim()}、${trainingComment}`
+              {sessionElapsedSeconds < intensiveStartSeconds &&
+              settings?.playerName.trim()
+                ? `${settings.playerName.trim()}。${trainingComment}`
                 : trainingComment}
             </AppText>
           </View>

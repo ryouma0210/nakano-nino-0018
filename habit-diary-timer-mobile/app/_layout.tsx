@@ -9,6 +9,7 @@ import { AppText } from "@/components/AppText";
 import { ErrorDetailsScreen } from "@/components/ErrorDetailsScreen";
 import { AudioProvider } from "@/audio/AudioProvider";
 import { formatError } from "@/utils/error";
+import { AppModalProvider } from "@/components/AppModalProvider";
 
 type ErrorHandler = (error: Error, isFatal?: boolean) => void;
 type ErrorUtilsApi = { getGlobalHandler?: () => ErrorHandler; setGlobalHandler: (handler: ErrorHandler) => void };
@@ -58,8 +59,10 @@ function RootContent() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AudioProvider>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false }} />
+          <AppModalProvider>
+            <StatusBar style="light" />
+            <Stack screenOptions={{ headerShown: false }} />
+          </AppModalProvider>
         </AudioProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -32,6 +32,7 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   const player = useVideoPlayer(defaultVideos[defaultIndex], (instance) => {
     instance.loop = false;
     instance.muted = true;
+    instance.volume = 0;
     instance.playbackRate = 1;
   });
 
@@ -52,6 +53,8 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
       ? { uri: currentFile.uri }
       : defaultVideos[defaultIndex];
     player.replaceAsync(source).then(() => {
+      player.muted = true;
+      player.volume = 0;
       player.playbackRate = 1;
       if (active) player.play();
       else player.pause();

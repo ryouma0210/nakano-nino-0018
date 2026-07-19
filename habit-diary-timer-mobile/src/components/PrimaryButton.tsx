@@ -79,19 +79,19 @@ const styles = StyleSheet.create({
   },
   preparation: {
     borderColor: "#fff",
-    backgroundColor: "#071b10",
+    backgroundColor: "#7cb342",
   },
   order: {
     borderColor: "#fff",
-    backgroundColor: "#071426",
+    backgroundColor: "#29b6f6",
   },
   training: {
     borderColor: "#fff",
-    backgroundColor: "#220815",
+    backgroundColor: "#6a1b9a",
   },
   management: {
     borderColor: "#fff",
-    backgroundColor: "#23070d",
+    backgroundColor: "#6a1b9a",
   },
   record: {
     borderColor: "#fff",

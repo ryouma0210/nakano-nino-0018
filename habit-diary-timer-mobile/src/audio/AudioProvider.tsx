@@ -5,7 +5,7 @@ import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
-type EffectName = "button" | "dialogue" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
+type EffectName = "button" | "dialogue" | "preparationLoop" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
 type AudioContextValue = {
   settings: AppSettings | null;
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
@@ -40,6 +40,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const bgm = useAudioPlayer(null);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
+  const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.mp4"));
   const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
   const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
@@ -85,17 +86,17 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   const playEffect = useCallback((name: EffectName) => {
     if (!settings?.soundEnabled) return;
-    const player = { button, dialogue, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
-    player.loop = name === "trainingStart";
+    const player = { button, dialogue, preparationLoop, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
+    player.loop = name === "preparationLoop" || name === "trainingStart";
     player.volume = settings.soundVolume;
     player.seekTo(0).then(() => player.play()).catch(console.error);
-  }, [button, complete, dialogue, ejaculation, punishmentHit, settings, trainingRhythm, trainingStart]);
+  }, [button, complete, dialogue, ejaculation, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const stopEffect = useCallback((name: EffectName) => {
-    const player = { button, dialogue, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
+    const player = { button, dialogue, preparationLoop, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
     player.pause();
     player.seekTo(0).catch(console.error);
-  }, [button, complete, dialogue, ejaculation, punishmentHit, trainingRhythm, trainingStart]);
+  }, [button, complete, dialogue, ejaculation, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   const value = useMemo(
     () => ({

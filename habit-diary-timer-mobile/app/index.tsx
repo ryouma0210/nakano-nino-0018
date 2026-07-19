@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, BackHandler, Image, Platform, StyleSheet, View } from "react-native";
+import { BackHandler, Image, Platform, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { AppText } from "@/components/AppText";
@@ -7,13 +7,15 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
+import { useAppModal } from "@/components/AppModalProvider";
 
 export default function Index() {
   const [exitConfirmation, setExitConfirmation] = useState(false);
+  const { showNotice } = useAppModal();
 
   function exitGame() {
     if (Platform.OS === "android") BackHandler.exitApp();
-    else Alert.alert("ゲーム終了", "iOSではアプリを閉じる操作は端末側から行ってください。");
+    else showNotice("ゲーム終了", "iOSではアプリを閉じる操作は端末側から行ってください。");
   }
 
   return (

@@ -58,7 +58,7 @@ export function RoomConversation({
   const isContractLine = contractSigned && safeIndex >= lines.length;
   const isContractRoom = roomName === "契約部屋";
   const playerName = settings?.playerName.trim() ?? "";
-  const message = playerName ? `${playerName}、${current.text}` : current.text;
+  const message = playerName ? `${playerName}。${current.text}` : current.text;
 
   function next() {
     playEffect("dialogue");
