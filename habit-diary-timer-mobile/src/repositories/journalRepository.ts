@@ -1,4 +1,4 @@
-import { execute, query, queryOne } from "@/database/client";
+import { execute, query, queryOne, transaction } from "@/database/client";
 import type { Journal, JournalRecordType } from "@/types/models";
 import { toDateKey, toDateTimeKey, toTimeKey } from "@/utils/date";
 
@@ -81,7 +81,16 @@ export const journalRepository = {
   },
 
   remove(id: number) {
-    execute("DELETE FROM journals WHERE id = ?", [id]);
+    const journal = queryOne<{ record_date: string; title: string; tags: string | null }>(
+      "SELECT record_date, title, tags FROM journals WHERE id = ?",
+      [id],
+    );
+    transaction(() => {
+      if (journal && (journal.title === "準備部屋チェック" || journal.tags?.includes("準備部屋"))) {
+        execute("DELETE FROM preparation_records WHERE record_date = ?", [journal.record_date]);
+      }
+      execute("DELETE FROM journals WHERE id = ?", [id]);
+    });
   },
 
   countToday() {

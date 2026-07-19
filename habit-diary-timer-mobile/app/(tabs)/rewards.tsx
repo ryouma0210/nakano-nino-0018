@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
-import * as Sharing from "expo-sharing";
+import * as MediaLibrary from "expo-media-library";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -27,6 +27,8 @@ const rewardVideos = [
   { name: "調教動画 4", module: require("../../assets/videos/habits_4.mp4") },
   { name: "調教動画 5", module: require("../../assets/videos/habits_5.mp4") },
   { name: "調教動画 6", module: require("../../assets/videos/habits_6.mp4") },
+  { name: "お仕置き動画 1", module: require("../../assets/videos/timer_1.mp4") },
+  { name: "お仕置き動画 2", module: require("../../assets/videos/timer_2.mp4") },
   {
     name: "準備動画",
     module: require("../../assets/videos/preparation_1.mp4"),
@@ -37,6 +39,19 @@ async function bundledVideoUri(module: number) {
   const asset = Asset.fromModule(module);
   await asset.downloadAsync();
   return asset.localUri ?? asset.uri;
+}
+
+async function saveVideoToLibrary(uri: string) {
+  const permission = await MediaLibrary.requestPermissionsAsync(true, ["video"]);
+  if (!permission.granted) {
+    Alert.alert(
+      "保存権限が必要です",
+      "動画を直接保存するには、写真と動画への保存を許可してください。",
+    );
+    return false;
+  }
+  await MediaLibrary.saveToLibraryAsync(uri);
+  return true;
 }
 
 export default function RewardsScreen() {
@@ -55,6 +70,15 @@ export default function RewardsScreen() {
     setAcquired(rewardRepository.acquired());
   }, []);
   useFocusEffect(reload);
+  const acquiredVideoNames = new Set(
+    acquired
+      .filter((item) => item.reward_key === "video")
+      .map((item) => item.reward_content)
+      .filter((name): name is string => Boolean(name)),
+  );
+  const availableRewardVideos = rewardVideos.filter(
+    (video) => !acquiredVideoNames.has(video.name),
+  );
 
   function exchangeRandom(key: RandomRewardKey) {
     const reward = rewardCatalog[key];
@@ -97,19 +121,16 @@ export default function RewardsScreen() {
     const reward = rewardCatalog.video;
     setConfirmation({
       title: "この動画と交換しますか？",
-      message: `${video.name}\n\n${reward.cost}ptを消費します。交換後に端末の共有・保存画面を開きます。`,
+      message: `${video.name}\n\n${reward.cost}ptを消費します。交換後、動画を端末のギャラリーへ直接保存します。`,
       onConfirm: async () => {
         try {
           const uri = await bundledVideoUri(video.module);
           if (!rewardRepository.redeemVideo(video.name))
             return Alert.alert("ポイント不足", "所持ポイントが足りません。");
           reload();
-          Alert.alert(
-            "動画を獲得しました♡",
-            "端末の共有・保存画面を開きます。",
-          );
-          if (await Sharing.isAvailableAsync())
-            await Sharing.shareAsync(uri, { dialogTitle: "ご褒美動画を保存" });
+          if (await saveVideoToLibrary(uri)) {
+            Alert.alert("動画を獲得しました♡", "端末のギャラリーへ保存しました。");
+          }
         } catch {
           Alert.alert(
             "動画を準備できません",
@@ -129,8 +150,9 @@ export default function RewardsScreen() {
         ? await bundledVideoUri(bundled.module)
         : item.file_uri;
       if (!uri) throw new Error("Video not found");
-      if (await Sharing.isAvailableAsync())
-        await Sharing.shareAsync(uri, { dialogTitle: "ご褒美動画を保存" });
+      if (await saveVideoToLibrary(uri)) {
+        Alert.alert("保存完了", "動画を端末のギャラリーへ保存しました。");
+      }
     } catch {
       Alert.alert("動画を開けません", "同梱動画の読み込みに失敗しました。");
     }
@@ -188,22 +210,24 @@ export default function RewardsScreen() {
         );
       })}
 
-      <Card>
-        <AppText variant="subtitle">{rewardCatalog.video.name}</AppText>
-        <AppText variant="muted">
-          消費：500pt／アプリに同梱された動画を1つ選んで端末へ書き出します。
-        </AppText>
-        {rewardVideos.map((video) => (
-          <View key={video.name} style={styles.videoRow}>
-            <AppText style={styles.grow}>{video.name}</AppText>
-            <PrimaryButton
-              title="交換"
-              disabled={balance.available < 500}
-              onPress={() => exchangeVideo(video)}
-            />
-          </View>
-        ))}
-      </Card>
+      {availableRewardVideos.length > 0 ? (
+        <Card>
+          <AppText variant="subtitle">{rewardCatalog.video.name}</AppText>
+          <AppText variant="muted">
+            消費：500pt／アプリに同梱された動画を1つ選んで端末へ書き出します。
+          </AppText>
+          {availableRewardVideos.map((video) => (
+            <View key={video.name} style={styles.videoRow}>
+              <AppText style={styles.grow}>{video.name}</AppText>
+              <PrimaryButton
+                title="交換"
+                disabled={balance.available < 500}
+                onPress={() => exchangeVideo(video)}
+              />
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       <Card>
         <AppText variant="subtitle">{rewardCatalog.secret.name}</AppText>

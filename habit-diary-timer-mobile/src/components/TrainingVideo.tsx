@@ -26,6 +26,15 @@ function selectRandomVideoIndex(excludeIndex?: number) {
   return candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
 }
 
+function createRandomMarkerOffsets(markerCount: number, slotCount = 12) {
+  const slots = Array.from({ length: slotCount }, (_, index) => index);
+  for (let index = slots.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [slots[index], slots[swapIndex]] = [slots[swapIndex], slots[index]];
+  }
+  return slots.slice(0, markerCount).sort((a, b) => a - b).map((slot) => slot / slotCount);
+}
+
 const modes = [
   { key: "easy", label: "イージー", rate: 1 },
   { key: "normal", label: "ノーマル", rate: 3 },
@@ -36,17 +45,29 @@ const warmupComments = [
   "ほら、リズムを守りなさい♡",
   "四つん這いで受けると気持ちいいわよ♡",
   "姿勢を崩さないで♡ゆっくり丁寧に続けなさい♡",
-  "力を入れすぎないで♡私に集中しなさい♡",
+  "私に集中しなさい♡",
 ] as const;
 
 const trainingComments = [
   "ほら、もっとマゾらしくアヘアへしながら腰振りなさい♡",
   "根本から先端まで♡カリ首引っ掛けて♡",
-  "なに、手緩めているのかしら？もっと強く握りしめて♡",
-  "ざぁ～こ♡まぁ～ぞ♡ざぁ～こ♡まぁ～ぞ♡ざぁ～こ♡まぁ～ぞ♡",
-  "聞こえないわよ？もっと「二ノ様好き♡」って連呼しなさい♡",
+  "何、手緩めているのかしら？もっと強く握りしめて♡",
+  "ばぁ～か♡あぁ～ほ♡ざぁ～こ♡まぁ～ぞ♡変態マゾ死ね♡",
+  "聞こえないわよ？もっと『二ノ様好き♡』って連呼しなさい♡",
   "なに？もう逝きそうなの？我慢しろ♡変態♡",
-  "ダメ♡まだ我慢♡乳首もいじりなさい♡カリカリカリ…♡",
+  "ダメ♡まだ我慢♡『乳首』もいじりなさい♡カリカリカリ…♡",
+  "ふふ♡情けない顔ね♡もっと舌出して、白目向いて『アヘ顔』晒しなさい♡",
+  "我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしないさい♡",
+  "ほら♡もっと一定の速さで腰を振って、私のリズムについてきなさい♡",
+  "手を止める許可なんて出してないわよ♡そのまま続けなさい♡",
+  "先端ばかり触ってないで♡根元からゆっくり扱いなさい♡",
+  "もっと声を出して♡誰の命令で動いているのか言ってみなさい♡",
+  "その情けない顔、ちゃんと私に見せなさい♡隠したらダメよ♡",
+  "右手が疲れたなら左手に替えなさい♡休憩とは言ってないわ♡",
+  "速く♡ゆっくり♡また速く♡私の言葉どおりに切り替えなさい♡",
+  "もう震えているの？まだ終わりじゃないわ♡しっかり耐えなさい♡",
+  "もっと腰を前に出して♡一回ずつ丁寧に数えながら続けなさい♡",
+  "目を逸らさないで♡私を見ながら『もっとください』って懇願しなさい♡",
 ] as const;
 
 const intensiveComments = [
@@ -55,10 +76,11 @@ const intensiveComments = [
   "４…♡",
   "３…♡",
   "２…♡",
-  "１…♡",
-  "１…♡",
-  "１…♡",
-  "オアズケ♡寸止めよ♡",
+  "１～…♡",
+  "１～…♡♡♡",
+  "１～…♡♡♡♡♡",
+  "ゼ～…♡w",
+  "オ・ア・ズ・ケ♡寸・止・め♡",
 ] as const;
 
 const finishingComments = [
@@ -87,17 +109,19 @@ export function TrainingVideo({
   const insets = useSafeAreaInsets();
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
   const [gaugeProgress, setGaugeProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
   const [trackWidth, setTrackWidth] = useState(1);
+  const [markerOffsets, setMarkerOffsets] = useState(() => createRandomMarkerOffsets(5));
   const [mode, setMode] = useState<TrainingMode>("normal");
   const [slideIndex, setSlideIndex] = useState(0);
   const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
   const [trainingComment, setTrainingComment] = useState<string>(warmupComments[0]);
   const elapsedMilliseconds = useRef(0);
   const lastTick = useRef(0);
-  const lastBeat = useRef(-1);
+  const previousGaugeProgress = useRef(0);
   const lastCommentSlot = useRef(-1);
   const videoLoopCount = useRef(0);
   const { playEffect } = useAppAudio();
@@ -160,11 +184,13 @@ export function TrainingVideo({
       lastTick.current = now;
       const selectedMode = modes.find((item) => item.key === mode) ?? modes[1];
       const elapsed = elapsedMilliseconds.current / 1000;
+      setSessionElapsedSeconds(Math.floor(elapsed));
       const mediaTime = slideMode ? elapsed : player.currentTime || 0;
       const mediaDuration = slideMode
         ? Math.max(1, slides.length * 10)
         : player.duration || 0;
       const rhythmTime = elapsed * selectedMode.rate;
+      const nextGaugeProgress = (rhythmTime % 5) / 5;
       const commentSlot = Math.floor(elapsed / 10);
       if (activelyPlaying && commentSlot !== lastCommentSlot.current) {
         lastCommentSlot.current = commentSlot;
@@ -172,25 +198,32 @@ export function TrainingVideo({
       }
       setCurrentTime(mediaDuration > 0 ? mediaTime % mediaDuration : 0);
       setDuration(mediaDuration);
-      setGaugeProgress((rhythmTime % 5) / 5);
-      if (slideMode) setSlideIndex(Math.floor(mediaTime / 10) % slides.length);
-      const beat = Math.floor(rhythmTime);
-      if (activelyPlaying && beat !== lastBeat.current) {
-        if (lastBeat.current >= 0) playEffect("trainingRhythm");
-        lastBeat.current = beat;
+      if (activelyPlaying) {
+        const reachedTarget = markerOffsets.some((offset) => {
+          const previousPhase = (previousGaugeProgress.current + offset) % 1;
+          const nextPhase = (nextGaugeProgress + offset) % 1;
+          return nextPhase < previousPhase;
+        });
+        if (reachedTarget) playEffect("trainingRhythm");
       }
+      previousGaugeProgress.current = nextGaugeProgress;
+      setGaugeProgress(nextGaugeProgress);
+      if (slideMode) setSlideIndex(Math.floor(mediaTime / 10) % slides.length);
       if (!slideMode) setPlaying(player.playing);
     }, 50);
     return () => clearInterval(timer);
-  }, [mode, player, playEffect, playing, showRandomComment, slideMode, slides.length]);
+  }, [markerOffsets, mode, player, playEffect, playing, showRandomComment, slideMode, slides.length]);
 
   function startTraining() {
     elapsedMilliseconds.current = 0;
+    setSessionElapsedSeconds(0);
     lastTick.current = Date.now();
-    lastBeat.current = -1;
+    previousGaugeProgress.current = 0;
+    setMarkerOffsets(createRandomMarkerOffsets(5));
     lastCommentSlot.current = 0;
     videoLoopCount.current = 0;
     showRandomComment(0);
+    playEffect("trainingStart");
     setStarted(true);
     if (!slideMode) {
       const firstVideoIndex = selectRandomVideoIndex();
@@ -242,7 +275,12 @@ export function TrainingVideo({
   const rhythmGauge = (
     <View style={[styles.rhythmFrame, started && styles.fullscreenRhythm]}>
       <View style={styles.rhythmTitle}>
-        <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
+        <View style={styles.rhythmTitleGroup}>
+          <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
+          <AppText style={styles.rhythmElapsedText}>
+            経過時間 {secondsToClock(sessionElapsedSeconds)}
+          </AppText>
+        </View>
         <AppText style={styles.rhythmSubText}>ピンクのポイントで消滅</AppText>
       </View>
       <View
@@ -254,7 +292,7 @@ export function TrainingVideo({
         <View style={styles.hitGlow} />
         <View style={styles.hitPoint} />
         {Array.from({ length: markerCount }, (_, index) => {
-          const phase = (gaugeProgress + index / markerCount) % 1;
+          const phase = (gaugeProgress + markerOffsets[index]) % 1;
           const travelWidth = Math.max(0, trackWidth - 56);
           const left = 26 + (1 - phase) * travelWidth;
           const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
@@ -479,10 +517,12 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 2,
   },
+  rhythmTitleGroup: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rhythmElapsedText: { color: lightTheme.muted, fontSize: 8, fontWeight: "800" },
   rhythmSubText: { color: lightTheme.muted, fontSize: 9 },
   track: {
     overflow: "hidden",
-    height: 44,
+    height: 58,
     justifyContent: "center",
     marginHorizontal: 8,
   },
@@ -514,9 +554,9 @@ const styles = StyleSheet.create({
   },
   rhythmMarker: {
     position: "absolute",
-    width: 34,
-    height: 34,
-    marginLeft: -17,
+    width: 44,
+    height: 50,
+    marginLeft: -22,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
@@ -524,15 +564,23 @@ const styles = StyleSheet.create({
   rhythmMarkerHeart: {
     position: "absolute",
     color: "#ff69b4",
-    fontSize: 36,
-    lineHeight: 38,
+    fontSize: 40,
+    lineHeight: 50,
     fontWeight: "900",
+    includeFontPadding: false,
+    textAlign: "center",
   },
   rhythmMarkerText: {
+    position: "absolute",
+    width: 44,
+    height: 50,
     color: "#fff",
     fontSize: 7,
-    lineHeight: 9,
+    lineHeight: 50,
     fontWeight: "900",
+    textAlign: "center",
+    textAlignVertical: "center",
+    includeFontPadding: false,
     textShadowColor: "#a60050",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,

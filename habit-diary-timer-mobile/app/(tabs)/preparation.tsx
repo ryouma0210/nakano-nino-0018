@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
@@ -47,6 +47,13 @@ export default function PreparationScreen() {
   const [completed, setCompleted] = useState(Boolean(saved));
   const [fullscreen, setFullscreen] = useState(false);
   const [commentIndex, setCommentIndex] = useState(0);
+
+  useFocusEffect(useCallback(() => {
+    const current = preparationRepository.find();
+    const currentChecks: string[] = current ? JSON.parse(current.checks_json) : [];
+    setChecked(new Set(currentChecks));
+    setCompleted(Boolean(current));
+  }, []));
   const requiredComplete = items
     .filter((item) => item.required)
     .every((item) => checked.has(item.text));
@@ -73,7 +80,6 @@ export default function PreparationScreen() {
     preparationRepository.save(Array.from(checked));
     setCompleted(true);
     preparationPlayer.replay();
-    setFullscreen(true);
   }
 
   return (
@@ -94,19 +100,23 @@ export default function PreparationScreen() {
       <Card>
         <AppText variant="subtitle">発情してない人向け</AppText>
         {!fullscreen ? (
-          <Pressable
-            onPress={() => {
-              preparationPlayer.play();
-              setFullscreen(true);
-            }}
-          >
+          <View style={styles.videoPreview}>
             <VideoView
               player={preparationPlayer}
               style={styles.video}
               nativeControls={false}
               contentFit="contain"
             />
-          </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="動画を拡大表示"
+              onPress={() => {
+                preparationPlayer.play();
+                setFullscreen(true);
+              }}
+              style={styles.videoTapArea}
+            />
+          </View>
         ) : (
           <View style={styles.videoPlaceholder}>
             <AppText variant="muted">動画を拡大表示中</AppText>
@@ -139,13 +149,13 @@ export default function PreparationScreen() {
       {completed ? (
         <Card>
           <AppText style={styles.closing}>
-            「本日も調教よろしくお願いいたします。」
+            「本日も調教よろしくお願いいたします♡」
           </AppText>
           <AppText variant="muted">調教日記へ保存しました。</AppText>
         </Card>
       ) : (
         <PrimaryButton
-          title="勃起も準備も完了しました♡"
+          title="本日も調教よろしくお願いいたします♡"
           disabled={!requiredComplete}
           onPress={complete}
         />
@@ -215,6 +225,8 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#000",
   },
+  videoPreview: { position: "relative" },
+  videoTapArea: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   videoPlaceholder: {
     width: "100%",
     aspectRatio: 16 / 9,

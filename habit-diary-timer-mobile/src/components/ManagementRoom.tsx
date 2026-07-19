@@ -35,6 +35,7 @@ export function ManagementRoom({
   );
   const [rolling, setRolling] = useState(false);
   const [rerollConfirmation, setRerollConfirmation] = useState(false);
+  const [changeModeConfirmation, setChangeModeConfirmation] = useState(false);
 
   function roll() {
     setRolling(true);
@@ -78,6 +79,22 @@ export function ManagementRoom({
     }, 650);
   }
 
+  function requestChangeMode() {
+    if (rolling) return;
+    if (!cycle) {
+      onChangeMode?.();
+      return;
+    }
+    setChangeModeConfirmation(true);
+  }
+
+  function changeMode() {
+    if (cycle) managementRepository.removeCycle(cycle.id);
+    setCycle(null);
+    setTask(null);
+    onChangeMode?.();
+  }
+
   return (
     <Screen>
       <AppText variant="title">{title}</AppText>
@@ -101,7 +118,7 @@ export function ManagementRoom({
           <PrimaryButton
             title="管理方法を選び直す"
             tone="secondary"
-            onPress={onChangeMode}
+            onPress={requestChangeMode}
           />
         ) : null}
       </Card>
@@ -156,6 +173,18 @@ export function ManagementRoom({
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
+      />
+      <ConfirmModal
+        visible={changeModeConfirmation}
+        title="管理方法を選び直しますか？"
+        message="現在選択している管理方法の期間・日別指示・完了記録・獲得ポイントを削除して、管理方法の選択へ戻ります。"
+        confirmLabel="削除して選び直す"
+        confirmTone="danger"
+        onCancel={() => setChangeModeConfirmation(false)}
+        onConfirm={() => {
+          setChangeModeConfirmation(false);
+          changeMode();
+        }}
       />
       <ConfirmModal
         visible={rerollConfirmation}

@@ -38,7 +38,15 @@ export default function MenuScreen() {
           <PrimaryButton
             key={href}
             title={title}
-            tone={title === "設定" ? "secondary" : "primary"}
+            tone={
+              title === "設定"
+                ? "secondary"
+                : title === "調教日記" || title === "ファイル格納"
+                  ? "record"
+                  : title === "称号・実績" || title === "ご褒美"
+                    ? "reward"
+                    : "primary"
+            }
             onPress={() => router.push(href)}
           />
         ))}

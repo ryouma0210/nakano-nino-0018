@@ -146,6 +146,11 @@ export const rewardRepository = {
     const reward = rewardCatalog.video;
     let redeemed = false;
     transaction(() => {
+      const existing = queryOne<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM reward_redemptions WHERE reward_key='video' AND reward_content=?",
+        [name],
+      )?.count ?? 0;
+      if (existing > 0) return;
       if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('video', ?, ?, ?, ?)",

@@ -25,8 +25,8 @@ export default function FilesScreen() {
   useEffect(load, [load]);
   useFocusEffect(load);
 
-  async function upload() {
-    if (await fileStorageService.pickAndStore()) load();
+  async function upload(purpose: "training" | "punishment") {
+    if (await fileStorageService.pickAndStore(purpose)) load();
   }
 
   function remove(file: StoredFile) {
@@ -47,7 +47,14 @@ export default function FilesScreen() {
           { text: "奴隷好みのオカズを全部ここに入れなさい♡私に弱点晒せ♡" },
         ]}
       />
-      <PrimaryButton title="ファイルを格納" onPress={upload} />
+      <View style={styles.uploadButtons}>
+        <View style={styles.grow}>
+          <PrimaryButton title="調教用を格納" onPress={() => upload("training")} />
+        </View>
+        <View style={styles.grow}>
+          <PrimaryButton title="お仕置き用を格納" onPress={() => upload("punishment")} />
+        </View>
+      </View>
       <AppText variant="muted">
         使用量 {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
       </AppText>
@@ -77,6 +84,9 @@ export default function FilesScreen() {
             <View style={styles.grow}>
               <AppText>{file.name}</AppText>
               <AppText variant="muted">{formatBytes(file.size)}</AppText>
+              <AppText variant="muted">
+                用途：{file.purpose === "training" ? "調教部屋" : "お仕置き部屋"}
+              </AppText>
             </View>
             <PrimaryButton
               title="削除"
@@ -169,6 +179,7 @@ function FileViewer({
 }
 
 const styles = StyleSheet.create({
+  uploadButtons: { flexDirection: "row", gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
   preview: {

@@ -1,4 +1,4 @@
-import { execute, queryOne, transaction } from "@/database/client";
+import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateKey, toDateTimeKey, toTimeKey } from "@/utils/date";
 
 export type PreparationRecord = {
@@ -32,9 +32,33 @@ function addDays(dateKey: string, days: number) {
   return toDateKey(date);
 }
 
+function deleteManagementCycleData(cycleId: number) {
+  const tasks = query<{ id: number }>(
+    "SELECT id FROM management_daily_tasks WHERE cycle_id=?",
+    [cycleId],
+  );
+  tasks.forEach((task) => {
+    execute("DELETE FROM point_transactions WHERE source_key=?", [
+      `management-task:${task.id}`,
+    ]);
+  });
+  execute("DELETE FROM management_daily_tasks WHERE cycle_id=?", [cycleId]);
+  execute("DELETE FROM management_cycles WHERE id=?", [cycleId]);
+}
+
 export const preparationRepository = {
   find(date = toDateKey()) {
-    return queryOne<PreparationRecord>("SELECT * FROM preparation_records WHERE record_date = ?", [date]);
+    const record = queryOne<PreparationRecord>("SELECT * FROM preparation_records WHERE record_date = ?", [date]);
+    if (!record) return undefined;
+    const journal = queryOne<{ id: number }>(
+      "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%準備部屋%' LIMIT 1",
+      [date],
+    );
+    if (!journal) {
+      execute("DELETE FROM preparation_records WHERE record_date = ?", [date]);
+      return undefined;
+    }
+    return record;
   },
 
   save(checks: string[], date = toDateKey()) {
@@ -106,8 +130,7 @@ export const managementRepository = {
     let id = 0;
     transaction(() => {
       // Deleting the cycle also deletes every daily task and removes this period from achievements.
-      execute("DELETE FROM management_daily_tasks WHERE cycle_id=?", [cycleId]);
-      execute("DELETE FROM management_cycles WHERE id=?", [cycleId]);
+      deleteManagementCycleData(cycleId);
       execute("UPDATE management_cycles SET is_active=0 WHERE mode=?", [mode]);
       const result = execute(
         "INSERT INTO management_cycles(mode, dice, start_date, end_date, is_active, created_at) VALUES(?, ?, ?, ?, 1, ?)",
@@ -116,6 +139,10 @@ export const managementRepository = {
       id = Number(result.lastInsertRowId);
     });
     return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+  },
+
+  removeCycle(cycleId: number) {
+    transaction(() => deleteManagementCycleData(cycleId));
   },
 
   todayTask(cycle: ManagementCycle) {

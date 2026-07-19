@@ -5,7 +5,7 @@ import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
-type EffectName = "button" | "dialogue" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
+type EffectName = "button" | "dialogue" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
 type AudioContextValue = {
   settings: AppSettings | null;
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
@@ -31,9 +31,10 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const bgm = useAudioPlayer(null);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
-  const trainingRhythm = useAudioPlayer(require("../../assets/audio/training-rhythm.wav"));
+  const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
+  const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
-  const ejaculation = useAudioPlayer(require("../../assets/audio/ejaculation.wav"));
+  const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.mp4"));
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
 
   useEffect(() => {
@@ -75,10 +76,10 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   const playEffect = useCallback((name: EffectName) => {
     if (!settings?.soundEnabled) return;
-    const player = { button, dialogue, trainingRhythm, punishmentHit, ejaculation, complete }[name];
+    const player = { button, dialogue, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
     player.volume = settings.soundVolume;
     player.seekTo(0).then(() => player.play());
-  }, [button, complete, dialogue, ejaculation, punishmentHit, settings, trainingRhythm]);
+  }, [button, complete, dialogue, ejaculation, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const value = useMemo(() => ({ settings, updateAudioSettings, playEffect }), [playEffect, settings, updateAudioSettings]);
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
