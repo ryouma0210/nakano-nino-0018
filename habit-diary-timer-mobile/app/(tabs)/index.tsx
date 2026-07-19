@@ -50,7 +50,15 @@ export default function HomeScreen() {
                       ? "contract"
                       : href === "/(tabs)/menu"
                         ? "secondary"
-                      : "primary"
+                        : href === "/(tabs)/preparation"
+                          ? "preparation"
+                          : href === "/(tabs)/orders"
+                            ? "order"
+                            : href === "/(tabs)/habits"
+                              ? "training"
+                              : href === "/(tabs)/management"
+                                ? "management"
+                                : "primary"
                 }
                 onPress={() => router.push(href)}
               />

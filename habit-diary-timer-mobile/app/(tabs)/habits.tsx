@@ -23,6 +23,39 @@ import {
 } from "@/services/fileStorageService";
 import { pointRepository } from "@/repositories/rewardRepository";
 
+const trainingJudgements = [
+  { limit: 10, comments: [
+    "は？10秒も我慢できないなんて早すぎよ。すぐにお仕置き部屋へ行きなさい",
+    "え？一桁秒で終わり？記録するのも恥ずかしい速さね。お仕置き確定よ",
+    "始まったと思ったらもう終わり？早漏すぎて話にならないわね。反省しながらお仕置きを受けなさい",
+  ] },
+  { limit: 30, comments: [
+    "ずいぶん早かったわね。お仕置き部屋で鍛え直しなさい",
+  ] },
+  { limit: 100, comments: [
+    "その弱さはお仕置き部屋で鍛え直しね♡",
+    "合格には程遠いからお仕置きね♡",
+    "少しは耐えたけど足りないわ。次はもっと我慢しなさい♡",
+  ] },
+  { limit: 300, comments: [
+    "5分まで届かなかったのね。惜しくてもお仕置きは免除しないわ♡",
+    "ここで終わるなんて中途半端よ。お仕置き部屋へ行きなさい♡",
+  ] },
+  { limit: 600, comments: [
+    "よく耐えたけれど基準未満ね。最後にお仕置きを受けてきなさい♡",
+  ] },
+  { limit: Number.POSITIVE_INFINITY, comments: [
+    "最後までよく我慢したわね。今日はお仕置きなしでいいわ♡",
+  ] },
+] as const;
+
+function trainingJudgement(seconds: number) {
+  const group = trainingJudgements.find((item) => seconds < item.limit) ?? trainingJudgements.at(-1)!;
+  return group.comments[Math.floor(Math.random() * group.comments.length)];
+}
+
+type TrainingCompletion = TrainingResult & { judgement: string };
+
 export default function HabitsScreen() {
   const [habits, setHabits] = useState<HabitWithToday[]>([]);
   const [formVisible, setFormVisible] = useState(false);
@@ -32,7 +65,7 @@ export default function HabitsScreen() {
   const [pendingDelete, setPendingDelete] = useState<HabitWithToday | null>(
     null,
   );
-  const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(
+  const [trainingResult, setTrainingResult] = useState<TrainingCompletion | null>(
     null,
   );
   const [trainingImages, setTrainingImages] = useState<StoredFile[]>([]);
@@ -59,7 +92,7 @@ export default function HabitsScreen() {
   useEffect(load, [load]);
   useFocusEffect(
     useCallback(() => {
-      fileStorageService.list().then((files) => {
+      fileStorageService.list("training").then((files) => {
         const images = files.filter((file) =>
           /\.(png|jpe?g|webp|gif)$/i.test(file.name),
         );
@@ -86,17 +119,20 @@ export default function HabitsScreen() {
 
   function completeTraining(result: TrainingResult) {
     const recordDate = toDateKey();
+    const judgement = trainingJudgement(result.elapsedSeconds);
     journalRepository.create({
       recordDate,
       title: "調教完了記録",
-      body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒`,
+      body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒\n判定: ${judgement}`,
       recordType: "diary",
       tags: `調教,完了,射精記録,${result.difficulty}`,
       durationSeconds: result.elapsedSeconds,
     });
     pointRepository.award(`training:${recordDate}`, 5, "本日初回の調教を完了");
-    setTrainingResult(result);
+    setTrainingResult({ ...result, judgement });
   }
+
+  const resultJudgement = trainingResult?.judgement ?? "";
 
   return (
     <Screen>
@@ -338,7 +374,7 @@ export default function HabitsScreen() {
             </View>
             <AppText variant="subtitle">ニノ</AppText>
             <AppText style={styles.completeMessage}>
-              お疲れさま。今日の調教はここまでよ。ちゃんと記録しておくわ。
+              {resultJudgement}
             </AppText>
             <View style={styles.resultBox}>
               <AppText variant="label">タイトル</AppText>
@@ -351,10 +387,23 @@ export default function HabitsScreen() {
               <AppText style={styles.resultSeconds}>
                 {trainingResult?.elapsedSeconds ?? 0}秒
               </AppText>
+              <AppText variant="label">判定メッセージ</AppText>
+              <AppText>{resultJudgement}</AppText>
               <AppText variant="muted">調教日記へ保存しました。</AppText>
             </View>
+            {(trainingResult?.elapsedSeconds ?? 600) < 600 ? (
+              <PrimaryButton
+                title="お仕置き部屋へ"
+                tone="danger"
+                onPress={() => {
+                  setTrainingResult(null);
+                  router.replace("/(tabs)/timer");
+                }}
+              />
+            ) : null}
             <PrimaryButton
               title="ホームへ戻る"
+              tone="secondary"
               onPress={() => {
                 setTrainingResult(null);
                 router.replace("/(tabs)");

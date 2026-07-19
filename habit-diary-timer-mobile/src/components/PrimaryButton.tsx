@@ -5,7 +5,17 @@ import { useAppAudio } from "@/audio/AudioProvider";
 type Props = {
   title: string;
   onPress: () => void;
-  tone?: "primary" | "secondary" | "danger" | "contract";
+  tone?:
+    | "primary"
+    | "secondary"
+    | "danger"
+    | "contract"
+    | "preparation"
+    | "order"
+    | "training"
+    | "management"
+    | "record"
+    | "reward";
   disabled?: boolean;
 };
 
@@ -31,6 +41,12 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "secondary" && styles.secondaryText,
         tone === "danger" && styles.dangerText,
         tone === "contract" && styles.contractText,
+        tone === "preparation" && styles.preparationText,
+        tone === "order" && styles.orderText,
+        tone === "training" && styles.trainingText,
+        tone === "management" && styles.managementText,
+        tone === "record" && styles.recordText,
+        tone === "reward" && styles.rewardText,
       ]}>{title}</AppText>
     </Pressable>
   );
@@ -61,6 +77,30 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#7b2cbf",
   },
+  preparation: {
+    borderColor: "#2f9e58",
+    backgroundColor: "#071b10",
+  },
+  order: {
+    borderColor: "#245a9a",
+    backgroundColor: "#071426",
+  },
+  training: {
+    borderColor: "#c93678",
+    backgroundColor: "#220815",
+  },
+  management: {
+    borderColor: "#8c2338",
+    backgroundColor: "#23070d",
+  },
+  record: {
+    borderColor: "#fff",
+    backgroundColor: "#1f5fae",
+  },
+  reward: {
+    borderColor: "#fff",
+    backgroundColor: "#f2c94c",
+  },
   disabled: {
     opacity: 0.45,
   },
@@ -80,4 +120,10 @@ const styles = StyleSheet.create({
   contractText: {
     color: "#fff",
   },
+  preparationText: { color: "#7ee2a0" },
+  orderText: { color: "#7fb8ff" },
+  trainingText: { color: "#ff8fbe" },
+  managementText: { color: "#e56b82" },
+  recordText: { color: "#fff" },
+  rewardText: { color: "#111" },
 });

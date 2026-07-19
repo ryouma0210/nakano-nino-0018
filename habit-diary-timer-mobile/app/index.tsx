@@ -22,7 +22,7 @@ export default function Index() {
         <AppText style={styles.title}>PRIVATE ROOM</AppText>
         <Image source={require("../assets/characters/home-nino.png")} style={styles.hero} resizeMode="contain" />
         <View style={styles.menu}>
-          <PrimaryButton title="始める" onPress={() => router.replace("/(tabs)")} />
+          <PrimaryButton title="始める" tone="secondary" onPress={() => router.replace("/(tabs)")} />
           <PrimaryButton title="ゲーム終了" onPress={() => setExitConfirmation(true)} tone="danger" />
         </View>
         <AppText style={styles.version}>Ver:{Constants.expoConfig?.version ?? "-"}</AppText>
