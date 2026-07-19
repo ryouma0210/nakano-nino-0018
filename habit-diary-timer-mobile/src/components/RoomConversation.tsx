@@ -55,6 +55,8 @@ export function RoomConversation({
   const safeIndex = Math.min(index, visibleLines.length - 1);
   const current = visibleLines[safeIndex];
   const isLast = safeIndex === visibleLines.length - 1;
+  const isContractLine = contractSigned && safeIndex >= lines.length;
+  const isContractRoom = roomName === "契約部屋";
 
   function next() {
     playEffect("dialogue");
@@ -64,12 +66,16 @@ export function RoomConversation({
   return (
     <Pressable
       onPress={next}
-      style={({ pressed }) => [styles.panel, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.panel,
+        isContractRoom && styles.contractPanel,
+        pressed && styles.pressed,
+      ]}
       accessibilityRole="button"
       accessibilityLabel="会話を進める"
     >
-      <View style={styles.roomBar}>
-        <AppText style={styles.roomLabel}>{roomName}</AppText>
+      <View style={[styles.roomBar, isContractRoom && styles.contractBorder]}>
+        <AppText style={[styles.roomLabel, isContractRoom && styles.contractText]}>{roomName}</AppText>
         <AppText style={styles.counter}>
           {safeIndex + 1} / {visibleLines.length}
         </AppText>
@@ -102,11 +108,17 @@ export function RoomConversation({
         )}
       </View>
 
-      <View style={styles.dialogue}>
+      <View style={[styles.dialogue, isContractRoom && styles.contractBorder]}>
         <View style={styles.namePlate}>
           <AppText style={styles.name}>ニノ</AppText>
         </View>
-        <AppText style={styles.message}>{current.text}</AppText>
+        <AppText style={[
+          styles.message,
+          isContractLine && styles.contractMessage,
+          isContractRoom && styles.contractText,
+        ]}>
+          {current.text}
+        </AppText>
         <AppText style={styles.next}>
           {isLast ? "タップでもう一度  ↻" : "タップして次へ  ▶"}
         </AppText>
@@ -225,6 +237,10 @@ const styles = StyleSheet.create({
   },
   name: { fontWeight: "900" },
   message: { minHeight: 44, fontSize: 16, lineHeight: 24 },
+  contractMessage: { color: lightTheme.danger, fontWeight: "900" },
+  contractPanel: { borderColor: "#b875ff" },
+  contractBorder: { borderColor: "#b875ff" },
+  contractText: { color: "#c99aff", fontWeight: "900" },
   next: {
     marginTop: 8,
     color: lightTheme.muted,

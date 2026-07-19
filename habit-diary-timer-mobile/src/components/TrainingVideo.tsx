@@ -19,6 +19,13 @@ const defaultVideos = [
   require("../../assets/videos/habits_6.mp4"),
 ];
 
+function selectRandomVideoIndex(excludeIndex?: number) {
+  const candidates = defaultVideos
+    .map((_, index) => index)
+    .filter((index) => index !== excludeIndex);
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
+}
+
 const modes = [
   { key: "easy", label: "イージー", rate: 1 },
   { key: "normal", label: "ノーマル", rate: 3 },
@@ -131,7 +138,7 @@ export function TrainingVideo({
       return;
     }
     videoLoopCount.current = 0;
-    const nextIndex = (defaultVideoIndex + 1) % defaultVideos.length;
+    const nextIndex = selectRandomVideoIndex(defaultVideoIndex);
     setDefaultVideoIndex(nextIndex);
     showRandomComment();
     player
@@ -185,7 +192,17 @@ export function TrainingVideo({
     videoLoopCount.current = 0;
     showRandomComment(0);
     setStarted(true);
-    if (!slideMode) player.replay();
+    if (!slideMode) {
+      const firstVideoIndex = selectRandomVideoIndex();
+      setDefaultVideoIndex(firstVideoIndex);
+      player
+        .replaceAsync(defaultVideos[firstVideoIndex])
+        .then(() => {
+          player.playbackRate = 1;
+          player.play();
+        })
+        .catch(console.error);
+    }
     setPlaying(true);
   }
 

@@ -43,7 +43,15 @@ export default function HomeScreen() {
             <View style={styles.button}>
               <PrimaryButton
                 title={title}
-                tone={href === "/(tabs)/timer" ? "danger" : "primary"}
+                tone={
+                  href === "/(tabs)/timer"
+                    ? "danger"
+                    : href === "/(tabs)/contract"
+                      ? "contract"
+                      : href === "/(tabs)/menu"
+                        ? "secondary"
+                      : "primary"
+                }
                 onPress={() => router.push(href)}
               />
             </View>
