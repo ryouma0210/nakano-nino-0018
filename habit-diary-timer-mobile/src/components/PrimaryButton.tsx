@@ -78,19 +78,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#7b2cbf",
   },
   preparation: {
-    borderColor: "#2f9e58",
+    borderColor: "#fff",
     backgroundColor: "#071b10",
   },
   order: {
-    borderColor: "#245a9a",
+    borderColor: "#fff",
     backgroundColor: "#071426",
   },
   training: {
-    borderColor: "#c93678",
+    borderColor: "#fff",
     backgroundColor: "#220815",
   },
   management: {
-    borderColor: "#8c2338",
+    borderColor: "#fff",
     backgroundColor: "#23070d",
   },
   record: {
@@ -110,6 +110,7 @@ const styles = StyleSheet.create({
   text: {
     color: "#fff",
     fontWeight: "800",
+    textAlign: "center",
   },
   dangerText: {
     color: "#fff",
@@ -120,10 +121,10 @@ const styles = StyleSheet.create({
   contractText: {
     color: "#fff",
   },
-  preparationText: { color: "#7ee2a0" },
-  orderText: { color: "#7fb8ff" },
-  trainingText: { color: "#ff8fbe" },
-  managementText: { color: "#e56b82" },
+  preparationText: { color: "#fff" },
+  orderText: { color: "#fff" },
+  trainingText: { color: "#fff" },
+  managementText: { color: "#fff" },
   recordText: { color: "#fff" },
   rewardText: { color: "#111" },
 });

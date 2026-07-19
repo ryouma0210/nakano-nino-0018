@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
-import * as MediaLibrary from "expo-media-library";
+import * as MediaLibrary from "expo-media-library/legacy";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -18,8 +18,8 @@ import {
 
 const rewardVideos = [
   {
-    name: "契約成立動画",
-    module: require("../../assets/videos/contract_1.mp4"),
+    name: "準備動画",
+    module: require("../../assets/videos/preparation_1.mp4"),
   },
   { name: "調教動画 1", module: require("../../assets/videos/habits_1.mp4") },
   { name: "調教動画 2", module: require("../../assets/videos/habits_2.mp4") },
@@ -30,8 +30,8 @@ const rewardVideos = [
   { name: "お仕置き動画 1", module: require("../../assets/videos/timer_1.mp4") },
   { name: "お仕置き動画 2", module: require("../../assets/videos/timer_2.mp4") },
   {
-    name: "準備動画",
-    module: require("../../assets/videos/preparation_1.mp4"),
+    name: "契約成立動画",
+    module: require("../../assets/videos/contract_1.mp4"),
   },
 ] as const;
 
@@ -52,6 +52,10 @@ async function saveVideoToLibrary(uri: string) {
   }
   await MediaLibrary.saveToLibraryAsync(uri);
   return true;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export default function RewardsScreen() {
@@ -131,10 +135,10 @@ export default function RewardsScreen() {
           if (await saveVideoToLibrary(uri)) {
             Alert.alert("動画を獲得しました♡", "端末のギャラリーへ保存しました。");
           }
-        } catch {
+        } catch (error) {
           Alert.alert(
             "動画を準備できません",
-            "動画の読み込みに失敗しました。もう一度お試しください。",
+            `動画の読み込みまたは保存に失敗しました。\n\n${getErrorMessage(error)}`,
           );
         }
       },
@@ -153,8 +157,11 @@ export default function RewardsScreen() {
       if (await saveVideoToLibrary(uri)) {
         Alert.alert("保存完了", "動画を端末のギャラリーへ保存しました。");
       }
-    } catch {
-      Alert.alert("動画を開けません", "同梱動画の読み込みに失敗しました。");
+    } catch (error) {
+      Alert.alert(
+        "動画を保存できません",
+        `同梱動画の読み込みまたは端末への保存に失敗しました。\n\n${getErrorMessage(error)}`,
+      );
     }
   }
 

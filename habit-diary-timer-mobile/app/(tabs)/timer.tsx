@@ -37,16 +37,28 @@ const punishmentComments = [
   "私が終わりと言うまで、お仕置きは続くわよ♡",
 ] as const;
 
-function createRandomMarkerOffsets(markerCount: number, slotCount = 12) {
+const markerCount = 3;
+
+function createRandomMarkerOffsets(
+  count: number,
+  slotCount = 16,
+  minimumGap = 4,
+) {
   const slots = Array.from({ length: slotCount }, (_, index) => index);
   for (let index = slots.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
     [slots[index], slots[swapIndex]] = [slots[swapIndex], slots[index]];
   }
-  return slots
-    .slice(0, markerCount)
-    .sort((a, b) => a - b)
-    .map((slot) => slot / slotCount);
+  const selected: number[] = [];
+  for (const slot of slots) {
+    const hasEnoughSpace = selected.every((current) => {
+      const distance = Math.abs(slot - current);
+      return Math.min(distance, slotCount - distance) >= minimumGap;
+    });
+    if (hasEnoughSpace) selected.push(slot);
+    if (selected.length === count) break;
+  }
+  return selected.sort((a, b) => a - b).map((slot) => slot / slotCount);
 }
 
 export default function TimerScreen() {
@@ -59,7 +71,7 @@ export default function TimerScreen() {
   const [minMinutes, setMinMinutes] = useState(1);
   const [trackWidth, setTrackWidth] = useState(1);
   const [markerOffsets, setMarkerOffsets] = useState(() =>
-    createRandomMarkerOffsets(5),
+    createRandomMarkerOffsets(markerCount),
   );
   const [target, setTarget] = useState<"金玉" | "チンポ">("金玉");
   const [speedLabel, setSpeedLabel] = useState("ゆっくり");
@@ -76,9 +88,15 @@ export default function TimerScreen() {
   const gaugeSpeed = useRef<number>(gaugeSpeeds[0].value);
   const lastGaugeTick = useRef(0);
   const nextSpeedChangeAt = useRef(0);
-  const { playEffect, stopEffect } = useAppAudio();
+  const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
 
-  useEffect(() => () => stopEffect("trainingStart"), [stopEffect]);
+  useEffect(
+    () => () => {
+      stopEffect("trainingStart");
+      setSessionAudioActive(false);
+    },
+    [setSessionAudioActive, stopEffect],
+  );
   useEffect(() => {
     contractService.load().then((contract) => {
       const minimum = contract.signedAt ? 30 : 1;
@@ -122,7 +140,6 @@ export default function TimerScreen() {
         return nextPhase < previousPhase;
       });
       if (reachedTarget) {
-        setTarget(Math.random() < 0.5 ? "金玉" : "チンポ");
         playEffect("punishmentHit");
       }
       previousGaugeProgress.current = nextGaugeProgress;
@@ -140,6 +157,13 @@ export default function TimerScreen() {
     }, 1000);
     return () => clearInterval(timer);
   }, [running]);
+
+  useEffect(() => {
+    if (!running) return;
+    const elapsedSeconds = Math.max(0, totalSeconds - remaining);
+    const targetSlot = Math.floor(elapsedSeconds / 30);
+    setTarget(targetSlot % 2 === 0 ? "金玉" : "チンポ");
+  }, [remaining, running, totalSeconds]);
 
   useEffect(() => {
     if (!running) return;
@@ -163,9 +187,10 @@ export default function TimerScreen() {
     sessionRecorded.current = true;
     achievementRepository.recordPunishment(totalSeconds);
     stopEffect("trainingStart");
+    setSessionAudioActive(false);
     playEffect("complete");
     setRunning(false);
-  }, [playEffect, remaining, running, stopEffect, totalSeconds]);
+  }, [playEffect, remaining, running, setSessionAudioActive, stopEffect, totalSeconds]);
 
   function start() {
     const enteredMinutes = Number(minutes);
@@ -183,13 +208,15 @@ export default function TimerScreen() {
     lastGaugeTick.current = startedAt.current;
     nextSpeedChangeAt.current = startedAt.current + 30000;
     setSpeedLabel(gaugeSpeeds[0].label);
+    setTarget("金玉");
     previousGaugeProgress.current = 0;
     lastCommentSlot.current = 0;
     setPunishmentComment(
       punishmentComments[Math.floor(Math.random() * punishmentComments.length)],
     );
-    setMarkerOffsets(createRandomMarkerOffsets(5));
+    setMarkerOffsets(createRandomMarkerOffsets(markerCount));
     sessionRecorded.current = false;
+    setSessionAudioActive(true);
     playEffect("trainingStart");
     setRunning(true);
   }
@@ -199,6 +226,7 @@ export default function TimerScreen() {
       achievementRepository.recordPunishment(totalSeconds - remaining);
     sessionRecorded.current = true;
     stopEffect("trainingStart");
+    setSessionAudioActive(false);
     setRunning(false);
   }
 
@@ -240,15 +268,13 @@ export default function TimerScreen() {
           ) : null}
         </View>
       </Card>
-      {!running ? (
+      <Card>
         <PunishmentMedia
           key={mediaMode}
           active={false}
           files={punishmentFiles}
           useStored={mediaMode === "stored"}
         />
-      ) : null}
-      <Card>
         <TextField
           label={`時間（分）・最低 ${minMinutes}分`}
           value={minutes}
@@ -256,50 +282,10 @@ export default function TimerScreen() {
           keyboardType="number-pad"
           editable={!running}
         />
-        <AppText style={styles.clock}>{secondsToClock(remaining)}</AppText>
-        <View style={styles.rhythmFrame}>
-          <View style={styles.rhythmHeader}>
-            <View>
-              <View style={styles.rhythmTitleGroup}>
-                <AppText variant="label">RHYTHM</AppText>
-                <AppText style={styles.rhythmElapsed}>
-                  経過時間{" "}
-                  {secondsToClock(Math.max(0, totalSeconds - remaining))}
-                </AppText>
-              </View>
-              <AppText style={styles.speed}>速度：{speedLabel}</AppText>
-            </View>
-            <AppText style={styles.target}>{target}にビンタ</AppText>
-          </View>
-          <View
-            onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-            style={styles.track}
-          >
-            <View style={styles.line} />
-            <View style={styles.hitGlow} />
-            <View style={styles.hitPoint} />
-            {Array.from({ length: 5 }, (_, index) => {
-              const phase = (gaugeElapsed / 5 + markerOffsets[index]) % 1;
-              const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
-              const opacity =
-                phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
-              return (
-                <View key={index} style={[styles.marker, { left, opacity }]}> 
-                  <AppText style={styles.markerSpade}>♠</AppText>
-                  <AppText style={styles.markerLetter}>Q</AppText>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-        {!running ? (
-          <PrimaryButton
-            title={remaining === 0 ? "もう一度開始" : "開始"}
-            onPress={start}
-          />
-        ) : (
-          <PrimaryButton title="ギブアップ" tone="danger" onPress={stop} />
-        )}
+        <PrimaryButton
+          title={remaining === 0 ? "もう一度開始" : "お仕置き開始"}
+          onPress={start}
+        />
       </Card>
       <PrimaryButton
         title="ホームへ戻る"
@@ -332,7 +318,9 @@ export default function TimerScreen() {
           <View style={styles.punishmentComment}>
             <AppText style={styles.punishmentCommentName}>ニノ</AppText>
             <AppText style={styles.punishmentCommentText}>
-              {punishmentComment}
+              {settings?.playerName.trim()
+                ? `${settings.playerName.trim()}、${punishmentComment}`
+                : punishmentComment}
             </AppText>
           </View>
           <View style={styles.rhythmFrame}>
@@ -350,12 +338,11 @@ export default function TimerScreen() {
             </View>
             <View
               onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-              style={styles.track}
-            >
-              <View style={styles.line} />
-              <View style={styles.hitGlow} />
-              <View style={styles.hitPoint} />
-              {Array.from({ length: 5 }, (_, index) => {
+            style={styles.track}
+          >
+            <View style={styles.line} />
+            <View style={styles.hitPoint} />
+              {Array.from({ length: markerCount }, (_, index) => {
                 const phase = (gaugeElapsed / 5 + markerOffsets[index]) % 1;
                 const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
@@ -441,14 +428,6 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: "#d17a9b",
   },
-  hitGlow: {
-    position: "absolute",
-    left: 8,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(255,105,180,0.28)",
-  },
   hitPoint: {
     position: "absolute",
     left: 15,
@@ -457,7 +436,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 4,
     borderColor: "#ff69b4",
-    backgroundColor: "#ffd2e6",
+    backgroundColor: "transparent",
     zIndex: 3,
   },
   marker: {

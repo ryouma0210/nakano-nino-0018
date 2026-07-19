@@ -11,9 +11,16 @@ type AudioContextValue = {
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
   playEffect: (name: EffectName) => void;
   stopEffect: (name: EffectName) => void;
+  setSessionAudioActive: (active: boolean) => void;
 };
 
-const AudioContext = createContext<AudioContextValue>({ settings: null, updateAudioSettings: async () => {}, playEffect: () => {}, stopEffect: () => {} });
+const AudioContext = createContext<AudioContextValue>({
+  settings: null,
+  updateAudioSettings: async () => {},
+  playEffect: () => {},
+  stopEffect: () => {},
+  setSessionAudioActive: () => {},
+});
 
 const bgmSources = {
   start: require("../../assets/audio/bgm-start.wav"),
@@ -29,6 +36,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const segments = useSegments();
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [sessionAudioActive, setSessionAudioActive] = useState(false);
   const bgm = useAudioPlayer(null);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
@@ -64,9 +72,9 @@ export function AudioProvider({ children }: PropsWithChildren) {
     bgm.replace(bgmSources[bgmKey]);
     bgm.loop = true;
     bgm.volume = settings.musicVolume;
-    if (settings.backgroundMusicEnabled) bgm.play();
+    if (settings.backgroundMusicEnabled && !sessionAudioActive) bgm.play();
     return () => bgm.pause();
-  }, [bgm, bgmKey, settings]);
+  }, [bgm, bgmKey, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -80,7 +88,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
     const player = { button, dialogue, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
     player.loop = name === "trainingStart";
     player.volume = settings.soundVolume;
-    player.seekTo(0).then(() => player.play());
+    player.seekTo(0).then(() => player.play()).catch(console.error);
   }, [button, complete, dialogue, ejaculation, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const stopEffect = useCallback((name: EffectName) => {
@@ -89,7 +97,16 @@ export function AudioProvider({ children }: PropsWithChildren) {
     player.seekTo(0).catch(console.error);
   }, [button, complete, dialogue, ejaculation, punishmentHit, trainingRhythm, trainingStart]);
 
-  const value = useMemo(() => ({ settings, updateAudioSettings, playEffect, stopEffect }), [playEffect, settings, stopEffect, updateAudioSettings]);
+  const value = useMemo(
+    () => ({
+      settings,
+      updateAudioSettings,
+      playEffect,
+      stopEffect,
+      setSessionAudioActive,
+    }),
+    [playEffect, settings, stopEffect, updateAudioSettings],
+  );
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
 }
 

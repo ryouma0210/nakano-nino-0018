@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
@@ -22,6 +22,8 @@ import {
   type StoredFile,
 } from "@/services/fileStorageService";
 import { pointRepository } from "@/repositories/rewardRepository";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 const trainingJudgements = [
   { limit: 10, comments: [
@@ -57,6 +59,9 @@ function trainingJudgement(seconds: number) {
 type TrainingCompletion = TrainingResult & { judgement: string };
 
 export default function HabitsScreen() {
+  const insets = useSafeAreaInsets();
+  const { settings } = useAppAudio();
+  const playerName = settings?.playerName.trim() ?? "";
   const [habits, setHabits] = useState<HabitWithToday[]>([]);
   const [formVisible, setFormVisible] = useState(false);
   const [selectedHabit, setSelectedHabit] = useState<HabitWithToday | null>(
@@ -133,6 +138,9 @@ export default function HabitsScreen() {
   }
 
   const resultJudgement = trainingResult?.judgement ?? "";
+  const namedResultJudgement = playerName
+    ? `${playerName}、${resultJudgement}`
+    : resultJudgement;
 
   return (
     <Screen>
@@ -365,7 +373,17 @@ export default function HabitsScreen() {
         transparent
         statusBarTranslucent
       >
-        <View style={styles.completeBackdrop}>
+        <ScrollView
+          style={styles.completeScroll}
+          contentContainerStyle={[
+            styles.completeBackdrop,
+            {
+              paddingTop: Math.max(24, insets.top + 12),
+              paddingBottom: Math.max(24, insets.bottom + 12),
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.completeDialog}>
             <AppText style={styles.completeEvent}>TRAINING COMPLETE</AppText>
             <View style={styles.completePortrait}>
@@ -374,7 +392,7 @@ export default function HabitsScreen() {
             </View>
             <AppText variant="subtitle">ニノ</AppText>
             <AppText style={styles.completeMessage}>
-              {resultJudgement}
+              {namedResultJudgement}
             </AppText>
             <View style={styles.resultBox}>
               <AppText variant="label">タイトル</AppText>
@@ -388,7 +406,7 @@ export default function HabitsScreen() {
                 {trainingResult?.elapsedSeconds ?? 0}秒
               </AppText>
               <AppText variant="label">判定メッセージ</AppText>
-              <AppText>{resultJudgement}</AppText>
+              <AppText>{namedResultJudgement}</AppText>
               <AppText variant="muted">調教日記へ保存しました。</AppText>
             </View>
             {(trainingResult?.elapsedSeconds ?? 600) < 600 ? (
@@ -410,7 +428,7 @@ export default function HabitsScreen() {
               }}
             />
           </View>
-        </View>
+        </ScrollView>
       </Modal>
       <ConfirmModal
         visible={pendingDelete !== null}
@@ -491,10 +509,14 @@ const styles = StyleSheet.create({
     backgroundColor: lightTheme.primary,
   },
   completeBackdrop: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
+    justifyContent: "flex-start",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(0,0,0,0.88)",
+  },
+  completeScroll: {
+    flex: 1,
     backgroundColor: "rgba(0,0,0,0.88)",
   },
   completeDialog: {

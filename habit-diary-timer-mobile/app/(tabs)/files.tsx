@@ -49,10 +49,10 @@ export default function FilesScreen() {
       />
       <View style={styles.uploadButtons}>
         <View style={styles.grow}>
-          <PrimaryButton title="調教用を格納" onPress={() => upload("training")} />
+          <PrimaryButton title="調教用" onPress={() => upload("training")} />
         </View>
         <View style={styles.grow}>
-          <PrimaryButton title="お仕置き用を格納" onPress={() => upload("punishment")} />
+          <PrimaryButton title="お仕置き用" onPress={() => upload("punishment")} />
         </View>
       </View>
       <AppText variant="muted">

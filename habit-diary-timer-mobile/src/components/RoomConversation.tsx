@@ -35,7 +35,7 @@ export function RoomConversation({
   contractLines = [],
   characterSource,
 }: Props) {
-  const { playEffect } = useAppAudio();
+  const { playEffect, settings } = useAppAudio();
   const [index, setIndex] = useState(0);
   const [contractSigned, setContractSigned] = useState(false);
 
@@ -57,6 +57,8 @@ export function RoomConversation({
   const isLast = safeIndex === visibleLines.length - 1;
   const isContractLine = contractSigned && safeIndex >= lines.length;
   const isContractRoom = roomName === "契約部屋";
+  const playerName = settings?.playerName.trim() ?? "";
+  const message = playerName ? `${playerName}、${current.text}` : current.text;
 
   function next() {
     playEffect("dialogue");
@@ -117,7 +119,7 @@ export function RoomConversation({
           isContractLine && styles.contractMessage,
           isContractRoom && styles.contractText,
         ]}>
-          {current.text}
+          {message}
         </AppText>
         <AppText style={styles.next}>
           {isLast ? "タップでもう一度  ↻" : "タップして次へ  ▶"}

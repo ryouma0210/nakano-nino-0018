@@ -14,6 +14,8 @@ export function TextField({ label, error, style, ...props }: Props) {
       <TextInput
         placeholderTextColor="#777"
         {...props}
+        allowFontScaling={false}
+        maxFontSizeMultiplier={1}
         style={[styles.input, props.multiline && styles.multiline, style]}
       />
       {error ? <AppText style={styles.error}>{error}</AppText> : null}
