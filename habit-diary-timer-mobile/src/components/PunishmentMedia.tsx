@@ -31,6 +31,7 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   const showingStoredVideo = useStored && isVideo(currentFile);
   const player = useVideoPlayer(defaultVideos[defaultIndex], (instance) => {
     instance.loop = false;
+    instance.muted = true;
     instance.playbackRate = 1;
   });
 
@@ -64,19 +65,21 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   }, [active, advance, files.length, showingStoredVideo, useStored]);
 
   return (
-    <View style={[styles.frame, fullscreen && styles.fullscreenFrame]}>
+    <View style={fullscreen ? styles.fullscreenFrame : styles.frame}>
       {useStored && currentFile && !showingStoredVideo ? (
         <Image source={{ uri: currentFile.uri }} style={[styles.media, fullscreen && styles.fullscreenMedia]} resizeMode="contain" />
       ) : (
         <VideoView player={player} style={[styles.media, fullscreen && styles.fullscreenMedia]} nativeControls={false} contentFit="contain" />
       )}
-      <View style={styles.badge}>
-        <AppText style={styles.badgeText}>
-          {useStored
-            ? `格納ファイル ${Math.min(fileIndex + 1, files.length)}/${files.length}`
-            : `DEFAULT VIDEO ${defaultIndex + 1}/${defaultVideos.length}`}
-        </AppText>
-      </View>
+      {!fullscreen ? (
+        <View style={styles.badge}>
+          <AppText style={styles.badgeText}>
+            {useStored
+              ? `格納ファイル ${Math.min(fileIndex + 1, files.length)}/${files.length}`
+              : `DEFAULT VIDEO ${defaultIndex + 1}/${defaultVideos.length}`}
+          </AppText>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -84,8 +87,20 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
 const styles = StyleSheet.create({
   frame: { overflow: "hidden", borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
   media: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
-  fullscreenFrame: { flex: 1, width: "100%" },
-  fullscreenMedia: { height: "100%", aspectRatio: undefined },
+  fullscreenFrame: {
+    flex: 1,
+    width: "100%",
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#000",
+  },
+  fullscreenMedia: {
+    width: "100%",
+    height: "100%",
+    aspectRatio: undefined,
+    backgroundColor: "#000",
+  },
   badge: { position: "absolute", top: 8, left: 8, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(0,0,0,0.78)" },
   badgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 });

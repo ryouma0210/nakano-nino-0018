@@ -10,7 +10,11 @@ import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
-import { contractService, type ContractSettings } from "@/services/gameRoomService";
+import {
+  contractService,
+  type ContractSettings,
+} from "@/services/gameRoomService";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 const contractRules = [
   { text: "私の命令は絶対服従すること。", required: true },
@@ -31,13 +35,18 @@ function formatContractDate(value?: string) {
 }
 
 export default function ContractScreen() {
+  const { settings } = useAppAudio();
+  const playerName = settings?.playerName.trim() ?? "";
   const [contract, setContract] = useState<ContractSettings | null>(null);
   const [checked, setChecked] = useState(() => new Set<string>());
   const [signature, setSignature] = useState("");
   const [contractConfirmation, setContractConfirmation] = useState(false);
-  const player = useVideoPlayer(require("../../assets/videos/contract_1.mp4"), (instance) => {
-    instance.loop = true;
-  });
+  const player = useVideoPlayer(
+    require("../../assets/videos/contract_1.mp4"),
+    (instance) => {
+      instance.loop = true;
+    },
+  );
 
   useEffect(() => {
     contractService.load().then((saved) => {
@@ -53,7 +62,12 @@ export default function ContractScreen() {
     else player.pause();
   }, [player, signed]);
 
-  if (!contract) return <Screen><AppText>読み込み中...</AppText></Screen>;
+  if (!contract)
+    return (
+      <Screen>
+        <AppText>読み込み中...</AppText>
+      </Screen>
+    );
 
   const requiredComplete = contractRules
     .filter((rule) => rule.required)
@@ -94,30 +108,58 @@ export default function ContractScreen() {
     const next: ContractSettings = { ...current, signature: nextSignature };
     await contractService.save(next);
     setContract(next);
-    Alert.alert("変更完了", "契約者サインを変更しました。契約内容と契約状態は変更されません。");
+    Alert.alert(
+      "変更完了",
+      "契約者サインを変更しました。契約内容と契約状態は変更されません。",
+    );
   }
 
   return (
     <Screen>
-      <AppText variant="title" style={styles.contractText}>契約部屋</AppText>
+      <AppText variant="title" style={styles.contractText}>
+        契約部屋
+      </AppText>
       {signed ? (
         <>
           <Card style={styles.contractCard}>
-            <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
-            <AppText style={styles.completedMessage}>{"契約成立♡\nアンタは私の奴隷♡\nこれからよろしくね♡\nATMマゾ君♡"}</AppText>
+            <VideoView
+              player={player}
+              style={styles.video}
+              nativeControls={false}
+              contentFit="contain"
+            />
+            <AppText style={styles.completedMessage}>
+              {`契約成立♡\n${playerName ? `${playerName}、` : ""}アンタは私の奴隷♡\nこれからよろしくね♡\nATMマゾ君♡`}
+            </AppText>
           </Card>
           <Card style={styles.contractCard}>
-            <AppText variant="label" style={styles.contractText}>契約日</AppText>
-            <AppText style={styles.contractDate}>{formatContractDate(contract.signedAt)}</AppText>
-            <AppText variant="subtitle" style={styles.contractText}>契約者</AppText>
-            <TextField label="契約者サイン" value={signature} onChangeText={setSignature} placeholder="名前を入力" />
+            <AppText variant="label" style={styles.contractText}>
+              契約日
+            </AppText>
+            <AppText style={styles.contractDate}>
+              {formatContractDate(contract.signedAt)}
+            </AppText>
+            <AppText variant="subtitle" style={styles.contractText}>
+              契約者
+            </AppText>
+            <TextField
+              label="契約者サイン"
+              value={signature}
+              onChangeText={setSignature}
+              placeholder="名前を入力"
+            />
             <PrimaryButton
               title="契約者サインを変更"
               tone="contract"
-              disabled={!signature.trim() || signature.trim() === (contract.signature ?? "")}
+              disabled={
+                !signature.trim() ||
+                signature.trim() === (contract.signature ?? "")
+              }
               onPress={updateSignature}
             />
-            <AppText style={styles.contractText}>この契約は解除できません。</AppText>
+            <AppText style={styles.contractText}>
+              この契約は解除できません。
+            </AppText>
           </Card>
         </>
       ) : (
@@ -125,27 +167,54 @@ export default function ContractScreen() {
           <RoomConversation
             characterSource={require("../../assets/characters/settings-nino.png")}
             roomName="契約部屋"
-            lines={[{ text: "二ノ様の奴隷になりますか？" }, { text: "一度奴隷になると、契約を解除できません。" }]}
+            lines={[
+              { text: "二ノ様の奴隷になりますか？" },
+              { text: "一度奴隷になると、契約を解除できません。" },
+            ]}
           />
           <Card style={styles.contractCard}>
-            <AppText variant="subtitle" style={styles.contractText}>奴隷になることで以下のルールが追加されます。</AppText>
+            <AppText variant="subtitle" style={styles.contractText}>
+              奴隷になることで以下のルールが追加されます。
+            </AppText>
             {contractRules.map((rule) => (
-              <Pressable key={rule.text} onPress={() => toggleRule(rule.text)} style={styles.checkRow}>
-                <AppText style={styles.check}>{checked.has(rule.text) ? "✅" : "□"}</AppText>
+              <Pressable
+                key={rule.text}
+                onPress={() => toggleRule(rule.text)}
+                style={styles.checkRow}
+              >
+                <AppText style={styles.check}>
+                  {checked.has(rule.text) ? "✅" : "□"}
+                </AppText>
                 <View style={styles.grow}>
                   <AppText style={styles.contractText}>{rule.text}</AppText>
-                  {!rule.required ? <AppText style={styles.contractMutedText}>任意</AppText> : null}
+                  {!rule.required ? (
+                    <AppText style={styles.contractMutedText}>任意</AppText>
+                  ) : null}
                 </View>
               </Pressable>
             ))}
           </Card>
           <Card style={styles.contractCard}>
-            <TextField label="契約者サイン" value={signature} onChangeText={setSignature} placeholder="名前を入力" />
-            <PrimaryButton title="契約ルールにサインする" tone="contract" disabled={!canSign} onPress={confirmContract} />
+            <TextField
+              label="契約者サイン"
+              value={signature}
+              onChangeText={setSignature}
+              placeholder="名前を入力"
+            />
+            <PrimaryButton
+              title="契約ルールにサインする"
+              tone="contract"
+              disabled={!canSign}
+              onPress={confirmContract}
+            />
           </Card>
         </>
       )}
-      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
+      <PrimaryButton
+        title="ホームへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)")}
+      />
       <ConfirmModal
         visible={contractConfirmation}
         title="本当に契約しますか？"
@@ -153,18 +222,40 @@ export default function ContractScreen() {
         confirmLabel="契約にサインする"
         confirmTone="danger"
         onCancel={() => setContractConfirmation(false)}
-        onConfirm={() => { setContractConfirmation(false); signContract(); }}
+        onConfirm={() => {
+          setContractConfirmation(false);
+          signContract();
+        }}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderTopColor: "#444", paddingVertical: 12 },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#444",
+    paddingVertical: 12,
+  },
   check: { width: 28, color: lightTheme.muted, fontSize: 20, lineHeight: 30 },
   grow: { flex: 1, gap: 2 },
-  video: { width: "100%", aspectRatio: 16 / 9, borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
-  completedMessage: { color: "#ff4b55", fontSize: 22, lineHeight: 34, fontWeight: "900", textAlign: "center" },
+  video: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  completedMessage: {
+    color: "#ff4b55",
+    fontSize: 22,
+    lineHeight: 34,
+    fontWeight: "900",
+    textAlign: "center",
+  },
   contractDate: { fontSize: 20, lineHeight: 30, fontWeight: "900" },
   contractCard: { borderColor: "#b875ff" },
   contractText: { color: "#c99aff" },

@@ -26,13 +26,28 @@ function selectRandomVideoIndex(excludeIndex?: number) {
   return candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
 }
 
-function createRandomMarkerOffsets(markerCount: number, slotCount = 12) {
+const markerCount = 3;
+
+function createRandomMarkerOffsets(
+  count: number,
+  slotCount = 16,
+  minimumGap = 4,
+) {
   const slots = Array.from({ length: slotCount }, (_, index) => index);
   for (let index = slots.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
     [slots[index], slots[swapIndex]] = [slots[swapIndex], slots[index]];
   }
-  return slots.slice(0, markerCount).sort((a, b) => a - b).map((slot) => slot / slotCount);
+  const selected: number[] = [];
+  for (const slot of slots) {
+    const hasEnoughSpace = selected.every((current) => {
+      const distance = Math.abs(slot - current);
+      return Math.min(distance, slotCount - distance) >= minimumGap;
+    });
+    if (hasEnoughSpace) selected.push(slot);
+    if (selected.length === count) break;
+  }
+  return selected.sort((a, b) => a - b).map((slot) => slot / slotCount);
 }
 
 const modes = [
@@ -114,7 +129,7 @@ export function TrainingVideo({
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
   const [trackWidth, setTrackWidth] = useState(1);
-  const [markerOffsets, setMarkerOffsets] = useState(() => createRandomMarkerOffsets(5));
+  const [markerOffsets, setMarkerOffsets] = useState(() => createRandomMarkerOffsets(markerCount));
   const [mode, setMode] = useState<TrainingMode>("normal");
   const [slideIndex, setSlideIndex] = useState(0);
   const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
@@ -124,14 +139,21 @@ export function TrainingVideo({
   const previousGaugeProgress = useRef(0);
   const lastCommentSlot = useRef(-1);
   const videoLoopCount = useRef(0);
-  const { playEffect, stopEffect } = useAppAudio();
+  const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
   const slideMode = slides.length > 0;
   const player = useVideoPlayer(defaultVideos[0], (instance) => {
     instance.loop = false;
+    instance.muted = true;
     instance.playbackRate = 1;
   });
 
-  useEffect(() => () => stopEffect("trainingStart"), [stopEffect]);
+  useEffect(
+    () => () => {
+      stopEffect("trainingStart");
+      setSessionAudioActive(false);
+    },
+    [setSessionAudioActive, stopEffect],
+  );
 
   const showRandomComment = useCallback((elapsedSeconds = elapsedMilliseconds.current / 1000) => {
     if (
@@ -221,10 +243,11 @@ export function TrainingVideo({
     setSessionElapsedSeconds(0);
     lastTick.current = Date.now();
     previousGaugeProgress.current = 0;
-    setMarkerOffsets(createRandomMarkerOffsets(5));
+    setMarkerOffsets(createRandomMarkerOffsets(markerCount));
     lastCommentSlot.current = 0;
     videoLoopCount.current = 0;
     showRandomComment(0);
+    setSessionAudioActive(true);
     playEffect("trainingStart");
     setStarted(true);
     if (!slideMode) {
@@ -247,6 +270,7 @@ export function TrainingVideo({
     setPlaying(false);
     setStarted(false);
     stopEffect("trainingStart");
+    setSessionAudioActive(false);
     playEffect("ejaculation");
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
     onComplete({
@@ -257,8 +281,6 @@ export function TrainingVideo({
       difficulty: selected.label,
     });
   }
-
-  const markerCount = 5;
 
   const media = slideMode ? (
     <Image
@@ -292,7 +314,6 @@ export function TrainingVideo({
         style={styles.track}
       >
         <View style={styles.line} />
-        <View style={styles.hitGlow} />
         <View style={styles.hitPoint} />
         {Array.from({ length: markerCount }, (_, index) => {
           const phase = (gaugeProgress + markerOffsets[index]) % 1;
@@ -334,7 +355,9 @@ export function TrainingVideo({
           <View style={styles.trainingComment}>
             <AppText style={styles.trainingCommentName}>ニノ</AppText>
             <AppText style={styles.trainingCommentText}>
-              {trainingComment}
+              {settings?.playerName.trim()
+                ? `${settings.playerName.trim()}、${trainingComment}`
+                : trainingComment}
             </AppText>
           </View>
           {rhythmGauge}
@@ -536,14 +559,6 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: "#ddd",
   },
-  hitGlow: {
-    position: "absolute",
-    left: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,105,180,0.28)",
-  },
   hitPoint: {
     position: "absolute",
     left: 16,
@@ -551,8 +566,8 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: "#ffd1e6",
-    backgroundColor: "#ff69b4",
+    borderColor: "#ff69b4",
+    backgroundColor: "transparent",
     zIndex: 3,
   },
   rhythmMarker: {

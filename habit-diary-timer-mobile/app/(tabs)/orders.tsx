@@ -7,8 +7,11 @@ import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { dailyOrderService, type DailyOrder } from "@/services/gameRoomService";
 import { formatDateJa, toDateKey } from "@/utils/date";
+import { useAppAudio } from "@/audio/AudioProvider";
 
 export default function OrdersScreen() {
+  const { settings } = useAppAudio();
+  const playerName = settings?.playerName.trim() ?? "";
   const [order, setOrder] = useState<DailyOrder | null>(null);
   useEffect(() => {
     dailyOrderService.load().then(setOrder);
@@ -32,7 +35,9 @@ export default function OrdersScreen() {
         {order ? (
           <>
             <AppText variant="subtitle">本日の命令</AppText>
-            <AppText>{order.text}</AppText>
+            <AppText>
+              {playerName ? `${playerName}、${order.text}` : order.text}
+            </AppText>
             <PrimaryButton
               title={order.completed ? "完了済み" : "命令完了"}
               disabled={order.completed}

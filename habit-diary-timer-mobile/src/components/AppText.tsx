@@ -8,7 +8,12 @@ type Props = TextProps & PropsWithChildren & {
 
 export function AppText({ variant = "body", style, children, ...props }: Props) {
   return (
-    <Text {...props} style={[styles.base, styles[variant], style]}>
+    <Text
+      {...props}
+      allowFontScaling={false}
+      maxFontSizeMultiplier={1}
+      style={[styles.base, styles[variant], style]}
+    >
       {children}
     </Text>
   );

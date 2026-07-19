@@ -4,6 +4,7 @@ import type { AppSettings } from "@/types/models";
 const SETTINGS_KEY = "habit-diary-timer:settings";
 
 export const defaultSettings: AppSettings = {
+  playerName: "マゾ",
   darkMode: false,
   backgroundMusicEnabled: true,
   notificationsEnabled: true,

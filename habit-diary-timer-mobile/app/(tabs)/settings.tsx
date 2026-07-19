@@ -7,6 +7,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
+import { TextField } from "@/components/TextField";
 import { execute } from "@/database/client";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
@@ -16,12 +17,16 @@ import { dailyOrderService } from "@/services/gameRoomService";
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
+  const [playerName, setPlayerName] = useState("");
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
   const loadSize = useCallback(() => {
     fileStorageService.totalSize().then(setCacheSize);
   }, []);
   useEffect(loadSize, [loadSize]);
+  useEffect(() => {
+    if (settings) setPlayerName(settings.playerName);
+  }, [settings]);
   useFocusEffect(loadSize);
 
   function resetAll() {
@@ -65,6 +70,34 @@ export default function SettingsScreen() {
           { text: "奴隷として積み上げた記録、勝手に消す前によく考えなさい。" },
         ]}
       />
+      <Card>
+        <AppText variant="subtitle">呼ばれたい名前</AppText>
+        <AppText variant="muted">
+          設定した名前を、各部屋の会話や調教中のコメントで呼びます。
+        </AppText>
+        <TextField
+          label="名前"
+          value={playerName}
+          onChangeText={setPlayerName}
+          placeholder="名前を入力"
+          maxLength={20}
+          autoCorrect={false}
+        />
+        <PrimaryButton
+          title="名前を保存"
+          onPress={async () => {
+            const normalized = playerName.trim();
+            setPlayerName(normalized);
+            await updateAudioSettings({ playerName: normalized });
+            Alert.alert(
+              "保存しました",
+              normalized
+                ? `これから「${normalized}」と呼びます。`
+                : "名前の呼びかけを解除しました。",
+            );
+          }}
+        />
+      </Card>
       <Card>
         <AppText variant="subtitle">サウンド</AppText>
         <View style={styles.audioRow}>

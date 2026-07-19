@@ -155,7 +155,7 @@ export default function PreparationScreen() {
         </Card>
       ) : (
         <PrimaryButton
-          title="本日も調教よろしくお願いいたします♡"
+          title="準備完了♡本日も調教\nよろしくお願いいたします♡"
           disabled={!requiredComplete}
           onPress={complete}
         />

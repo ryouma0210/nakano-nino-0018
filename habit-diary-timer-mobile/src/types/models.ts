@@ -112,6 +112,7 @@ export type TimerHistory = {
 };
 
 export type AppSettings = {
+  playerName: string;
   darkMode: boolean;
   backgroundMusicEnabled: boolean;
   notificationsEnabled: boolean;
