@@ -11,7 +11,8 @@
       "expo-router",
       "expo-sqlite",
       "expo-notifications",
-      "expo-video"
+      "expo-video",
+      "expo-asset"
     ],
     "ios": {
       "supportsTablet": false,

@@ -5,6 +5,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
@@ -19,16 +20,30 @@ const contractRules = [
   { text: "調教を受ける際は、貞操帯を着用すること。", required: false },
 ] as const;
 
+function formatContractDate(value?: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
 export default function ContractScreen() {
   const [contract, setContract] = useState<ContractSettings | null>(null);
   const [checked, setChecked] = useState(() => new Set<string>());
   const [signature, setSignature] = useState("");
+  const [contractConfirmation, setContractConfirmation] = useState(false);
   const player = useVideoPlayer(require("../../assets/videos/contract_1.mp4"), (instance) => {
     instance.loop = true;
   });
 
   useEffect(() => {
-    contractService.load().then(setContract);
+    contractService.load().then((saved) => {
+      setContract(saved);
+      setSignature(saved.signature ?? "");
+    });
   }, []);
 
   const signed = Boolean(contract?.signedAt);
@@ -55,30 +70,31 @@ export default function ContractScreen() {
   }
 
   function confirmContract() {
-    Alert.alert(
-      "本当に契約しますか？",
-      "一度奴隷になると、契約を解除できません。契約内容をもう一度確認してください。",
-      [
-        { text: "戻る", style: "cancel" },
-        {
-          text: "契約にサインする",
-          style: "destructive",
-          onPress: async () => {
-            const next: ContractSettings = {
-              allowRelease: true,
-              allowChastity: checked.has("調教を受ける際は、貞操帯を着用すること。"),
-              maxPunishmentMinutes: contract?.maxPunishmentMinutes ?? 30,
-              note: contract?.note ?? "",
-              signature: signature.trim(),
-              signedAt: new Date().toISOString(),
-            };
-            await contractService.save(next);
-            setContract(next);
-            player.replay();
-          },
-        },
-      ],
-    );
+    setContractConfirmation(true);
+  }
+
+  async function signContract() {
+    const next: ContractSettings = {
+      allowRelease: true,
+      allowChastity: checked.has("調教を受ける際は、貞操帯を着用すること。"),
+      maxPunishmentMinutes: contract?.maxPunishmentMinutes ?? 30,
+      note: contract?.note ?? "",
+      signature: signature.trim(),
+      signedAt: new Date().toISOString(),
+    };
+    await contractService.save(next);
+    setContract(next);
+    player.replay();
+  }
+
+  async function updateSignature() {
+    const nextSignature = signature.trim();
+    const current = contract;
+    if (!nextSignature || !current?.signedAt) return;
+    const next: ContractSettings = { ...current, signature: nextSignature };
+    await contractService.save(next);
+    setContract(next);
+    Alert.alert("変更完了", "契約者サインを変更しました。契約内容と契約状態は変更されません。");
   }
 
   return (
@@ -88,11 +104,18 @@ export default function ContractScreen() {
         <>
           <Card>
             <VideoView player={player} style={styles.video} nativeControls={false} contentFit="contain" />
-            <AppText style={styles.completedMessage}>契約成立よ♡アンタは私の奴隷♡これからよろしくねATMマゾ君♡</AppText>
+            <AppText style={styles.completedMessage}>{"契約成立♡\nアンタは私の奴隷♡\nこれからよろしくね♡\nATMマゾ君♡"}</AppText>
           </Card>
           <Card>
+            <AppText variant="label">契約日</AppText>
+            <AppText style={styles.contractDate}>{formatContractDate(contract.signedAt)}</AppText>
             <AppText variant="subtitle">契約者</AppText>
-            <AppText style={styles.signature}>{contract.signature}</AppText>
+            <TextField label="契約者サイン" value={signature} onChangeText={setSignature} placeholder="名前を入力" />
+            <PrimaryButton
+              title="契約者サインを変更"
+              disabled={!signature.trim() || signature.trim() === (contract.signature ?? "")}
+              onPress={updateSignature}
+            />
             <AppText variant="muted">この契約は解除できません。</AppText>
           </Card>
         </>
@@ -122,6 +145,15 @@ export default function ContractScreen() {
         </>
       )}
       <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
+      <ConfirmModal
+        visible={contractConfirmation}
+        title="本当に契約しますか？"
+        message="一度奴隷になると、契約を解除できません。契約内容をもう一度確認してください。"
+        confirmLabel="契約にサインする"
+        confirmTone="danger"
+        onCancel={() => setContractConfirmation(false)}
+        onConfirm={() => { setContractConfirmation(false); signContract(); }}
+      />
     </Screen>
   );
 }
@@ -132,5 +164,5 @@ const styles = StyleSheet.create({
   grow: { flex: 1, gap: 2 },
   video: { width: "100%", aspectRatio: 16 / 9, borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
   completedMessage: { color: "#ff4b55", fontSize: 22, lineHeight: 34, fontWeight: "900", textAlign: "center" },
-  signature: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#fff", fontSize: 24, fontWeight: "900", textAlign: "center" },
+  contractDate: { fontSize: 20, lineHeight: 30, fontWeight: "900" },
 });
