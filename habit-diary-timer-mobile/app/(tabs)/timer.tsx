@@ -76,7 +76,9 @@ export default function TimerScreen() {
   const gaugeSpeed = useRef<number>(gaugeSpeeds[0].value);
   const lastGaugeTick = useRef(0);
   const nextSpeedChangeAt = useRef(0);
-  const { playEffect } = useAppAudio();
+  const { playEffect, stopEffect } = useAppAudio();
+
+  useEffect(() => () => stopEffect("trainingStart"), [stopEffect]);
   useEffect(() => {
     contractService.load().then((contract) => {
       const minimum = contract.signedAt ? 30 : 1;
@@ -160,9 +162,10 @@ export default function TimerScreen() {
     if (!running || remaining !== 0 || sessionRecorded.current) return;
     sessionRecorded.current = true;
     achievementRepository.recordPunishment(totalSeconds);
+    stopEffect("trainingStart");
     playEffect("complete");
     setRunning(false);
-  }, [playEffect, remaining, running, totalSeconds]);
+  }, [playEffect, remaining, running, stopEffect, totalSeconds]);
 
   function start() {
     const enteredMinutes = Number(minutes);
@@ -187,6 +190,7 @@ export default function TimerScreen() {
     );
     setMarkerOffsets(createRandomMarkerOffsets(5));
     sessionRecorded.current = false;
+    playEffect("trainingStart");
     setRunning(true);
   }
 
@@ -194,6 +198,7 @@ export default function TimerScreen() {
     if (!sessionRecorded.current)
       achievementRepository.recordPunishment(totalSeconds - remaining);
     sessionRecorded.current = true;
+    stopEffect("trainingStart");
     setRunning(false);
   }
 

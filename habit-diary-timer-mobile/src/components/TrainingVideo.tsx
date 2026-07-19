@@ -124,12 +124,14 @@ export function TrainingVideo({
   const previousGaugeProgress = useRef(0);
   const lastCommentSlot = useRef(-1);
   const videoLoopCount = useRef(0);
-  const { playEffect } = useAppAudio();
+  const { playEffect, stopEffect } = useAppAudio();
   const slideMode = slides.length > 0;
   const player = useVideoPlayer(defaultVideos[0], (instance) => {
     instance.loop = false;
     instance.playbackRate = 1;
   });
+
+  useEffect(() => () => stopEffect("trainingStart"), [stopEffect]);
 
   const showRandomComment = useCallback((elapsedSeconds = elapsedMilliseconds.current / 1000) => {
     if (
@@ -244,6 +246,7 @@ export function TrainingVideo({
     if (!slideMode) player.pause();
     setPlaying(false);
     setStarted(false);
+    stopEffect("trainingStart");
     playEffect("ejaculation");
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
     onComplete({
