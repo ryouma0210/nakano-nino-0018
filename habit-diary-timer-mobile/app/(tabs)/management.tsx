@@ -5,6 +5,7 @@ import { Card } from "@/components/Card";
 import { ManagementRoom } from "@/components/ManagementRoom";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
+import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import type { ManagementMode } from "@/repositories/roomRepository";
 
@@ -33,13 +34,8 @@ export default function ManagementScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/chastity-nino.png")}
         roomName="射精管理部屋"
-        lines={[
-          { text: "今日はどちらの管理方法にする？" },
-          { text: "選んだ方法に合わせて、指示を変えてあげる。" },
-        ]}
-        contractLines={[
-          { text: "契約した奴隷なんだから、もちろん貞操帯付けて受けるわよね♡",},
-        ]}
+        lines={roomMessages.management.lines}
+        contractLines={roomMessages.management.contractLines}
       />
       <Card>
         <AppText variant="subtitle">管理方法を選択</AppText>

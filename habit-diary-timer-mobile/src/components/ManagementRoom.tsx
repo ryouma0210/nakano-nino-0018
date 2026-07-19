@@ -16,6 +16,12 @@ import {
 import { formatDateJa } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { pointRepository } from "@/repositories/rewardRepository";
+import { useAppAudio } from "@/audio/AudioProvider";
+import {
+  findManagementMessage,
+  formatConfiguredMessage,
+  roomMessages,
+} from "@/constants/messages";
 
 export function ManagementRoom({
   mode,
@@ -28,6 +34,7 @@ export function ManagementRoom({
   characterSource: ImageSourcePropType;
   onChangeMode?: () => void;
 }) {
+  const { settings } = useAppAudio();
   const initialCycle = managementRepository.active(mode);
   const [cycle, setCycle] = useState<ManagementCycle | null>(initialCycle);
   const [task, setTask] = useState<ManagementDailyTask | null>(() =>
@@ -101,13 +108,8 @@ export function ManagementRoom({
       <RoomConversation
         characterSource={characterSource}
         roomName={title}
-        lines={[
-          { text: "まずサイコロで管理期間を決めるわ。" },
-          { text: "最終日までは、毎日違う指示を確認して。" },
-        ]}
-        contractLines={[
-          { text: "契約した奴隷の射精は私の管理下よ。最終日まで勝手なことは禁止♡",},
-        ]}
+        lines={roomMessages.managementSession.lines}
+        contractLines={roomMessages.managementSession.contractLines}
       />
       <Card>
         <AppText variant="label">選択中</AppText>
@@ -158,7 +160,13 @@ export function ManagementRoom({
           <Card>
             <AppText variant="label">本日の調教指示</AppText>
             <AppText style={styles.instruction}>
-              {task?.instruction ?? "指示を準備中"}よ。
+              {task?.instruction
+                ? formatManagementInstruction(
+                    task.instruction,
+                    settings?.playerName.trim() ?? "",
+                  )
+                : "指示を準備中"}
+              よ。
             </AppText>
             <AppText>実施完了次第、完了ボタンを押してね。</AppText>
             <PrimaryButton
@@ -200,6 +208,11 @@ export function ManagementRoom({
       />
     </Screen>
   );
+}
+
+function formatManagementInstruction(text: string, playerName: string) {
+  const message = findManagementMessage(text);
+  return message ? formatConfiguredMessage(message, playerName) : text;
 }
 
 const styles = StyleSheet.create({

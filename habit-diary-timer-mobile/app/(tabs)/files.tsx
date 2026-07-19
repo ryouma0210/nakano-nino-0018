@@ -8,6 +8,7 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
+import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import {
   fileStorageService,
@@ -39,13 +40,8 @@ export default function FilesScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/files-nino.png")}
         roomName="ファイル格納部屋"
-        lines={[
-          { text: "残しておきたいファイルは、ここへ格納して。" },
-          { text: "不要になったものは選んで削除できるわ。" },
-        ]}
-        contractLines={[
-          { text: "奴隷好みのオカズを全部ここに入れなさい♡私に弱点晒せ♡" },
-        ]}
+        lines={roomMessages.files.lines}
+        contractLines={roomMessages.files.contractLines}
       />
       <View style={styles.uploadButtons}>
         <View style={styles.grow}>

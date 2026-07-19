@@ -10,19 +10,22 @@ import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
+import { roomMessages } from "@/constants/messages";
 import {
   contractService,
   type ContractSettings,
 } from "@/services/gameRoomService";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
+import {
+  additionalContractRules,
+  chastityContractRule,
+  requiredContractRuleTexts,
+} from "@/utils/contract";
 
 const contractRules = [
-  { text: "私の命令は絶対服従すること。", required: true },
-  { text: "私の許可なしに射精しないこと。", required: true },
-  { text: "私のATMになること。", required: true },
-  { text: "調教を受ける際は、首輪を着用すること。", required: true },
-  { text: "調教を受ける際は、貞操帯を着用すること。", required: false },
+  ...requiredContractRuleTexts.map((text) => ({ text, required: true })),
+  { text: chastityContractRule.replace("（任意）", ""), required: false },
 ] as const;
 
 function formatContractDate(value?: string) {
@@ -163,16 +166,31 @@ export default function ContractScreen() {
               この契約は解除できません。
             </AppText>
           </Card>
+          <Card style={styles.contractCard}>
+            <AppText variant="subtitle" style={styles.contractText}>
+              契約ルール
+            </AppText>
+            {requiredContractRuleTexts.map((rule) => (
+              <AppText key={rule} style={styles.contractText}>・{rule}</AppText>
+            ))}
+            {contract.allowChastity ? (
+              <AppText style={styles.contractText}>・{chastityContractRule}</AppText>
+            ) : null}
+            <View style={styles.ruleDivider} />
+            <AppText variant="label" style={styles.contractText}>
+              契約上の追加ルール
+            </AppText>
+            {additionalContractRules(contract).map((rule) => (
+              <AppText key={rule} style={styles.contractText}>・{rule}</AppText>
+            ))}
+          </Card>
         </>
       ) : (
         <>
           <RoomConversation
             characterSource={require("../../assets/characters/settings-nino.png")}
             roomName="契約部屋"
-            lines={[
-              { text: "二ノ様の奴隷になりますか？" },
-              { text: "一度奴隷になると、契約を解除できません。" },
-            ]}
+            lines={roomMessages.contract.lines}
           />
           <Card style={styles.contractCard}>
             <AppText variant="subtitle" style={styles.contractText}>
@@ -262,4 +280,5 @@ const styles = StyleSheet.create({
   contractCard: { borderColor: "#b875ff" },
   contractText: { color: "#c99aff" },
   contractMutedText: { color: "#9e72c9" },
+  ruleDivider: { height: 1, backgroundColor: "#704699", marginVertical: 4 },
 });

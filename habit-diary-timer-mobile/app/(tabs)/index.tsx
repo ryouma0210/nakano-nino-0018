@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
+import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
 
@@ -27,15 +28,8 @@ export default function HomeScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/home-nino.png")}
         roomName="ホーム"
-        lines={[
-          { text: "おかえりなさい。今日はどの部屋へ行く？" },
-          { text: "あなたの調教記録は、私がここで見守っているわ。" },
-        ]}
-        contractLines={[
-          { text: "おい、マゾ犬。奴隷用の首輪は付けてきたのかしら？" },
-          { text: "まだ何もしていないのに、なんで興奮しているのかしら。" },
-          { text: "部屋に移動する際は、四つん這いで移動しなさい。" },
-        ]}
+        lines={roomMessages.home.lines}
+        contractLines={roomMessages.home.contractLines}
       />
       <View style={styles.rooms}>
         {rooms.map(([title, href]) => (

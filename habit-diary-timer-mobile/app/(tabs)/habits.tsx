@@ -8,6 +8,7 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
+import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { TrainingVideo, type TrainingResult } from "@/components/TrainingVideo";
@@ -152,14 +153,8 @@ export default function HabitsScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/training-nino-v3.png")}
         roomName="調教部屋"
-        lines={[
-          { text: "今日の課題を確認するわ。続けるものを選んで。" },
-          { text: "達成した課題は、忘れずに記録して。" },
-          { text: "積み重ねた日数は、あなたが続けた証拠よ。" },
-        ]}
-        contractLines={[
-          { text: "私の奴隷になった以上、許可するまで勝手に逝っちゃダメよ♡" },
-        ]}
+        lines={roomMessages.training.lines}
+        contractLines={roomMessages.training.contractLines}
       />
 
       <Card>
