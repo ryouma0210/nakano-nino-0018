@@ -25,7 +25,7 @@ const items = [
 
 const preparationComments = [
   "ふぅ～～～～～～～♡",
-  "ほら、早くを勃起させない♡",
+  "ほら、早く勃起させなさい♡",
   "ふふ♡ビクビクさせてチョロすぎ♡",
   "まだ足りないの？欲張りね♡",
   "準備できるまで、何度でもしてあげる♡",
@@ -34,21 +34,27 @@ const preparationComments = [
 
 export default function PreparationScreen() {
   const insets = useSafeAreaInsets();
-  const preparationPlayer = useVideoPlayer(require("../../assets/videos/preparation_1.mp4"), (player) => {
-    player.loop = true;
-    player.play();
-  });
+  const preparationPlayer = useVideoPlayer(
+    require("../../assets/videos/preparation_1.mp4"),
+    (player) => {
+      player.loop = true;
+      player.play();
+    },
+  );
   const saved = preparationRepository.find();
   const savedChecks: string[] = saved ? JSON.parse(saved.checks_json) : [];
   const [checked, setChecked] = useState(() => new Set(savedChecks));
   const [completed, setCompleted] = useState(Boolean(saved));
   const [fullscreen, setFullscreen] = useState(false);
   const [commentIndex, setCommentIndex] = useState(0);
-  const requiredComplete = items.filter((item) => item.required).every((item) => checked.has(item.text));
+  const requiredComplete = items
+    .filter((item) => item.required)
+    .every((item) => checked.has(item.text));
 
   useEventListener(preparationPlayer, "playToEnd", () => {
     setCommentIndex((current) => {
-      const offset = Math.floor(Math.random() * (preparationComments.length - 1)) + 1;
+      const offset =
+        Math.floor(Math.random() * (preparationComments.length - 1)) + 1;
       return (current + offset) % preparationComments.length;
     });
   });
@@ -57,7 +63,8 @@ export default function PreparationScreen() {
     if (completed) return;
     setChecked((current) => {
       const next = new Set(current);
-      if (next.has(text)) next.delete(text); else next.add(text);
+      if (next.has(text)) next.delete(text);
+      else next.add(text);
       return next;
     });
   }
@@ -72,21 +79,56 @@ export default function PreparationScreen() {
   return (
     <Screen>
       <AppText variant="title">準備部屋</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/preparation-nino.png")} roomName="準備部屋" lines={[{ text: "今日の準備を一つずつ確認して。" }, { text: "必須項目を全部済ませたら、最後の挨拶よ。" }]} />
+      <RoomConversation
+        characterSource={require("../../assets/characters/preparation-nino.png")}
+        roomName="準備部屋"
+        lines={[
+          { text: "今日の準備を一つずつ確認して。" },
+          { text: "必須項目を全部済ませたら、最後の挨拶よ。" },
+        ]}
+        contractLines={[
+          { text: "契約した奴隷なら、首輪を着けて土下座で私を待つのが当然よね♡"},
+          { text: "貞操帯辛い？何もしていないのに、中でパンパンね♡"},
+        ]}
+      />
       <Card>
         <AppText variant="subtitle">発情してない人向け</AppText>
         {!fullscreen ? (
-          <Pressable onPress={() => { preparationPlayer.play(); setFullscreen(true); }}>
-            <VideoView player={preparationPlayer} style={styles.video} nativeControls={false} contentFit="contain" />
+          <Pressable
+            onPress={() => {
+              preparationPlayer.play();
+              setFullscreen(true);
+            }}
+          >
+            <VideoView
+              player={preparationPlayer}
+              style={styles.video}
+              nativeControls={false}
+              contentFit="contain"
+            />
           </Pressable>
-        ) : <View style={styles.videoPlaceholder}><AppText variant="muted">動画を拡大表示中</AppText></View>}
-        <AppText style={styles.breath}>{preparationComments[commentIndex]}</AppText>
+        ) : (
+          <View style={styles.videoPlaceholder}>
+            <AppText variant="muted">動画を拡大表示中</AppText>
+          </View>
+        )}
+        <AppText style={styles.breath}>
+          {preparationComments[commentIndex]}
+        </AppText>
       </Card>
       <Card>
         <AppText variant="subtitle">{formatDateJa(toDateKey())}</AppText>
         {items.map((item) => (
-          <Pressable key={item.text} onPress={() => toggle(item.text)} style={styles.checkRow}>
-            <AppText style={[styles.check, checked.has(item.text) && styles.checked]}>{checked.has(item.text) ? "✅" : "□"}</AppText>
+          <Pressable
+            key={item.text}
+            onPress={() => toggle(item.text)}
+            style={styles.checkRow}
+          >
+            <AppText
+              style={[styles.check, checked.has(item.text) && styles.checked]}
+            >
+              {checked.has(item.text) ? "✅" : "□"}
+            </AppText>
             <View style={styles.grow}>
               <AppText>{item.text}</AppText>
               {!item.required ? <AppText variant="muted">任意</AppText> : null}
@@ -95,16 +137,53 @@ export default function PreparationScreen() {
         ))}
       </Card>
       {completed ? (
-        <Card><AppText style={styles.closing}>「本日も調教よろしくお願いいたします。」</AppText><AppText variant="muted">調教日記へ保存しました。</AppText></Card>
+        <Card>
+          <AppText style={styles.closing}>
+            「本日も調教よろしくお願いいたします。」
+          </AppText>
+          <AppText variant="muted">調教日記へ保存しました。</AppText>
+        </Card>
       ) : (
-        <PrimaryButton title="本日の準備を完了" disabled={!requiredComplete} onPress={complete} />
+        <PrimaryButton
+          title="勃起も準備も完了しました♡"
+          disabled={!requiredComplete}
+          onPress={complete}
+        />
       )}
-      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
-      <Modal visible={fullscreen} animationType="fade" statusBarTranslucent onRequestClose={() => setFullscreen(false)}>
-        <View style={[styles.fullscreen, { paddingTop: Math.max(12, insets.top), paddingBottom: Math.max(12, insets.bottom) }]}>
-          <VideoView player={preparationPlayer} style={styles.fullscreenVideo} nativeControls={false} contentFit="contain" />
-          <AppText style={styles.fullscreenBreath}>{preparationComments[commentIndex]}</AppText>
-          <PrimaryButton title="閉じる" tone="secondary" onPress={() => setFullscreen(false)} />
+      <PrimaryButton
+        title="ホームへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)")}
+      />
+      <Modal
+        visible={fullscreen}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setFullscreen(false)}
+      >
+        <View
+          style={[
+            styles.fullscreen,
+            {
+              paddingTop: Math.max(12, insets.top),
+              paddingBottom: Math.max(12, insets.bottom),
+            },
+          ]}
+        >
+          <VideoView
+            player={preparationPlayer}
+            style={styles.fullscreenVideo}
+            nativeControls={false}
+            contentFit="contain"
+          />
+          <AppText style={styles.fullscreenBreath}>
+            {preparationComments[commentIndex]}
+          </AppText>
+          <PrimaryButton
+            title="閉じる"
+            tone="secondary"
+            onPress={() => setFullscreen(false)}
+          />
         </View>
       </Modal>
     </Screen>
@@ -112,15 +191,60 @@ export default function PreparationScreen() {
 }
 
 const styles = StyleSheet.create({
-  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderTopColor: "#444", paddingVertical: 12 },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#444",
+    paddingVertical: 12,
+  },
   check: { width: 28, color: lightTheme.muted, fontSize: 20, lineHeight: 30 },
   checked: { color: "#fff" },
   grow: { flex: 1, gap: 2 },
-  closing: { textAlign: "center", fontSize: 17, fontWeight: "900", lineHeight: 28 },
-  video: { width: "100%", aspectRatio: 16 / 9, borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
-  videoPlaceholder: { width: "100%", aspectRatio: 16 / 9, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
-  breath: { color: "#fff", fontSize: 24, lineHeight: 34, fontWeight: "900", textAlign: "center", letterSpacing: 2 },
-  fullscreen: { flex: 1, gap: 10, paddingHorizontal: 10, backgroundColor: "#000" },
+  closing: {
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 28,
+  },
+  video: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  videoPlaceholder: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  breath: {
+    color: "#fff",
+    fontSize: 24,
+    lineHeight: 34,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: 2,
+  },
+  fullscreen: {
+    flex: 1,
+    gap: 10,
+    paddingHorizontal: 10,
+    backgroundColor: "#000",
+  },
   fullscreenVideo: { flex: 1, width: "100%", backgroundColor: "#000" },
-  fullscreenBreath: { color: "#fff", fontSize: 28, lineHeight: 40, fontWeight: "900", textAlign: "center", letterSpacing: 2 },
+  fullscreenBreath: {
+    color: "#fff",
+    fontSize: 28,
+    lineHeight: 40,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: 2,
+  },
 });

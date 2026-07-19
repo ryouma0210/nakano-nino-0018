@@ -1,12 +1,16 @@
+import { useState } from "react";
 import { Alert, BackHandler, Image, Platform, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
 
 export default function Index() {
+  const [exitConfirmation, setExitConfirmation] = useState(false);
+
   function exitGame() {
     if (Platform.OS === "android") BackHandler.exitApp();
     else Alert.alert("ゲーム終了", "iOSではアプリを閉じる操作は端末側から行ってください。");
@@ -19,10 +23,19 @@ export default function Index() {
         <Image source={require("../assets/characters/home-nino.png")} style={styles.hero} resizeMode="contain" />
         <View style={styles.menu}>
           <PrimaryButton title="始める" onPress={() => router.replace("/(tabs)")} />
-          <PrimaryButton title="ゲーム終了" onPress={exitGame} tone="danger" />
+          <PrimaryButton title="ゲーム終了" onPress={() => setExitConfirmation(true)} tone="danger" />
         </View>
         <AppText style={styles.version}>Ver:{Constants.expoConfig?.version ?? "-"}</AppText>
       </View>
+      <ConfirmModal
+        visible={exitConfirmation}
+        title="ゲームを終了しますか？"
+        message="アプリを終了してスタート画面を閉じます。"
+        confirmLabel="終了する"
+        confirmTone="danger"
+        onCancel={() => setExitConfirmation(false)}
+        onConfirm={() => { setExitConfirmation(false); exitGame(); }}
+      />
     </Screen>
   );
 }

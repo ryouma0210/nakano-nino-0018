@@ -25,21 +25,40 @@ export default function MenuScreen() {
       <RoomConversation
         characterSource={require("../../assets/characters/settings-nino.png")}
         roomName="管理メニュー"
-        lines={[{ text: "記録の確認や設定は、ここから選びなさい。" }, { text: "ご褒美の交換も忘れないでね。" }]}
+        lines={[
+          { text: "記録の確認や設定は、ここから選びなさい。" },
+          { text: "ご褒美の交換も忘れないでね。" },
+        ]}
+        contractLines={[
+          { text: "奴隷としての記録もご褒美も、全部ここで私に管理されるのよ♡" },
+        ]}
       />
       <View style={styles.items}>
         {menuItems.map(([title, href]) => (
-          <PrimaryButton key={href} title={title} onPress={() => router.push(href)} />
+          <PrimaryButton
+            key={href}
+            title={title}
+            onPress={() => router.push(href)}
+          />
         ))}
       </View>
-      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
+      <PrimaryButton
+        title="ホームへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)")}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 12 },
-  kicker: { color: lightTheme.danger, fontSize: 12, fontWeight: "900", letterSpacing: 3 },
+  kicker: {
+    color: lightTheme.danger,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
   rule: { height: 1, backgroundColor: "#fff" },
   items: { gap: 12 },
 });

@@ -13,6 +13,13 @@ import { lightTheme } from "@/constants/theme";
 import { achievementRepository } from "@/repositories/achievementRepository";
 import { contractService } from "@/services/gameRoomService";
 
+const gaugeSpeeds = [
+  { label: "ゆっくり", value: 0.5 },
+  { label: "一定", value: 1 },
+  { label: "速い", value: 3 },
+  { label: "急加速", value: 5 },
+] as const;
+
 export default function TimerScreen() {
   const [minutes, setMinutes] = useState("10");
   const [totalSeconds, setTotalSeconds] = useState(600);
@@ -22,15 +29,33 @@ export default function TimerScreen() {
   const [maxMinutes, setMaxMinutes] = useState(30);
   const [trackWidth, setTrackWidth] = useState(1);
   const [target, setTarget] = useState<"チンポ" | "金玉">("チンポ");
+  const [speedLabel, setSpeedLabel] = useState("ゆっくり");
   const lastBeat = useRef(-1);
   const sessionRecorded = useRef(false);
   const startedAt = useRef(0);
+  const gaugePosition = useRef(0);
+  const gaugeSpeed = useRef<number>(gaugeSpeeds[0].value);
+  const lastGaugeTick = useRef(0);
+  const nextSpeedChangeAt = useRef(0);
   const { playEffect } = useAppAudio();
   useEffect(() => { contractService.load().then((contract) => setMaxMinutes(contract.maxPunishmentMinutes)); }, []);
 
   useEffect(() => {
     if (!running) return;
-    const animation = setInterval(() => setGaugeElapsed((Date.now() - startedAt.current) / 1000), 50);
+    lastGaugeTick.current = Date.now();
+    const animation = setInterval(() => {
+      const now = Date.now();
+      const deltaSeconds = Math.max(0, now - lastGaugeTick.current) / 1000;
+      lastGaugeTick.current = now;
+      if (now >= nextSpeedChangeAt.current) {
+        const next = gaugeSpeeds[Math.floor(Math.random() * gaugeSpeeds.length)];
+        gaugeSpeed.current = next.value;
+        setSpeedLabel(next.label);
+        nextSpeedChangeAt.current = now + 2000 + Math.random() * 4000;
+      }
+      gaugePosition.current += deltaSeconds * gaugeSpeed.current;
+      setGaugeElapsed(gaugePosition.current);
+    }, 50);
     return () => clearInterval(animation);
   }, [running]);
 
@@ -56,7 +81,7 @@ export default function TimerScreen() {
   useEffect(() => {
     if (!running || gaugeBeat === lastBeat.current) return;
     lastBeat.current = gaugeBeat;
-    setTarget(Math.random() < 5 ? "チンポ" : "金玉");
+    setTarget(Math.random() < 1 ? "金玉" : "チンポ");
     playEffect("punishmentHit");
   }, [gaugeBeat, playEffect, running]);
 
@@ -66,6 +91,11 @@ export default function TimerScreen() {
     setRemaining(duration);
     setGaugeElapsed(0);
     startedAt.current = Date.now();
+    gaugePosition.current = 0;
+    gaugeSpeed.current = gaugeSpeeds[0].value;
+    lastGaugeTick.current = startedAt.current;
+    nextSpeedChangeAt.current = startedAt.current + 30000;
+    setSpeedLabel(gaugeSpeeds[0].label);
     lastBeat.current = 0;
     sessionRecorded.current = false;
     setRunning(true);
@@ -80,19 +110,28 @@ export default function TimerScreen() {
   return (
     <Screen>
       <AppText variant="title" style={styles.roomTitle}>お仕置き部屋</AppText>
-      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" lines={[{ text: "時間は自分で決めなさい。" }, { text: "黄色が赤へ到達したら、表示された場所へビンタよ。" }]} />
+      <RoomConversation characterSource={require("../../assets/characters/punishment-nino.png")} roomName="お仕置き部屋" 
+      lines={[
+        { text: "時間は自分で決めなさい。" },
+        { text: "黒いスペードがピンクの丸へ到達したら、表示された場所へビンタよ。" }]}
+      contractLines={[
+          { text: "契約済みの奴隷なら、最低10分以上。お仕置きから逃げずに最後まで受けなさい♡" },
+          { text: "貞操帯着用している人は、金玉ビンタのみよ♡" }]} />
       <Card>
         <TextField label={`時間（分）・契約上限 ${maxMinutes}分`} value={minutes} onChangeText={setMinutes} keyboardType="number-pad" editable={!running} />
         <AppText style={styles.clock}>{secondsToClock(remaining)}</AppText>
         <View style={styles.rhythmFrame}>
-          <View style={styles.rhythmHeader}><AppText variant="label">RHYTHM</AppText><AppText style={styles.target}>{target}にビンタ</AppText></View>
+          <View style={styles.rhythmHeader}>
+            <View><AppText variant="label">RHYTHM</AppText><AppText style={styles.speed}>速度：{speedLabel}</AppText></View>
+            <AppText style={styles.target}>{target}にビンタ</AppText>
+          </View>
           <View onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} style={styles.track}>
             <View style={styles.line} /><View style={styles.hitGlow} /><View style={styles.hitPoint} />
             {Array.from({ length: 5 }, (_, index) => {
               const phase = (gaugeElapsed / 5 + index / 5) % 1;
               const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
               const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
-              return <View key={index} style={[styles.marker, { left, opacity }]} />;
+              return <AppText key={index} style={[styles.marker, { left, opacity }]}>♠</AppText>;
             })}
           </View>
         </View>
@@ -109,9 +148,10 @@ const styles = StyleSheet.create({
   rhythmFrame: { borderWidth: 1, borderColor: "#777", backgroundColor: "#151515" },
   rhythmHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, paddingTop: 8 },
   target: { color: lightTheme.danger, fontSize: 18, fontWeight: "900" },
-  track: { overflow: "hidden", height: 58, justifyContent: "center", marginHorizontal: 8 },
-  line: { position: "absolute", right: 10, left: 20, height: 3, backgroundColor: "#ddd" },
-  hitGlow: { position: "absolute", left: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,47,47,0.22)" },
-  hitPoint: { position: "absolute", left: 16, width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: "#ffb0a5", backgroundColor: "#ed3b35", zIndex: 3 },
-  marker: { position: "absolute", width: 20, height: 20, marginLeft: -10, borderRadius: 10, borderWidth: 2, borderColor: "#fff1a3", backgroundColor: "#f1c84b", zIndex: 2 },
+  speed: { color: "#ff9bc7", fontSize: 11, fontWeight: "900" },
+  track: { overflow: "hidden", height: 58, justifyContent: "center", marginHorizontal: 8, borderRadius: 4, backgroundColor: "#f3dce5" },
+  line: { position: "absolute", right: 10, left: 20, height: 3, backgroundColor: "#d17a9b" },
+  hitGlow: { position: "absolute", left: 8, width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,105,180,0.28)" },
+  hitPoint: { position: "absolute", left: 15, width: 28, height: 28, borderRadius: 14, borderWidth: 4, borderColor: "#ff69b4", backgroundColor: "#ffd2e6", zIndex: 3 },
+  marker: { position: "absolute", top: 7, width: 34, height: 42, marginLeft: -17, color: "#050505", fontSize: 34, lineHeight: 40, fontWeight: "900", textAlign: "center", zIndex: 2 },
 });

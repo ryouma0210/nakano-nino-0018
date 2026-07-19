@@ -29,16 +29,23 @@ export default function HomeScreen() {
         roomName="ホーム"
         lines={[
           { text: "おかえりなさい。今日はどの部屋へ行く？" },
-          { text: "準備ができたら、行き先を選んで。" },
-          { text: "あなたの記録は、私がここで見守っているわ。" },
-          { text: "なに興奮しているのかしら？気持ち悪いわ。" },
+          { text: "あなたの調教記録は、私がここで見守っているわ。" },
+        ]}
+        contractLines={[
+          { text: "おい、マゾ犬。奴隷用の首輪は付けてきたのかしら？" },
+          { text: "まだ何もしていないのに、なんで興奮しているのかしら。" },
+          { text: "部屋に移動する際は、四つん這いで移動しなさい。" },
         ]}
       />
       <View style={styles.rooms}>
         {rooms.map(([title, href]) => (
           <View key={href} style={styles.roomRow}>
             <View style={styles.button}>
-              <PrimaryButton title={title} tone={href === "/(tabs)/timer" ? "danger" : "primary"} onPress={() => router.push(href)} />
+              <PrimaryButton
+                title={title}
+                tone={href === "/(tabs)/timer" ? "danger" : "primary"}
+                onPress={() => router.push(href)}
+              />
             </View>
           </View>
         ))}
@@ -49,7 +56,12 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 12 },
-  kicker: { color: lightTheme.danger, fontSize: 12, fontWeight: "900", letterSpacing: 3 },
+  kicker: {
+    color: lightTheme.danger,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
   rule: { height: 1, backgroundColor: "#fff" },
   rooms: { gap: 12 },
   roomRow: { flexDirection: "row", alignItems: "center" },

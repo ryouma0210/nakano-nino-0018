@@ -2,13 +2,14 @@ import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateTimeKey } from "@/utils/date";
 
 export const insultComments = [
+  "アンタ、手の施しようがない変態だわ♡",
   "ざぁこ♡今日も二ノ様に見下されに来たの？♡",
   "その程度で満足してるなんて、本当にお手軽なマゾね♡",
   "情けない顔♡鏡でちゃんと見ておきなさい♡",
   "命令がないと何もできないの？かわいそうな奴隷ね♡",
-  "ほら、もっと必死にお願いしてみなさい♡",
+  "ほら、情けなく腰振って、必死にオネダリしてみなさい♡",
   "二ノ様に褒めてもらえると思った？甘すぎ♡",
-  "その弱さ、隠せているつもりなのかしら♡",
+  "アンタの弱点、隠せているつもりなのかしら♡バレバレよ♡",
   "今日も私の言葉だけで喜んでるのね♡",
   "マゾらしく、もっと情けなく鳴きなさい♡",
   "これでご褒美なんて、本当に安上がりな子ね♡",
@@ -41,11 +42,31 @@ export const brutalOrders = [
 ] as const;
 
 export const rewardCatalog = {
-  insult: { key: "insult", name: "罵倒のコメント交換♡マゾはこれで十分よね♡", cost: 10, contents: insultComments },
-  praise: { key: "praise", name: "称賛のコメント交換♡頑張ったお兄さんに特別よ♡", cost: 50, contents: praiseComments },
+  insult: {
+    key: "insult",
+    name: "罵倒のコメント交換♡マゾはこれで十分よね♡",
+    cost: 10,
+    contents: insultComments,
+  },
+  praise: {
+    key: "praise",
+    name: "称賛のコメント交換♡頑張ったお兄さんに特別よ♡",
+    cost: 50,
+    contents: praiseComments,
+  },
   video: { key: "video", name: "ご褒美動画交換♡", cost: 500 },
-  brutal: { key: "brutal", name: "鬼畜の調教命令交換♡", cost: 1000, contents: brutalOrders },
-  secret: { key: "secret", name: "秘密♡交換時のお楽しみ♡", cost: 10000, contents: ["調教1回無料プレゼント。私に連絡してきなさい♡"] },
+  brutal: {
+    key: "brutal",
+    name: "鬼畜の調教命令交換♡",
+    cost: 1000,
+    contents: brutalOrders,
+  },
+  secret: {
+    key: "secret",
+    name: "秘密♡交換時のお楽しみ♡",
+    cost: 10000,
+    contents: ["調教1回無料プレゼント。私に連絡してきなさい♡"],
+  },
 } as const;
 
 export type RandomRewardKey = "insult" | "praise" | "brutal";
@@ -73,24 +94,31 @@ export const pointRepository = {
 
 export const rewardRepository = {
   balance() {
-    const activityPoints = queryOne<{ total: number }>(
-      "SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions",
-    )?.total ?? 0;
-    const spent = queryOne<{ total: number }>(
-      "SELECT COALESCE(SUM(points_spent), 0) AS total FROM reward_redemptions",
-    )?.total ?? 0;
+    const activityPoints =
+      queryOne<{ total: number }>(
+        "SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions",
+      )?.total ?? 0;
+    const spent =
+      queryOne<{ total: number }>(
+        "SELECT COALESCE(SUM(points_spent), 0) AS total FROM reward_redemptions",
+      )?.total ?? 0;
     const earned = activityPoints + stgBonus;
     return { earned, spent, available: Math.max(0, earned - spent), stgBonus };
   },
 
   acquired() {
-    return query<RewardRedemption>("SELECT * FROM reward_redemptions ORDER BY id DESC");
+    return query<RewardRedemption>(
+      "SELECT * FROM reward_redemptions ORDER BY id DESC",
+    );
   },
 
   remaining(key: RandomRewardKey) {
     const reward = rewardCatalog[key];
     const acquired = new Set(
-      query<{ reward_content: string | null }>("SELECT reward_content FROM reward_redemptions WHERE reward_key=?", [key])
+      query<{ reward_content: string | null }>(
+        "SELECT reward_content FROM reward_redemptions WHERE reward_key=?",
+        [key],
+      )
         .map((item) => item.reward_content)
         .filter(Boolean),
     );
@@ -114,14 +142,14 @@ export const rewardRepository = {
     return redeemed ? content : null;
   },
 
-  redeemVideo(name: string, uri: string) {
+  redeemVideo(name: string) {
     const reward = rewardCatalog.video;
     let redeemed = false;
     transaction(() => {
       if (this.balance().available < reward.cost) return;
       execute(
-        "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, file_uri, redeemed_at) VALUES('video', ?, ?, ?, ?, ?)",
-        [reward.name, reward.cost, name, uri, toDateTimeKey()],
+        "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('video', ?, ?, ?, ?)",
+        [reward.name, reward.cost, name, toDateTimeKey()],
       );
       redeemed = true;
     });

@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
@@ -16,14 +17,24 @@ import { journalRepository } from "@/repositories/journalRepository";
 import { habitFormSchema, type HabitFormValues } from "@/schemas/forms";
 import type { HabitWithToday } from "@/types/models";
 import { formatDateJa, toDateKey } from "@/utils/date";
-import { fileStorageService, type StoredFile } from "@/services/fileStorageService";
+import {
+  fileStorageService,
+  type StoredFile,
+} from "@/services/fileStorageService";
 import { pointRepository } from "@/repositories/rewardRepository";
 
 export default function HabitsScreen() {
   const [habits, setHabits] = useState<HabitWithToday[]>([]);
   const [formVisible, setFormVisible] = useState(false);
-  const [selectedHabit, setSelectedHabit] = useState<HabitWithToday | null>(null);
-  const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
+  const [selectedHabit, setSelectedHabit] = useState<HabitWithToday | null>(
+    null,
+  );
+  const [pendingDelete, setPendingDelete] = useState<HabitWithToday | null>(
+    null,
+  );
+  const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(
+    null,
+  );
   const [trainingImages, setTrainingImages] = useState<StoredFile[]>([]);
   const [mediaMode, setMediaMode] = useState<"default" | "slides">("default");
   const form = useForm<HabitFormValues>({
@@ -46,13 +57,17 @@ export default function HabitsScreen() {
   }, []);
 
   useEffect(load, [load]);
-  useFocusEffect(useCallback(() => {
-    fileStorageService.list().then((files) => {
-      const images = files.filter((file) => /\.(png|jpe?g|webp|gif)$/i.test(file.name));
-      setTrainingImages(images);
-      if (images.length === 0) setMediaMode("default");
-    });
-  }, []));
+  useFocusEffect(
+    useCallback(() => {
+      fileStorageService.list().then((files) => {
+        const images = files.filter((file) =>
+          /\.(png|jpe?g|webp|gif)$/i.test(file.name),
+        );
+        setTrainingImages(images);
+        if (images.length === 0) setMediaMode("default");
+      });
+    }, []),
+  );
 
   function openCreate() {
     form.reset();
@@ -66,18 +81,7 @@ export default function HabitsScreen() {
   }
 
   function removeHabit(habit: HabitWithToday) {
-    Alert.alert("削除確認", `${habit.name}を削除しますか？`, [
-      { text: "キャンセル", style: "cancel" },
-      {
-        text: "削除",
-        style: "destructive",
-        onPress: () => {
-          habitRepository.remove(habit.id);
-          setSelectedHabit(null);
-          load();
-        },
-      },
-    ]);
+    setPendingDelete(habit);
   }
 
   function completeTraining(result: TrainingResult) {
@@ -101,24 +105,49 @@ export default function HabitsScreen() {
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
 
-      <RoomConversation characterSource={require("../../assets/characters/training-nino.png")} roomName="調教部屋" lines={[{ text: "今日の課題を確認するわ。続けるものを選んで。" }, { text: "達成した課題は、忘れずに記録して。" }, { text: "積み重ねた日数は、あなたが続けた証拠よ。" }]} />
+      <RoomConversation
+        characterSource={require("../../assets/characters/training-nino-v3.png")}
+        roomName="調教部屋"
+        lines={[
+          { text: "今日の課題を確認するわ。続けるものを選んで。" },
+          { text: "達成した課題は、忘れずに記録して。" },
+          { text: "積み重ねた日数は、あなたが続けた証拠よ。" },
+        ]}
+        contractLines={[
+          { text: "私の奴隷になった以上、許可するまで勝手に逝っちゃダメよ♡" },
+        ]}
+      />
 
       <Card>
         <AppText variant="subtitle">表示するファイル</AppText>
         <View style={styles.mediaChoices}>
           <View style={styles.mediaChoice}>
-            <PrimaryButton title="デフォルト動画 (6)" tone={mediaMode === "default" ? "primary" : "secondary"} onPress={() => setMediaMode("default")} />
+            <PrimaryButton
+              title="デフォルト動画 (6)"
+              tone={mediaMode === "default" ? "primary" : "secondary"}
+              onPress={() => setMediaMode("default")}
+            />
           </View>
           {trainingImages.length > 0 ? (
             <View style={styles.mediaChoice}>
-              <PrimaryButton title={`格納画像 (${trainingImages.length})`} tone={mediaMode === "slides" ? "primary" : "secondary"} onPress={() => setMediaMode("slides")} />
+              <PrimaryButton
+                title={`格納画像 (${trainingImages.length})`}
+                tone={mediaMode === "slides" ? "primary" : "secondary"}
+                onPress={() => setMediaMode("slides")}
+              />
             </View>
           ) : null}
         </View>
-        <AppText variant="muted">{trainingImages.length > 0 ? "デフォルト動画は各3回、格納画像は各10秒表示してから、次のファイルとコメントへ切り替わります。" : "6本のデフォルト動画を各3回再生してから、次の動画とコメントへ切り替えます。ファイル格納部屋へ画像を追加するとスライド表示も選択できます。"}</AppText>
+        <AppText variant="muted">
+          {"【デフォルト動画】または【格納した画像】どちらか選択してください。"}
+        </AppText>
       </Card>
 
-      <TrainingVideo key={mediaMode} onComplete={completeTraining} slides={mediaMode === "slides" ? trainingImages : []} />
+      <TrainingVideo
+        key={mediaMode}
+        onComplete={completeTraining}
+        slides={mediaMode === "slides" ? trainingImages : []}
+      />
 
       {habits.map((habit) => {
         const streak = habitRepository.streak(habit.id);
@@ -127,97 +156,179 @@ export default function HabitsScreen() {
             <Card>
               <View style={styles.habitHeader}>
                 <View style={[styles.icon, { backgroundColor: habit.color }]}>
-                  <AppText style={styles.iconText}>{habit.icon?.slice(0, 1).toUpperCase() || "H"}</AppText>
+                  <AppText style={styles.iconText}>
+                    {habit.icon?.slice(0, 1).toUpperCase() || "H"}
+                  </AppText>
                 </View>
                 <View style={styles.grow}>
                   <AppText variant="subtitle">{habit.name}</AppText>
-                  <AppText variant="muted">{habit.category || "未分類"} / {habit.frequency_type}</AppText>
+                  <AppText variant="muted">
+                    {habit.category || "未分類"} / {habit.frequency_type}
+                  </AppText>
                 </View>
-                <AppText style={habit.today_status === "completed" ? styles.done : styles.todo}>
+                <AppText
+                  style={
+                    habit.today_status === "completed"
+                      ? styles.done
+                      : styles.todo
+                  }
+                >
                   {habit.today_status === "completed" ? "達成" : "未達成"}
                 </AppText>
               </View>
               <View style={styles.stats}>
                 <AppText variant="muted">連続 {streak.current}日</AppText>
                 <AppText variant="muted">最長 {streak.longest}日</AppText>
-                <AppText variant="muted">通算 {habit.total_completed}回</AppText>
+                <AppText variant="muted">
+                  通算 {habit.total_completed}回
+                </AppText>
               </View>
             </Card>
           </Pressable>
         );
       })}
 
-      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
+      <PrimaryButton
+        title="ホームへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)")}
+      />
 
-      <Modal visible={formVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal
+        visible={formVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
         <Screen>
           <AppText variant="title">習慣登録</AppText>
           <Controller
             control={form.control}
             name="name"
             render={({ field, fieldState }) => (
-              <TextField label="習慣名" value={field.value} onChangeText={field.onChange} error={fieldState.error?.message} />
+              <TextField
+                label="習慣名"
+                value={field.value}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+              />
             )}
           />
           <Controller
             control={form.control}
             name="description"
             render={({ field }) => (
-              <TextField label="説明" value={field.value} onChangeText={field.onChange} multiline />
+              <TextField
+                label="説明"
+                value={field.value}
+                onChangeText={field.onChange}
+                multiline
+              />
             )}
           />
           <Controller
             control={form.control}
             name="category"
             render={({ field }) => (
-              <TextField label="カテゴリ" value={field.value} onChangeText={field.onChange} />
+              <TextField
+                label="カテゴリ"
+                value={field.value}
+                onChangeText={field.onChange}
+              />
             )}
           />
           <Controller
             control={form.control}
             name="targetCount"
             render={({ field }) => (
-              <TextField label="1日の目標回数" value={String(field.value)} onChangeText={field.onChange} keyboardType="number-pad" />
+              <TextField
+                label="1日の目標回数"
+                value={String(field.value)}
+                onChangeText={field.onChange}
+                keyboardType="number-pad"
+              />
             )}
           />
           <View style={styles.actions}>
-            <PrimaryButton title="キャンセル" onPress={() => setFormVisible(false)} tone="secondary" />
+            <PrimaryButton
+              title="キャンセル"
+              onPress={() => setFormVisible(false)}
+              tone="secondary"
+            />
             <PrimaryButton title="保存" onPress={form.handleSubmit(save)} />
           </View>
         </Screen>
       </Modal>
 
-      <Modal visible={Boolean(selectedHabit)} animationType="slide" presentationStyle="pageSheet">
+      <Modal
+        visible={Boolean(selectedHabit)}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
         <Screen>
           {selectedHabit ? (
             <>
               <AppText variant="title">{selectedHabit.name}</AppText>
               <Card>
                 <AppText variant="subtitle">習慣情報</AppText>
-                <AppText>{selectedHabit.description || "説明はありません。"}</AppText>
-                <AppText variant="muted">カテゴリ: {selectedHabit.category || "-"}</AppText>
-                <AppText variant="muted">今日: {selectedHabit.today_status || "未記録"}</AppText>
+                <AppText>
+                  {selectedHabit.description || "説明はありません。"}
+                </AppText>
+                <AppText variant="muted">
+                  カテゴリ: {selectedHabit.category || "-"}
+                </AppText>
+                <AppText variant="muted">
+                  今日: {selectedHabit.today_status || "未記録"}
+                </AppText>
               </Card>
               <Card>
                 <AppText variant="subtitle">簡単なグラフ</AppText>
                 <View style={styles.graphTrack}>
-                  <View style={[styles.graphBar, { width: `${Math.min(100, selectedHabit.total_completed * 5)}%` }]} />
+                  <View
+                    style={[
+                      styles.graphBar,
+                      {
+                        width: `${Math.min(100, selectedHabit.total_completed * 5)}%`,
+                      },
+                    ]}
+                  />
                 </View>
-                <AppText variant="muted">通算達成回数を簡易表示しています。</AppText>
+                <AppText variant="muted">
+                  通算達成回数を簡易表示しています。
+                </AppText>
               </Card>
-              <PrimaryButton title="達成にする" onPress={() => {
-                habitRepository.upsertRecord(selectedHabit.id, "completed", selectedHabit.target_count);
-                setSelectedHabit(null);
-                load();
-              }} />
-              <PrimaryButton title="削除" tone="danger" onPress={() => removeHabit(selectedHabit)} />
-              <PrimaryButton title="閉じる" tone="secondary" onPress={() => setSelectedHabit(null)} />
+              <PrimaryButton
+                title="達成にする"
+                onPress={() => {
+                  habitRepository.upsertRecord(
+                    selectedHabit.id,
+                    "completed",
+                    selectedHabit.target_count,
+                  );
+                  setSelectedHabit(null);
+                  load();
+                }}
+              />
+              <PrimaryButton
+                title="削除"
+                tone="danger"
+                onPress={() => removeHabit(selectedHabit)}
+              />
+              <PrimaryButton
+                title="閉じる"
+                tone="secondary"
+                onPress={() => setSelectedHabit(null)}
+              />
             </>
           ) : null}
         </Screen>
       </Modal>
 
-      <Modal visible={trainingResult !== null} animationType="fade" transparent statusBarTranslucent>
+      <Modal
+        visible={trainingResult !== null}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+      >
         <View style={styles.completeBackdrop}>
           <View style={styles.completeDialog}>
             <AppText style={styles.completeEvent}>TRAINING COMPLETE</AppText>
@@ -226,7 +337,9 @@ export default function HabitsScreen() {
               <View style={styles.completeFace} />
             </View>
             <AppText variant="subtitle">ニノ</AppText>
-            <AppText style={styles.completeMessage}>お疲れさま。今日の調教はここまでよ。ちゃんと記録しておくわ。</AppText>
+            <AppText style={styles.completeMessage}>
+              お疲れさま。今日の調教はここまでよ。ちゃんと記録しておくわ。
+            </AppText>
             <View style={styles.resultBox}>
               <AppText variant="label">タイトル</AppText>
               <AppText>調教完了記録</AppText>
@@ -235,16 +348,37 @@ export default function HabitsScreen() {
               <AppText variant="label">難易度</AppText>
               <AppText>{trainingResult?.difficulty ?? "-"}</AppText>
               <AppText variant="label">秒数</AppText>
-              <AppText style={styles.resultSeconds}>{trainingResult?.elapsedSeconds ?? 0}秒</AppText>
+              <AppText style={styles.resultSeconds}>
+                {trainingResult?.elapsedSeconds ?? 0}秒
+              </AppText>
               <AppText variant="muted">調教日記へ保存しました。</AppText>
             </View>
-            <PrimaryButton title="ホームへ戻る" onPress={() => {
-              setTrainingResult(null);
-              router.replace("/(tabs)");
-            }} />
+            <PrimaryButton
+              title="ホームへ戻る"
+              onPress={() => {
+                setTrainingResult(null);
+                router.replace("/(tabs)");
+              }}
+            />
           </View>
         </View>
       </Modal>
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title="習慣を削除しますか？"
+        message={`${pendingDelete?.name ?? ""}\n\n関連する記録も削除されます。この操作は元に戻せません。`}
+        confirmLabel="削除する"
+        confirmTone="danger"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          const habit = pendingDelete;
+          setPendingDelete(null);
+          if (!habit) return;
+          habitRepository.remove(habit.id);
+          setSelectedHabit(null);
+          load();
+        }}
+      />
     </Screen>
   );
 }

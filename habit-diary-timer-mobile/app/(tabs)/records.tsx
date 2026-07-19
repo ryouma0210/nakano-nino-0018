@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
@@ -25,6 +26,7 @@ export default function RecordsScreen() {
   });
   const [formVisible, setFormVisible] = useState(false);
   const [editing, setEditing] = useState<Journal | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Journal | null>(null);
   const form = useForm<JournalFormValues>({
     resolver: zodResolver(journalFormSchema) as never,
     defaultValues: {
@@ -44,8 +46,14 @@ export default function RecordsScreen() {
 
   useEffect(load, [load]);
 
-  const markedDates = useMemo(() => new Set(journals.map((journal) => journal.record_date)), [journals]);
-  const displayedJournals = useMemo(() => journals.filter((journal) => journal.record_date === selectedDate), [journals, selectedDate]);
+  const markedDates = useMemo(
+    () => new Set(journals.map((journal) => journal.record_date)),
+    [journals],
+  );
+  const displayedJournals = useMemo(
+    () => journals.filter((journal) => journal.record_date === selectedDate),
+    [journals, selectedDate],
+  );
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
     const month = visibleMonth.getMonth();
@@ -53,7 +61,9 @@ export default function RecordsScreen() {
     const count = new Date(year, month + 1, 0).getDate();
     return [
       ...Array.from({ length: leading }, () => null),
-      ...Array.from({ length: count }, (_, index) => toDateKey(new Date(year, month, index + 1))),
+      ...Array.from({ length: count }, (_, index) =>
+        toDateKey(new Date(year, month, index + 1)),
+      ),
     ];
   }, [visibleMonth]);
 
@@ -96,17 +106,7 @@ export default function RecordsScreen() {
   }
 
   function remove(journal: Journal) {
-    Alert.alert("削除確認", `${journal.title}を削除しますか？`, [
-      { text: "キャンセル", style: "cancel" },
-      {
-        text: "削除",
-        style: "destructive",
-        onPress: () => {
-          journalRepository.remove(journal.id);
-          load();
-        },
-      },
-    ]);
+    setPendingDelete(journal);
   }
 
   return (
@@ -116,112 +116,251 @@ export default function RecordsScreen() {
         <PrimaryButton title="登録" onPress={openCreate} />
       </View>
 
-      <RoomConversation characterSource={require("../../assets/characters/diary-nino.png")} roomName="調教日記部屋" lines={[{ text: "今日あったことを、ここに残して。" }, { text: "気持ちも評価も、正直に書けばいいわ。" }, { text: "過去の記録は、いつでも読み返せるわよ。" }]} />
+      <RoomConversation
+        characterSource={require("../../assets/characters/diary-nino.png")}
+        roomName="調教日記部屋"
+        lines={[
+          { text: "今日あったことを、ここに残して。" },
+          { text: "気持ちも評価も、正直に書けばいいわ。" },
+          { text: "過去の記録は、いつでも読み返せるわよ。" },
+        ]}
+        contractLines={[
+          { text: "奴隷として何をされたか、恥ずかしいことまで全部正直に残しなさい♡"},
+        ]}
+      />
 
-      <TextField label="検索" value={keyword} onChangeText={setKeyword} placeholder="タイトル・本文・タグ" />
+      <TextField
+        label="検索"
+        value={keyword}
+        onChangeText={setKeyword}
+        placeholder="タイトル・本文・タグ"
+      />
 
       <Card>
         <AppText variant="subtitle">記録カレンダー</AppText>
         <View style={styles.monthHeader}>
-          <PrimaryButton title="‹" tone="secondary" onPress={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} />
-          <AppText style={styles.monthTitle}>{visibleMonth.getFullYear()}年{visibleMonth.getMonth() + 1}月</AppText>
-          <PrimaryButton title="›" tone="secondary" disabled={visibleMonth.getFullYear() === new Date().getFullYear() && visibleMonth.getMonth() === new Date().getMonth()} onPress={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} />
+          <PrimaryButton
+            title="‹"
+            tone="secondary"
+            onPress={() =>
+              setVisibleMonth(
+                (month) =>
+                  new Date(month.getFullYear(), month.getMonth() - 1, 1),
+              )
+            }
+          />
+          <AppText style={styles.monthTitle}>
+            {visibleMonth.getFullYear()}年{visibleMonth.getMonth() + 1}月
+          </AppText>
+          <PrimaryButton
+            title="›"
+            tone="secondary"
+            disabled={
+              visibleMonth.getFullYear() === new Date().getFullYear() &&
+              visibleMonth.getMonth() === new Date().getMonth()
+            }
+            onPress={() =>
+              setVisibleMonth(
+                (month) =>
+                  new Date(month.getFullYear(), month.getMonth() + 1, 1),
+              )
+            }
+          />
         </View>
         <View style={styles.weekRow}>
-          {["日", "月", "火", "水", "木", "金", "土"].map((day) => <AppText key={day} style={styles.weekDay}>{day}</AppText>)}
+          {["日", "月", "火", "水", "木", "金", "土"].map((day) => (
+            <AppText key={day} style={styles.weekDay}>
+              {day}
+            </AppText>
+          ))}
         </View>
         <View style={styles.calendarGrid}>
           {calendarDays.map((date, index) => {
-            if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
+            if (!date)
+              return <View key={`blank-${index}`} style={styles.dayCell} />;
             const future = date > toDateKey();
             const selected = date === selectedDate;
             const marked = markedDates.has(date);
             return (
-              <Pressable key={date} disabled={future} onPress={() => setSelectedDate(date)} style={[styles.dayCell, selected && styles.selectedDay, future && styles.futureDay]}>
-                <AppText style={[styles.dayText, selected && styles.selectedDayText]}>{Number(date.slice(-2))}</AppText>
-                {marked ? <View style={[styles.recordDot, selected && styles.selectedRecordDot]} /> : null}
+              <Pressable
+                key={date}
+                disabled={future}
+                onPress={() => setSelectedDate(date)}
+                style={[
+                  styles.dayCell,
+                  selected && styles.selectedDay,
+                  future && styles.futureDay,
+                ]}
+              >
+                <AppText
+                  style={[styles.dayText, selected && styles.selectedDayText]}
+                >
+                  {Number(date.slice(-2))}
+                </AppText>
+                {marked ? (
+                  <View
+                    style={[
+                      styles.recordDot,
+                      selected && styles.selectedRecordDot,
+                    ]}
+                  />
+                ) : null}
               </Pressable>
             );
           })}
         </View>
-        <AppText variant="muted">選択中：{formatDateJa(selectedDate)}　●は記録のある日です。</AppText>
+        <AppText variant="muted">
+          選択中：{formatDateJa(selectedDate)}　●は記録のある日です。
+        </AppText>
       </Card>
 
       {displayedJournals.length === 0 ? (
-        <Card><AppText variant="muted">選択した日の記録はありません。</AppText></Card>
+        <Card>
+          <AppText variant="muted">選択した日の記録はありません。</AppText>
+        </Card>
       ) : null}
 
       {displayedJournals.map((journal, index) => (
         <View key={journal.id} style={styles.dateGroup}>
-          {index === 0 ? <AppText style={styles.dateHeading}>{formatDateJa(journal.record_date)}</AppText> : null}
-        <Card>
-          <View style={styles.journalHeader}>
-            <View style={styles.grow}>
-              <AppText variant="subtitle">{journal.title}</AppText>
-              <AppText variant="muted">{formatDateJa(journal.record_date)} / 評価 {journal.rating ?? "-"}</AppText>
+          {index === 0 ? (
+            <AppText style={styles.dateHeading}>
+              {formatDateJa(journal.record_date)}
+            </AppText>
+          ) : null}
+          <Card>
+            <View style={styles.journalHeader}>
+              <View style={styles.grow}>
+                <AppText variant="subtitle">{journal.title}</AppText>
+                <AppText variant="muted">
+                  {formatDateJa(journal.record_date)} / 評価{" "}
+                  {journal.rating ?? "-"}
+                </AppText>
+              </View>
+              <AppText style={styles.typeBadge}>{journal.record_type}</AppText>
             </View>
-            <AppText style={styles.typeBadge}>{journal.record_type}</AppText>
-          </View>
-          <AppText numberOfLines={4}>{journal.body}</AppText>
-          <View style={styles.tagRow}>
-            {parseTags(journal.tags ?? "").map((tag) => (
-              <AppText key={tag} style={styles.tag}>#{tag}</AppText>
-            ))}
-          </View>
-          <View style={styles.actions}>
-            <PrimaryButton title="編集" tone="secondary" onPress={() => openEdit(journal)} />
-            <PrimaryButton title="削除" tone="danger" onPress={() => remove(journal)} />
-          </View>
-        </Card>
+            <AppText numberOfLines={4}>{journal.body}</AppText>
+            <View style={styles.tagRow}>
+              {parseTags(journal.tags ?? "").map((tag) => (
+                <AppText key={tag} style={styles.tag}>
+                  #{tag}
+                </AppText>
+              ))}
+            </View>
+            <View style={styles.actions}>
+              <PrimaryButton
+                title="編集"
+                tone="secondary"
+                onPress={() => openEdit(journal)}
+              />
+              <PrimaryButton
+                title="削除"
+                tone="danger"
+                onPress={() => remove(journal)}
+              />
+            </View>
+          </Card>
         </View>
       ))}
 
-      <PrimaryButton title="ホームへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)")} />
+      <PrimaryButton
+        title="ホームへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)")}
+      />
 
-      <Modal visible={formVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal
+        visible={formVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
         <Screen>
           <AppText variant="title">{editing ? "記録編集" : "記録登録"}</AppText>
           <Controller
             control={form.control}
             name="recordDate"
             render={({ field, fieldState }) => (
-              <TextField label="日付" value={field.value} onChangeText={field.onChange} error={fieldState.error?.message} />
+              <TextField
+                label="日付"
+                value={field.value}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+              />
             )}
           />
           <Controller
             control={form.control}
             name="title"
             render={({ field, fieldState }) => (
-              <TextField label="タイトル" value={field.value} onChangeText={field.onChange} error={fieldState.error?.message} />
+              <TextField
+                label="タイトル"
+                value={field.value}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+              />
             )}
           />
           <Controller
             control={form.control}
             name="body"
             render={({ field, fieldState }) => (
-              <TextField label="本文" value={field.value} onChangeText={field.onChange} multiline error={fieldState.error?.message} />
+              <TextField
+                label="本文"
+                value={field.value}
+                onChangeText={field.onChange}
+                multiline
+                error={fieldState.error?.message}
+              />
             )}
           />
           <Controller
             control={form.control}
             name="rating"
             render={({ field }) => (
-              <TextField label="評価 1-5" value={String(field.value ?? 3)} onChangeText={field.onChange} keyboardType="number-pad" />
+              <TextField
+                label="評価 1-5"
+                value={String(field.value ?? 3)}
+                onChangeText={field.onChange}
+                keyboardType="number-pad"
+              />
             )}
           />
           <Controller
             control={form.control}
             name="tags"
             render={({ field }) => (
-              <TextField label="タグ" value={field.value} onChangeText={field.onChange} placeholder="仕事, 体調, 学び" />
+              <TextField
+                label="タグ"
+                value={field.value}
+                onChangeText={field.onChange}
+                placeholder="仕事, 体調, 学び"
+              />
             )}
           />
           <View style={styles.actions}>
-            <PrimaryButton title="キャンセル" tone="secondary" onPress={() => setFormVisible(false)} />
+            <PrimaryButton
+              title="キャンセル"
+              tone="secondary"
+              onPress={() => setFormVisible(false)}
+            />
             <PrimaryButton title="保存" onPress={form.handleSubmit(save)} />
           </View>
         </Screen>
       </Modal>
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title="記録を削除しますか？"
+        message={`${pendingDelete?.title ?? ""}\n\n削除した記録は元に戻せません。`}
+        confirmLabel="削除する"
+        confirmTone="danger"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          const journal = pendingDelete;
+          setPendingDelete(null);
+          if (!journal) return;
+          journalRepository.remove(journal.id);
+          load();
+        }}
+      />
     </Screen>
   );
 }
@@ -232,17 +371,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  monthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  monthHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   monthTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "900" },
   weekRow: { flexDirection: "row" },
-  weekDay: { width: `${100 / 7}%`, color: lightTheme.muted, textAlign: "center", fontSize: 12, fontWeight: "800" },
+  weekDay: {
+    width: `${100 / 7}%`,
+    color: lightTheme.muted,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: `${100 / 7}%`, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#242424" },
+  dayCell: {
+    width: `${100 / 7}%`,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#242424",
+  },
   selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
   futureDay: { opacity: 0.25 },
   dayText: { fontWeight: "800" },
   selectedDayText: { color: "#fff" },
-  recordDot: { position: "absolute", bottom: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: lightTheme.danger },
+  recordDot: {
+    position: "absolute",
+    bottom: 4,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: lightTheme.danger,
+  },
   selectedRecordDot: { backgroundColor: "#fff" },
   journalHeader: {
     flexDirection: "row",
@@ -275,5 +439,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   dateGroup: { gap: 8 },
-  dateHeading: { borderBottomWidth: 1, borderBottomColor: "#fff", paddingBottom: 6, fontSize: 18, fontWeight: "900" },
+  dateHeading: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#fff",
+    paddingBottom: 6,
+    fontSize: 18,
+    fontWeight: "900",
+  },
 });
