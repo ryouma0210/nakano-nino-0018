@@ -19,6 +19,16 @@ import { contractService } from "@/services/gameRoomService";
 import { defeatRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
+const heartLayers = [
+  { size: 360, color: "#b000ff" },
+  { size: 310, color: "#fff" },
+  { size: 260, color: "#c52cff" },
+  { size: 210, color: "#fff" },
+  { size: 160, color: "#df5cff" },
+  { size: 110, color: "#fff" },
+  { size: 60, color: "#f08cff" },
+] as const;
+
 export default function DefeatScreen() {
   const insets = useSafeAreaInsets();
   const { showNotice } = useAppModal();
@@ -27,8 +37,7 @@ export default function DefeatScreen() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [completed, setCompleted] = useState(false);
   const heartOpacity = useRef(new Animated.Value(0)).current;
-  const heartScale = useRef(new Animated.Value(0.5)).current;
-  const heartLift = useRef(new Animated.Value(30)).current;
+  const heartScale = useRef(new Animated.Value(0.65)).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -59,8 +68,7 @@ export default function DefeatScreen() {
   useEffect(() => {
     function showHeart() {
       heartOpacity.setValue(0);
-      heartScale.setValue(0.5);
-      heartLift.setValue(30);
+      heartScale.setValue(0.65);
       Animated.parallel([
         Animated.sequence([
           Animated.timing(heartOpacity, {
@@ -76,12 +84,7 @@ export default function DefeatScreen() {
           }),
         ]),
         Animated.timing(heartScale, {
-          toValue: 1.6,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartLift, {
-          toValue: -90,
+          toValue: 1.15,
           duration: 1650,
           useNativeDriver: true,
         }),
@@ -90,7 +93,7 @@ export default function DefeatScreen() {
     showHeart();
     const timer = setInterval(showHeart, 5000);
     return () => clearInterval(timer);
-  }, [heartLift, heartOpacity, heartScale]);
+  }, [heartOpacity, heartScale]);
 
   function forceCheck(text: string) {
     if (completed) return;
@@ -178,12 +181,26 @@ export default function DefeatScreen() {
           styles.heartMotion,
           {
             opacity: heartOpacity,
-            transform: [{ translateY: heartLift }, { scale: heartScale }],
+            transform: [{ scale: heartScale }],
           },
         ]}
       >
-        <AppText style={styles.heart}>♡</AppText>
-        <AppText style={styles.heartSmall}>♡　♡</AppText>
+        {heartLayers.map((layer) => (
+          <View key={layer.size} style={styles.heartLayer}>
+            <AppText
+              style={[
+                styles.heart,
+                {
+                  color: layer.color,
+                  fontSize: layer.size,
+                  lineHeight: layer.size,
+                },
+              ]}
+            >
+              ♡
+            </AppText>
+          </View>
+        ))}
       </Animated.View>
     </View>
   );
@@ -208,24 +225,26 @@ const styles = StyleSheet.create({
   checkedText: { color: "#fff", textDecorationLine: "underline" },
   heartMotion: {
     position: "absolute",
+    top: 0,
     right: 0,
-    bottom: "22%",
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heartLayer: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
     left: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   heart: {
-    color: "#fff",
-    fontSize: 92,
-    lineHeight: 105,
     fontWeight: "900",
-    textShadowColor: "#ff1493",
-    textShadowRadius: 12,
-  },
-  heartSmall: {
-    color: "#ff1493",
-    fontSize: 34,
-    lineHeight: 42,
-    fontWeight: "900",
+    textAlign: "center",
+    textShadowColor: "rgba(96,0,128,0.5)",
+    textShadowRadius: 8,
   },
 });

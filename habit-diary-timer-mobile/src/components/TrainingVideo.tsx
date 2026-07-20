@@ -98,7 +98,9 @@ export function TrainingVideo({
   const [trackWidth, setTrackWidth] = useState(1);
   const [markerOffsets, setMarkerOffsets] = useState(() => createRandomMarkerOffsets(markerCount));
   const [mode, setMode] = useState<TrainingMode>("normal");
-  const [slideIndex, setSlideIndex] = useState(0);
+  const [slideIndex, setSlideIndex] = useState(() =>
+    slides.length > 0 ? Math.floor(Math.random() * slides.length) : 0,
+  );
   const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
   const [trainingComment, setTrainingComment] = useState<ConfigurableMessage>(warmupComments[0]);
   const elapsedMilliseconds = useRef(0);
