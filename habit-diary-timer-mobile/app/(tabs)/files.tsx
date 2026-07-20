@@ -16,6 +16,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
+import { useAppAudio } from "@/audio/AudioProvider";
 import {
   fileStorageService,
   formatBytes,
@@ -204,6 +205,11 @@ export default function FilesScreen() {
       ))}
       </View>
       <PrimaryButton
+        title="記録・管理メニューへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/menu")}
+      />
+      <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
@@ -271,6 +277,7 @@ function FileViewer({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { setSessionAudioActive } = useAppAudio();
   const video = /\.mp4$/i.test(file.name);
   const player = useVideoPlayer(
     video ? { uri: file.uri } : null,
@@ -279,6 +286,13 @@ function FileViewer({
       if (video) instance.play();
     },
   );
+
+  useEffect(() => {
+    if (!video) return;
+    setSessionAudioActive(true);
+    return () => setSessionAudioActive(false);
+  }, [setSessionAudioActive, video]);
+
   return (
     <Modal
       visible

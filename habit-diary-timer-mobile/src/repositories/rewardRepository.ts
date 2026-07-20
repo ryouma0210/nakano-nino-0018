@@ -53,6 +53,7 @@ export type RewardRedemption = {
 };
 
 const stgBonus = process.env.EXPO_PUBLIC_APP_ENV === "stg" ? 99999 : 0;
+const pointChangeListeners = new Set<() => void>();
 
 export const pointRepository = {
   award(sourceKey: string, points: number, description: string) {
@@ -60,12 +61,63 @@ export const pointRepository = {
       "INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at) VALUES(?, ?, ?, ?)",
       [sourceKey, points, description, toDateTimeKey()],
     );
-    return result.changes > 0;
+    const awarded = result.changes > 0;
+    if (awarded) pointChangeListeners.forEach((listener) => listener());
+    return awarded;
+  },
+
+  subscribe(listener: () => void) {
+    pointChangeListeners.add(listener);
+    return () => {
+      pointChangeListeners.delete(listener);
+    };
+  },
+
+  /**
+   * 完了記録は保存されたもののポイント行だけ作成されなかった旧データを補完する。
+   * source_key は UNIQUE のため、既に付与済みのポイントは重複しない。
+   */
+  reconcileCompletionAwards() {
+    const now = toDateTimeKey();
+    const resetAt = queryOne<{ setting_value: string }>(
+      "SELECT setting_value FROM app_settings WHERE setting_key='points_reset_at'",
+    )?.setting_value ?? "";
+    transaction(() => {
+      execute(
+        `INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at)
+         SELECT 'daily-order:' || record_date, 1, '本日の命令を完了',
+                COALESCE(created_at, ?)
+           FROM journals
+          WHERE title = '本日の命令記録'
+            AND created_at > ?`,
+        [now, resetAt],
+      );
+      execute(
+        `INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at)
+         SELECT 'training:' || record_date, 5, '本日初回の調教を完了',
+                MIN(COALESCE(created_at, ?))
+           FROM journals
+          WHERE title = '調教完了記録'
+            AND created_at > ?
+          GROUP BY record_date`,
+        [now, resetAt],
+      );
+      execute(
+        `INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at)
+         SELECT 'management-task:' || id, 10, '射精管理の本日の命令を完了',
+                COALESCE(completed_at, ?)
+           FROM management_daily_tasks
+          WHERE completed_at IS NOT NULL
+            AND completed_at > ?`,
+        [now, resetAt],
+      );
+    });
   },
 };
 
 export const rewardRepository = {
   balance() {
+    pointRepository.reconcileCompletionAwards();
     const activityPoints =
       queryOne<{ total: number }>(
         "SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions",

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
@@ -12,6 +12,7 @@ import { Screen } from "@/components/Screen";
 import {
   rewardCatalog,
   rewardRepository,
+  pointRepository,
   type RandomRewardKey,
   type RewardRedemption,
 } from "@/repositories/rewardRepository";
@@ -78,6 +79,7 @@ export default function RewardsScreen() {
     setAcquired(rewardRepository.acquired());
   }, []);
   useFocusEffect(reload);
+  useEffect(() => pointRepository.subscribe(reload), [reload]);
   const acquiredVideoNames = new Set(
     acquired
       .filter((item) => item.reward_key === "video")
@@ -299,6 +301,11 @@ export default function RewardsScreen() {
         />
       </Card>
 
+      <PrimaryButton
+        title="記録・管理メニューへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/menu")}
+      />
       <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"

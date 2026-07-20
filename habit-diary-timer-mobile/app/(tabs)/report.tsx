@@ -87,6 +87,11 @@ export default function ReportScreen() {
       />
 
       <PrimaryButton
+        title="記録・管理メニューへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/menu")}
+      />
+      <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
