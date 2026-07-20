@@ -19,7 +19,8 @@
           "photosPermission": "ご褒美動画を表示するため、写真と動画へのアクセスを使用します。",
           "savePhotosPermission": "ご褒美動画を端末へ保存するため、写真と動画への保存を使用します。"
         }
-      ]
+      ],
+      "expo-image"
     ],
     "ios": {
       "supportsTablet": false,

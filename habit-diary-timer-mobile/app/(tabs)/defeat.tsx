@@ -20,13 +20,13 @@ import { defeatRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
 const heartLayers = [
-  { size: 360, color: "#b000ff" },
-  { size: 310, color: "#fff" },
-  { size: 260, color: "#c52cff" },
-  { size: 210, color: "#fff" },
-  { size: 160, color: "#df5cff" },
-  { size: 110, color: "#fff" },
-  { size: 60, color: "#f08cff" },
+  { size: 820, color: "#b000ff" },
+  { size: 700, color: "#fff" },
+  { size: 580, color: "#c52cff" },
+  { size: 460, color: "#fff" },
+  { size: 340, color: "#df5cff" },
+  { size: 220, color: "#fff" },
+  { size: 100, color: "#f08cff" },
 ] as const;
 
 export default function DefeatScreen() {
@@ -37,7 +37,7 @@ export default function DefeatScreen() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [completed, setCompleted] = useState(false);
   const heartOpacity = useRef(new Animated.Value(0)).current;
-  const heartScale = useRef(new Animated.Value(0.65)).current;
+  const heartScale = useRef(new Animated.Value(0.55)).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -68,7 +68,7 @@ export default function DefeatScreen() {
   useEffect(() => {
     function showHeart() {
       heartOpacity.setValue(0);
-      heartScale.setValue(0.65);
+      heartScale.setValue(0.55);
       Animated.parallel([
         Animated.sequence([
           Animated.timing(heartOpacity, {
@@ -84,7 +84,7 @@ export default function DefeatScreen() {
           }),
         ]),
         Animated.timing(heartScale, {
-          toValue: 1.15,
+          toValue: 1.25,
           duration: 1650,
           useNativeDriver: true,
         }),
@@ -141,7 +141,7 @@ export default function DefeatScreen() {
           </AppText>
           <AppText style={styles.dateText}>{formatDateJa(toDateKey())}</AppText>
           <AppText style={styles.whiteText}>
-            項目を一つずつ認めて、強制的にチェックしなさい♡
+            項目を一つずつ、チンピクしながらチェックしなさい♡{"\n"}
             一度付けたチェックは外せないわよ♡
           </AppText>
           {defeatChecklistMessages.map((item) => (
@@ -165,7 +165,7 @@ export default function DefeatScreen() {
           ))}
         </Card>
         <PrimaryButton
-          title={completed ? "本日は完全敗北済み♡" : "完全敗北を認めます♡"}
+          title={completed ? "完全敗北済み♡" : "完全敗北を認めます♡"}
           tone="defeat"
           disabled={!allChecked || completed}
           onPress={complete}

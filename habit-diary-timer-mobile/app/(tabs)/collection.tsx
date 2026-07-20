@@ -285,18 +285,9 @@ function formatRewardText(item: RewardRedemption, playerName: string) {
 }
 
 function CollectionVideo({ item }: { item: RewardRedemption }) {
-  const insets = useSafeAreaInsets();
   const { showNotice } = useAppModal();
   const [visible, setVisible] = useState(false);
   const bundled = rewardVideos.find((video) => video.name === item.reward_content);
-  const player = useVideoPlayer(bundled?.module ?? null, (instance) => {
-    instance.loop = true;
-  });
-
-  useEffect(() => {
-    if (visible) player.play();
-    else player.pause();
-  }, [player, visible]);
 
   async function save() {
     try {
@@ -338,35 +329,54 @@ function CollectionVideo({ item }: { item: RewardRedemption }) {
           onPress={save}
         />
       </View>
-      <Modal
-        visible={visible}
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setVisible(false)}
-      >
-        <View
-          style={[
-            styles.videoModal,
-            {
-              paddingTop: Math.max(12, insets.top),
-              paddingBottom: Math.max(12, insets.bottom),
-            },
-          ]}
-        >
-          <VideoView
-            player={player}
-            style={styles.video}
-            nativeControls
-            contentFit="contain"
-          />
-          <PrimaryButton
-            title="閉じる"
-            tone="secondary"
-            onPress={() => setVisible(false)}
-          />
-        </View>
-      </Modal>
+      {visible && bundled ? (
+        <CollectionVideoPlayer
+          module={bundled.module}
+          onClose={() => setVisible(false)}
+        />
+      ) : null}
     </View>
+  );
+}
+
+function CollectionVideoPlayer({
+  module,
+  onClose,
+}: {
+  module: number;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const player = useVideoPlayer(module, (instance) => {
+    instance.loop = true;
+    instance.play();
+  });
+
+  return (
+    <Modal
+      visible
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View
+        style={[
+          styles.videoModal,
+          {
+            paddingTop: Math.max(12, insets.top),
+            paddingBottom: Math.max(12, insets.bottom),
+          },
+        ]}
+      >
+        <VideoView
+          player={player}
+          style={styles.video}
+          nativeControls
+          contentFit="contain"
+        />
+        <PrimaryButton title="閉じる" tone="secondary" onPress={onClose} />
+      </View>
+    </Modal>
   );
 }
 

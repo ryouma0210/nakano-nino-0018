@@ -223,7 +223,7 @@ export function TrainingVideo({
       const mediaDuration = storedMode
         ? Math.max(1, slides.length * 10)
         : player.duration || 0;
-      const rhythmTime = elapsed * selectedMode.rate;
+      const rhythmTime = Math.max(0, elapsed - 3) * selectedMode.rate;
       const nextGaugeProgress = (rhythmTime % 5) / 5;
       const commentSlot = Math.floor(elapsed / 10);
       if (activelyPlaying && commentSlot !== lastCommentSlot.current) {
@@ -232,7 +232,7 @@ export function TrainingVideo({
       }
       setCurrentTime(mediaDuration > 0 ? mediaTime % mediaDuration : 0);
       setDuration(mediaDuration);
-      if (activelyPlaying) {
+      if (activelyPlaying && elapsed >= 3) {
         const reachedTarget = markerOffsets.some((offset) => {
           const previousPhase = (previousGaugeProgress.current + offset) % 1;
           const nextPhase = (nextGaugeProgress + offset) % 1;
@@ -336,7 +336,7 @@ export function TrainingVideo({
       >
         <View style={styles.line} />
         <View style={styles.hitPoint} />
-        {Array.from({ length: markerCount }, (_, index) => {
+        {(!started || sessionElapsedSeconds >= 3) && Array.from({ length: markerCount }, (_, index) => {
           const phase = (gaugeProgress + markerOffsets[index]) % 1;
           const travelWidth = Math.max(0, trackWidth - 56);
           const left = 26 + (1 - phase) * travelWidth;

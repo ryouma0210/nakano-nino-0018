@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Image as NativeImage, Modal, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import {
+  createVideoPlayer,
+  useVideoPlayer,
+  VideoView,
+  type VideoThumbnail as GeneratedVideoThumbnail,
+} from "expo-video";
+import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -22,11 +28,67 @@ export default function FilesScreen() {
   const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [selected, setSelected] = useState<StoredFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
+  const [videoThumbnails, setVideoThumbnails] = useState<
+    Record<string, GeneratedVideoThumbnail>
+  >({});
+  const videoThumbnailsRef = useRef<Record<string, GeneratedVideoThumbnail>>({});
   const load = useCallback(() => {
     fileStorageService.list().then(setFiles);
   }, []);
-  useEffect(load, [load]);
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      fileStorageService.list().then((nextFiles) => {
+        if (active) setFiles(nextFiles);
+      });
+      return () => {
+        active = false;
+        setSelected(null);
+        setPendingDelete(null);
+        setFiles([]);
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    let active = true;
+    const generated: Record<string, GeneratedVideoThumbnail> = {};
+
+    async function generateSequentially() {
+      const videos = files.filter((file) => /\.mp4$/i.test(file.name));
+      for (const file of videos) {
+        if (!active) break;
+        const player = createVideoPlayer({ uri: file.uri });
+        try {
+          const [thumbnail] = await player.generateThumbnailsAsync(0.1, {
+            maxWidth: 480,
+          });
+          if (!thumbnail) continue;
+          if (!active) {
+            thumbnail.release();
+            break;
+          }
+          generated[file.uri] = thumbnail;
+          videoThumbnailsRef.current = { ...generated };
+          setVideoThumbnails({ ...generated });
+        } catch (error) {
+          console.warn(`動画サムネイルを生成できませんでした: ${file.name}`, error);
+        } finally {
+          player.release();
+        }
+      }
+    }
+
+    generateSequentially();
+    return () => {
+      active = false;
+      Object.values(videoThumbnailsRef.current).forEach((thumbnail) =>
+        thumbnail.release(),
+      );
+      videoThumbnailsRef.current = {};
+      setVideoThumbnails({});
+    };
+  }, [files]);
 
   async function upload(purpose: "training" | "punishment") {
     if (await fileStorageService.pickAndStore(purpose)) load();
@@ -39,7 +101,7 @@ export default function FilesScreen() {
   const visibleFiles = files.filter(
     (file) => purposeFilter === "all" || file.purpose === purposeFilter,
   );
-  const tileWidth = columns === 1 ? "100%" : columns === 2 ? "48.8%" : "31.7%";
+  const tileWidth = columns === 1 ? "100%" : columns === 2 ? "47.5%" : "31%";
 
   return (
     <Screen>
@@ -112,12 +174,12 @@ export default function FilesScreen() {
           >
             {/\.(png|jpe?g|webp|gif)$/i.test(file.name) ? (
               <View style={styles.thumbnailWrap}>
-                <Image source={{ uri: file.uri }} style={styles.thumbnail} resizeMode="contain" />
+                <NativeImage source={{ uri: file.uri }} style={styles.thumbnail} resizeMode="contain" />
                 <FileLabel label={`格納ファイル ${index + 1}/${visibleFiles.length}`} />
               </View>
             ) : /\.mp4$/i.test(file.name) ? (
               <VideoThumbnail
-                file={file}
+                thumbnail={videoThumbnails[file.uri]}
                 label={`格納ファイル ${index + 1}/${visibleFiles.length}`}
               />
             ) : (
@@ -176,23 +238,26 @@ function FileLabel({ label }: { label: string }) {
   );
 }
 
-function VideoThumbnail({ file, label }: { file: StoredFile; label: string }) {
-  const player = useVideoPlayer({ uri: file.uri }, (instance) => {
-    instance.loop = false;
-    instance.muted = true;
-    instance.volume = 0;
-    instance.currentTime = 0.1;
-    instance.pause();
-  });
-
+function VideoThumbnail({
+  thumbnail,
+  label,
+}: {
+  thumbnail?: GeneratedVideoThumbnail;
+  label: string;
+}) {
   return (
     <View style={styles.thumbnailWrap} pointerEvents="none">
-      <VideoView
-        player={player}
-        style={styles.thumbnail}
-        nativeControls={false}
-        contentFit="contain"
-      />
+      {thumbnail ? (
+        <ExpoImage
+          source={thumbnail}
+          style={styles.thumbnail}
+          contentFit="contain"
+        />
+      ) : (
+        <View style={[styles.thumbnail, styles.thumbnailLoading]}>
+          <AppText style={styles.thumbnailLoadingText}>読込中</AppText>
+        </View>
+      )}
       <FileLabel label={label} />
     </View>
   );
@@ -240,7 +305,7 @@ function FileViewer({
               contentFit="contain"
             />
           ) : (
-            <Image
+            <NativeImage
               source={{ uri: file.uri }}
               style={styles.fullMedia}
               resizeMode="contain"
@@ -293,6 +358,8 @@ const styles = StyleSheet.create({
   previewWide: { aspectRatio: 16 / 9 },
   previewSquare: { aspectRatio: 1 },
   thumbnail: { width: "100%", height: "100%" },
+  thumbnailLoading: { alignItems: "center", justifyContent: "center" },
+  thumbnailLoadingText: { color: "#888", fontSize: 9, fontWeight: "800" },
   thumbnailWrap: { width: "100%", height: "100%" },
   videoLabel: {
     position: "absolute",
