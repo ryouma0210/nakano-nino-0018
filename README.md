@@ -1,330 +1,355 @@
-# nakano-nino-0018
+# Nino Room
 
-## 習慣・記録・タイマー
+会話形式で各部屋のイベントを進め、チェック、調教、お仕置き、射精管理、ポイント、ご褒美などを端末内へ記録するスマートフォン向けローカルアプリです。
 
-React Native / Expo / TypeScript で作成した、スマートフォン向けのローカル完結アプリです。
+アプリ本体は `habit-diary-timer-mobile/` にあります。
 
-アプリ本体:
+## 現在の構成
 
-```text
-habit-diary-timer-mobile/
-```
-
-## 機能
-
-- 習慣管理
-- 日記・記録
-- タイマー・リマインダー
-- ローカル通知
-- JSONエクスポート / インポート
-- 端末内 SQLite 保存
-
-## 方針
-
-- API、バックエンド、MySQLは使用しません。
-- データは端末内に保存します。
-- 通信がない状態でも利用できます。
-- AndroidはAPK、iPhoneはTestFlight配布を想定します。
-- READMEはこの外側のファイルに集約し、各フォルダごとのREADMEは作成しません。
-
-## ブランチ運用
-
-| ブランチ | 用途 | APK作成 |
-|---|---|---|
-| `main` | ローカル開発用 | なし |
-| `stg` | STG確認用 | push時にGitHub Actionsで作成 |
-| `production` | 本番確認・配布用 | push時にGitHub Actionsで作成 |
-
-通常は `main` で開発します。
-STG確認する場合は `main` の内容を `stg` へ反映します。
-本番確認・配布する場合は確認済みの内容を `production` へ反映します。
-
-```powershell
-git checkout main
-git pull origin main
-git checkout stg
-git merge main
-git push origin stg
-```
-
-`stg` または `production` にpushすると、GitHub Actionsの `Build Android APK` が実行されます。
-`main` にpushしてもAPKは作成されません。
-
-## 使用技術
-
-| 区分 | 内容 |
+| 項目 | 内容 |
 |---|---|
-| Framework | Expo / React Native |
+| アプリ名 | Nino Room |
+| アプリバージョン | 0.1.0 |
+| パッケージID | `jp.local.habitdiarytimer` |
+| Framework | Expo SDK 57 / React Native 0.86 |
 | Language | TypeScript |
-| Routing | Expo Router |
-| Form | React Hook Form / Zod |
-| DB | expo-sqlite |
-| Local storage | AsyncStorage |
-| Notification | expo-notifications |
-| Feedback | expo-haptics / expo-av |
+| 画面向き | 縦画面固定 |
+| データ保存 | SQLite、AsyncStorage、アプリ専用ファイル領域 |
+| 通信 | 通常利用では不要 |
+| Android配布 | Release APK |
+| iOS配布 | EAS / TestFlight設定のみ。現時点では実機配布未検証 |
 
-## 画面
+## 主な特徴
 
-| 画面 | 内容 |
+- 二ノとのタップ式会話
+- 設定した名前を使った呼びかけ
+- 契約成立後だけ表示される赤文字の専用会話
+- 日付単位の敗北・準備チェック
+- 本日の命令、射精管理、調教、お仕置きの自動記録
+- 調教・お仕置き用に分けた画像／動画の端末内格納
+- リズムゲージ、効果音、ループ音声
+- ポイント獲得、ご褒美交換、コレクション
+- 称号・実績、週間報告、記録カレンダー
+- オフライン動作
+
+## 画面一覧
+
+| 画面 | 現在の内容 |
 |---|---|
-| ホーム | 今日の習慣、達成率、直近の日記、タイマー導線 |
-| 習慣の部屋 | 習慣の登録、達成記録、連続日数、詳細表示 |
-| 日記の部屋 | 記録の登録、検索、タグ、簡易カレンダー |
-| 集中の部屋 | プリセット開始、一時停止、延長、履歴 |
-| 準備の部屋 | 通知、表示、エクスポート、インポート、初期化 |
+| スタート | 「始める」「設定（サウンドのみ）」「ゲーム終了」、アプリバージョンを表示 |
+| ホーム | 各部屋と記録・管理メニューへの入口。契約後は専用会話を追加 |
+| 敗北部屋 | 契約者限定。日付単位の強制チェック、専用音声、同心ハート演出、調教日記への保存 |
+| 準備部屋 | 必須・任意項目の確認、準備用動画と音声、日付単位の保存 |
+| 本日の命令部屋 | 日付単位でランダム命令を固定。完了で1pt |
+| 調教部屋 | デフォルト動画または調教用格納ファイル、難易度別リズムゲージ、コメント、完了秒数を保存。1日初回5pt |
+| 射精管理部屋 | 貞操帯あり／なしを選択。サイコロの目×3日で期間を決定し、日次指示と最終日指示を保存。1日完了10pt |
+| お仕置き部屋 | デフォルト動画またはお仕置き用格納ファイル、時間指定、ランダム速度、指示コメント、ギブアップ、実施時間の保存 |
+| 契約部屋 | 解除不可の契約、契約者サイン、契約日、契約ルール、追加ルールを表示 |
+| 記録・管理メニュー | 週間報告、調教日記、ファイル格納、コレクション、ご褒美、設定への入口 |
+| 週間報告 | 本日、直近7日、月単位の調教回数、管理日数、獲得ポイントを集計 |
+| 調教日記 | 月別カレンダー、過去日選択、検索、日付単位削除、種類別の色付き記録カード |
+| ファイル格納 | 調教用／お仕置き用にファイルを格納。用途絞り込み、1・2・3列表示、サムネイル、鑑賞、削除、容量表示 |
+| ご褒美 | 所持Pt順ではなく交換Pt順にカタログ表示し、共通確認モーダルから交換 |
+| コレクション | 称号、契約書・契約ルール、獲得済みコメント、動画、ボイスを閲覧・再生・保存 |
+| 設定 | 名前、BGM、効果音、音量、ファイル使用量、スタート画面への移動、全データ初期化 |
 
-## 部屋テーマ
+## 敗北部屋
 
-ホーム画面には各機能へ移動する部屋カードを表示します。
-見た目はシミュレーションゲームのホーム画面を意識し、キャラパネル、会話ウィンドウ、ステータス、場所選択カードで構成します。
-イベント進行バーは、今日の達成率に応じて現在地点が進む演出にしています。
+敗北部屋は契約成立後に解放されます。
 
-| 部屋 | 用途 |
+チェック項目:
+
+- 準備部屋で全てのチェック項目を完了すること。
+- 調教を5回受けること♡
+- お仕置き部屋で60分以上受けること♡
+- 私に直接お貢ぎすること♡
+
+一度付けたチェックは画面上から外せません。記録は日付単位で調教日記へ保存され、通常の日付一括削除では削除されません。
+
+## 契約
+
+契約成立後は契約を解除できません。契約者サインは後から変更できます。
+
+基本ルール:
+
+- 私の命令は絶対服従すること。
+- 私の許可なしに射精しないこと。
+- 私のATMになること。
+- 調教を受ける際は、首輪を着用すること。
+- 調教を受ける際は、貞操帯を着用すること。（任意）
+
+追加ルール:
+
+- お仕置きは最低30分受けること。
+- 敗北部屋を解放する。
+- 各画面に契約者向けコメントを追加する。（赤文字表記）
+
+## 調教・お仕置きメディア
+
+調教用ファイルとお仕置き用ファイルは別フォルダで管理します。
+
+| 種類 | 再生ルール |
 |---|---|
-| 習慣の部屋 | 毎日の小さな行動を育てる |
-| 日記の部屋 | 気持ちや出来事をしまう |
-| 集中の部屋 | 作業と休憩を切り替える |
-| 準備の部屋 | 通知や保存方法を整える |
+| デフォルト動画 | 3回再生後、次の動画へ |
+| 格納動画 | 1回再生後、次のファイルへ |
+| 格納画像 | 10秒後、次のファイルへ |
+| 動画音声 | 常にミュート |
+| 最初の格納ファイル | 画像・動画を含む全候補からランダム選択 |
+
+調教のゲージ速度は、イージー1倍、ノーマル3倍、ハード5倍です。動画自体の再生速度は変えません。
+
+お仕置きは、契約前は最低1分、契約後は最低30分です。上限は設けていません。開始後30秒は0.5倍で、その後は0.5倍、1倍、3倍、5倍からランダムに変化します。
+
+## 調教日記
+
+同日の記録は次の順で表示します。
+
+1. 敗北部屋
+2. 準備部屋
+3. 本日の命令
+4. 射精管理
+5. 調教（時刻昇順）
+6. お仕置き（時刻昇順）
+
+外枠色:
+
+| 記録 | 色 |
+|---|---|
+| 敗北部屋 | ピンク |
+| 準備部屋 | 黄緑 |
+| 本日の命令 | 水色 |
+| 射精管理 | オレンジ |
+| 調教 | 薄い紫 |
+| お仕置き | 赤 |
+
+敗北部屋、本日の命令、射精管理は削除不可です。準備部屋と敗北部屋のチェック記録は既存項目を削除できず、画面上に定義された未チェック項目だけを追加できます。全項目がチェック済みの場合、追加保存はできません。
+
+## ポイント・ご褒美
+
+ポイント獲得:
+
+| 条件 | Pt |
+|---|---:|
+| 本日の命令を完了 | 1pt |
+| 調教部屋を完了（1日初回） | 5pt |
+| 射精管理の1日分を完了 | 10pt |
+| STG環境のテストボーナス | 99,999pt |
+
+お仕置き部屋ではポイントを付与しません。
+
+交換:
+
+| ご褒美 | 使用Pt | 備考 |
+|---|---:|---|
+| 罵倒コメント | 10pt | 未獲得の内容からランダム |
+| 称賛コメント | 50pt | 未獲得の内容からランダム。名前呼びあり |
+| ご褒美動画 | 500pt | 同梱動画から1本。交換済みは候補から非表示 |
+| 鬼畜の調教命令 | 1,000pt | 未獲得の内容からランダム |
+| 好きボイス3秒 | 5,000pt | 音声のみ。コレクションでループ再生・保存 |
+| 秘密 | 10,000pt | Ptがあれば何度でも交換可能 |
+
+## 音声
+
+- 通常BGMは `kyouhunomori.mp4` に統一しています。
+- 調教・お仕置きなどのセッション音声中はBGMを停止します。
+- 準備部屋、敗北部屋、調教開始音はループ再生します。
+- BGM、効果音、各音量は設定から変更できます。
+- 同梱画像・動画の音声は無効です。
+
+## 対応端末・OS
+
+最終更新: 2026-07-20
+
+このプロジェクトはExpo SDK 57を使用しています。最低OSを `app.json` で上書きしていないため、Expo SDK 57の標準対応範囲が基準です。Expo公式のSDK一覧では、SDK 57はAndroid 7以降、iOS 16.4以降を対象とし、Androidの `compileSdkVersion` / `targetSdkVersion` は36です。
+
+参考:
+
+- [Expo SDK 57の対応OSとSDKバージョン](https://docs.expo.dev/versions/latest/)
+- [Expo FAQ: Android / iOS対応バージョン](https://docs.expo.dev/faq/)
+
+### 対応範囲
+
+| 端末 | OS | 状態 |
+|---|---|---|
+| Androidスマートフォン | Android 7.0以上 | APKの技術上の対応範囲。主な配布対象 |
+| Androidスマートフォン | Android 13以上 | 通知利用時に通知権限の許可が必要 |
+| iPhone | iOS 16.4以上 | SDK上は対応。iOSビルド・TestFlight・実機動作は未検証 |
+| Androidエミュレータ | Android 7.0以上 | 開発確認に利用可能。動画・音声は実機確認推奨 |
+| iOSシミュレータ | iOS 16.4以上 | macOSが必要。現時点では未検証 |
+
+### 非対応または動作保証外
+
+| 端末 | 理由 |
+|---|---|
+| Android 6.0以前 | Expo SDK 57の最低対応OS未満 |
+| iOS 16.3以前のiPhone | Expo SDK 57の最低対応OS未満 |
+| iPad | `ios.supportsTablet` が `false`。配布・レイアウトとも対象外 |
+| iPhoneへのAPK直接インストール | APKはAndroid専用。iPhoneにはIPA/TestFlightが必要 |
+| Android TV / Google TV | タッチ操作と縦画面前提。TV UI・リモコン操作未対応 |
+| Wear OS / Apple Watch | スマートウォッチ向けアプリではない |
+| Windows / macOSネイティブ | デスクトップアプリとしてビルドしていない |
+| Webブラウザ | 開発スクリプトはあるが、SQLite、ファイル、メディア保存などを含む正式動作は未検証 |
+| 折りたたみ端末・Androidタブレット・Chromebook | インストールできる可能性はあるが、縦画面スマートフォン以外のレイアウトは未検証 |
+| 極端に小さい画面・独自フォント端末 | 文字倍率の影響は抑制済みだが、全機種の表示保証はしていない |
+
+### 実機確認について
+
+対応OSであっても、端末メーカー、画面比率、メモリ容量、動画コーデック、Androidの省電力設定により挙動が変わる場合があります。特に以下は実機で確認してください。
+
+- アプリの初回起動
+- 画像・MP4の表示
+- BGMと効果音の同時制御
+- ファイル選択と端末への保存
+- 長時間のお仕置きタイマー
+- 画面上部・下部のセーフエリア
+
+現在、機種名単位の正式な検証済み端末一覧は管理していません。そのため「Android 7以上」はSDK上の対応範囲であり、すべてのAndroid 7端末での動作保証を意味しません。検証した機種は今後このREADMEへ追記します。
+
+## データ保存
+
+アプリはローカル完結です。
+
+- SQLite DB: `habit_diary_timer.db`
+- 設定: AsyncStorage
+- 格納ファイル: アプリ専用領域の `private-room-files/training` と `private-room-files/punishment`
+- サーバー同期: なし
+- アカウント認証: なし
+- 端末変更時の自動移行: なし
+- アプリ削除時: OSの仕様によりアプリ内データも削除
 
 ## DB
 
-SQLiteに次のテーブルを作成します。
+現在のスキーマバージョンは4です。
 
-| テーブル | 内容 |
+| テーブル | 用途 |
 |---|---|
+| `schema_migrations` | DBバージョン |
 | `habits` | 習慣マスタ |
 | `habit_schedules` | 習慣予定 |
 | `habit_records` | 習慣実績 |
-| `journals` | 日記・記録 |
-| `tags` | タグ |
-| `journal_tags` | 日記とタグの紐づけ |
+| `journals` | 敗北、準備、命令、管理、調教、お仕置き、手動日記 |
+| `tags` / `journal_tags` | タグ管理 |
 | `timer_presets` | タイマープリセット |
-| `timer_histories` | タイマー履歴 |
-| `app_settings` | アプリ設定 |
+| `timer_histories` | お仕置き実施履歴 |
+| `app_settings` | 汎用設定テーブル |
+| `preparation_records` | 日付単位の準備チェック |
+| `management_cycles` | 射精管理期間 |
+| `management_daily_tasks` | 日次・最終日指示 |
+| `reward_redemptions` | 交換済みご褒美 |
+| `point_transactions` | ポイント獲得履歴 |
 
-## ローカル手順
+AsyncStorageではサウンド、音量、名前、契約、本日の命令などを管理します。
 
-### 1. 必要なもの
+## 外部API・通信
 
-- Node.js
-- npm
-- Git
-- Expo Goを入れたスマートフォン
+アプリ本体は独自バックエンド、Google Drive API、AI APIを呼び出しません。通常利用はオフラインです。
 
-Androidエミュレータで確認する場合のみ、追加でAndroid Studio、Android SDK、Android Emulatorが必要です。
+| モジュール | 用途 | 通信 |
+|---|---|---|
+| `expo-sqlite` | 記録、ポイント、実績 | なし |
+| AsyncStorage | 設定、契約 | なし |
+| `expo-audio` | BGM、音声、効果音 | なし |
+| `expo-video` | 同梱・格納動画 | なし |
+| `expo-document-picker` | ファイル選択 | なし |
+| `expo-file-system` | コピー、削除、容量計算 | なし |
+| `expo-media-library` | 獲得動画・音声の端末保存 | なし |
+| `expo-sharing` | OS共有画面への受け渡し | 共有先による |
+| `expo-notifications` | ローカル通知 | なし |
+| `expo-haptics` | 振動フィードバック | なし |
 
-### 2. 初回セットアップ
+Google Driveはアプリ機能ではなく、GitHub Actionsが完成したAPKを配置するためだけに使用します。
+
+## 開発環境
+
+Expo SDK 57の最低Node.jsバージョンは22.13.xです。Node.js 22 LTSを使用してください。
 
 ```powershell
 cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
 npm install
-```
-
-### 3. ローカル起動
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
 npx expo start -c
 ```
 
-起動後、ターミナルに表示されるQRコードをExpo Goで読み込みます。
-
-スマートフォン側で `Failed to download remote update` が表示される場合は、PCとスマートフォンの通信が届いていません。
-その場合はトンネル接続で起動します。
+接続できない場合:
 
 ```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
 npm run tunnel
 ```
 
-トンネル接続用の `@expo/ngrok` は、このプロジェクトの開発依存に追加済みです。
-もしインストール確認や `CommandError: Install @expo/ngrok@^4.1.0 and try again` が表示された場合は、次を実行してから同じコマンドを再実行します。
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-npm install
-npm run tunnel
-```
-
-### 4. Expo Goで確認
-
-1. PCとスマートフォンを同じWi-Fiに接続する。
-2. `C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile` で `npx expo start -c` を実行する。
-3. 表示されたQRコードをExpo Goで読み込む。
-4. エラーが出た場合はExpo Goの `Log` または `View error log` を確認する。
-
-### 5. Androidエミュレータで確認
-
-Android Studio、Android SDK、Android Emulatorが必要です。
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-npm run android
-```
-
-Android SDKが見つからない場合は、`ANDROID_HOME` を設定します。
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-$env:ANDROID_HOME="C:\Users\ryoum\AppData\Local\Android\Sdk"
-$env:Path="$env:ANDROID_HOME\platform-tools;$env:ANDROID_HOME\emulator;$env:Path"
-npm run android
-```
-
-Android SDKを入れていない場合、`npm run android` は失敗します。
-その場合は `npx expo start -c` とExpo Goで確認します。
-
-### 6. iPhoneシミュレータで確認
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-npm run ios
-```
-
-iPhoneシミュレータはmacOS環境が必要です。WindowsではExpo Goで確認します。
-
-### 7. ローカル検証
+検証:
 
 ```powershell
 npm run typecheck
 npm run lint
 ```
 
-## 本番運用手順
-
-### 1. 本番前チェック
+Androidエミュレータ:
 
 ```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-npm install
-npm run typecheck
-npm run lint
-npx expo export --platform android --output-dir .expo-test
+npm run android
 ```
 
-`.expo-test` は確認用の生成物です。Gitへコミットしません。
+iOSシミュレータはmacOSが必要です。WindowsではiPhoneシミュレータを起動できません。
 
-### 2. バージョン更新
+## APKビルド・配布
 
-配布前に `habit-diary-timer-mobile/app.json` の `version` を更新します。
+`stg` または `production` ブランチへのpushで `.github/workflows/build-android-apk.yml` が実行されます。
 
-```json
-{
-  "expo": {
-    "version": "0.1.0"
-  }
-}
-```
+| ブランチ | 環境 | APK名 | 備考 |
+|---|---|---|---|
+| `main` | 開発 | なし | 自動ビルドなし |
+| `stg` | STG | `nino-stg.apk` | 99,999ptのテストボーナスあり |
+| `production` | PRD | `nino-prd.apk` | 本番配布用 |
 
-Android / iOS のビルド番号を運用する場合は、`android.versionCode` と `ios.buildNumber` も追加して管理します。
+処理内容:
 
-### 3. APK作成
+1. Node.js 22 / Java 17 / Android SDKを準備
+2. `npm ci --legacy-peer-deps`
+3. TypeScriptとESLintを検証
+4. Expo PrebuildでAndroidプロジェクトを生成
+5. JavaScript bundle同梱のRelease APKを作成
+6. GitHub Artifactへ保存
+7. rcloneでGoogle DriveのSTG／PRDフォルダへ上書き保存
 
-APK確認は、GitHub Actionsで作成します。
-`stg` または `production` にpushするとビルドが実行され、完了後にArtifactsからAPKをダウンロードできます。
+Google DriveアップロードにはRepository secret `GDRIVE_RCLONE_CONFIG_BASE64` が必要です。
 
-GitHubでの操作:
+## インストール時の注意
 
-1. GitHubのリポジトリを開く。
-2. `Actions` を開く。
-3. `Build Android APK` を選択する。
-4. 自動実行されていない場合は `Run workflow` を押し、対象ブランチに `stg` または `production` を選ぶ。
-5. 実行完了後、画面下部の `Artifacts` から `habit-diary-timer-mobile-stg-apk` または `habit-diary-timer-mobile-production-apk` をダウンロードする。
-6. ZIPを展開し、`app-debug.apk` をAndroid端末へ入れる。
-
-このAPKは動作確認用のDebug APKです。
-Android端末へ入れる場合は、端末側で提供元不明アプリのインストール許可が必要です。
-
-GitHub Actionsは次のファイルで管理します。
-
-```text
-.github/workflows/build-android-apk.yml
-```
-
-EAS Buildを使う場合は、ExpoのビルドページからAPKを直接ダウンロードできます。
-
-初回のみExpoアカウントへログインします。
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-npx eas login
-```
-
-APKを作成します。
-
-```powershell
-cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
-npm run build:android-apk
-```
-
-完了するとターミナルにEASのビルドURLが表示されます。
-そのURLを開き、`Download` からAPKをダウンロードします。
-
-Android端末へ入れる方法:
-
-- PCでAPKをダウンロードして、USBやGoogle Driveなどでスマートフォンへ送る
-- スマートフォンでEASのビルドURLを開いてAPKを直接ダウンロードする
-- GitHub ReleasesへAPKを添付して、そこからダウンロードする
-
-GitHub Releasesへの添付は任意です。
-配布先を固定したい場合や、バージョンごとのAPKを残したい場合に使います。
-
-### 4. TestFlight
-
-Apple Developer Program、App Store Connect、EASの設定後に実行します。
-
-```powershell
-npm run build:ios-testflight
-```
-
-TestFlight配布はApple Developer Programへの登録が必要です。
-
-### 5. 配布後確認
-
-- 初回起動できること
-- 習慣を登録できること
-- 習慣を達成できること
-- 日記・記録を登録できること
-- タイマーを開始、完了できること
-- 通知権限を許可できること
-- JSONエクスポートができること
-- JSONインポートができること
-
-### 6. データ運用
-
-このアプリはローカル完結です。
-
-- サーバー同期はありません。
-- 端末を変更すると、データは自動移行されません。
-- データ移行は設定画面のJSONエクスポート / インポートで行います。
-- アプリ削除時は端末内データも削除されます。
-
-### 7. 障害時の対応
-
-- Expo Go確認時のエラーは `npx expo start -c` でキャッシュを消して再起動します。
-- 端末内データが不整合になった場合は、設定画面から初期化します。
-- 配布版で問題が出た場合は、修正版をビルドして再配布します。
-
-## エクスポート / インポート
-
-設定画面からJSONファイルを出力できます。
-
-- 追加取込: 既存データを残して取り込み
-- 置換取込: 既存データを削除して取り込み
+- APKはAndroid専用です。
+- Google Play外から入れる場合、ブラウザまたはファイル管理アプリに「不明なアプリのインストール」許可が必要です。
+- 旧APKから上書き更新するには、同じパッケージIDと署名鍵でビルドされている必要があります。
+- 署名が異なるAPKは上書きできないため、旧版をアンインストールする必要があります。その場合、ローカルデータは失われます。
+- Release APKはMetro接続不要です。`Unable to load script` が出るAPKはJavaScript bundleが同梱されていない不正なビルドです。
 
 ## トラブルシュート
 
-| 症状 | 確認 |
+| 症状 | 対応 |
 |---|---|
-| 通知が出ない | 設定画面で通知権限を確認 |
-| データが見えない | 設定画面で初期化後、再起動 |
-| Expo Goでエラーになる | `C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile` で `npx expo start -c` を実行し、Expo Go側も再読み込み |
-| `Failed to download remote update` | PCとスマートフォンが同じWi-Fiか確認。直らない場合は `npm install` 後に `npm run tunnel` で起動 |
-| `package.json does not exist` | ルートではなく `habit-diary-timer-mobile` フォルダへ移動してから実行 |
-| APKビルドに失敗 | `npx eas login` と `eas.json` を確認 |
-| iOS配布に失敗 | Apple Developer Program と Bundle ID を確認 |
+| 起動エラー | 画面上の詳細エラーを確認し、再起動。必要なら設定から初期化 |
+| Expo Goで接続できない | `npx expo start -c`。改善しなければ `npm run tunnel` |
+| APKをインストールできない | Android 7以上、空き容量、不明なアプリの許可、署名不一致を確認 |
+| 動画が表示されない | MP4を使用し、端末がコーデックを再生できるか確認 |
+| 音が小さい | 効果音音量と端末メディア音量を確認。元音源の音量差にも注意 |
+| ファイルを保存できない | 写真・動画へのアクセス許可と端末空き容量を確認 |
+| APKビルドがJava heap spaceで失敗 | WorkflowのGradleメモリ設定と同時worker数を確認 |
+| Google Driveアップロード失敗 | `GDRIVE_RCLONE_CONFIG_BASE64` とrclone remote名 `gdrive` を確認 |
 
-## 開発メモ
+## キャラクター画像
 
-まずはローカル完結のMVPとして実装しています。
-将来的にクラウド同期が必要になった場合も、DB層をリポジトリに分けているため、同期処理を追加しやすい構成です。
+キャラクター画像は、参考画像をそのまま複製せず、ピンクのボブヘア、青い瞳、左右の黒いリボン、各部屋の配色と雰囲気を文章化して生成したオリジナルのアプリ用素材です。
+
+主な格納先:
+
+```text
+habit-diary-timer-mobile/assets/characters/
+```
+
+各画面では `RoomConversation` の `characterSource` へ画像を渡し、`contain` 表示で顔や全身が切れにくい構成にしています。敗北部屋は、赤い玉座と見下ろす視線を使った専用画像 `defeat-nino.png` を使用します。
+
+## 現在の制約
+
+- クラウド同期はありません。
+- AI会話は実装していません。
+- iOS配布とiOS実機動作は未検証です。
+- JSONエクスポート／インポートの旧サービスは現行画面へ接続していません。
+- 機種ごとの検証済み一覧はまだありません。
+- 端末メーカー固有の省電力制御や動画コーデック差までは保証していません。

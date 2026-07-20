@@ -4,9 +4,13 @@ import type { AppSettings } from "@/types/models";
 const SETTINGS_KEY = "habit-diary-timer:settings";
 
 export const defaultSettings: AppSettings = {
+  playerName: "マゾ",
   darkMode: false,
+  backgroundMusicEnabled: true,
   notificationsEnabled: true,
   soundEnabled: true,
+  musicVolume: 0.35,
+  soundVolume: 0.7,
   vibrationEnabled: true,
   weekStartsOn: "monday",
   dateFormat: "yyyy/mm/dd",

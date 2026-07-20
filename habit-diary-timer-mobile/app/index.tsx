@@ -1,5 +1,96 @@
-import { Redirect } from "expo-router";
+import { useState } from "react";
+import { BackHandler, Image, Platform, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
+import Constants from "expo-constants";
+import { AppText } from "@/components/AppText";
+import { PrimaryButton } from "@/components/PrimaryButton";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { Screen } from "@/components/Screen";
+import { lightTheme } from "@/constants/theme";
+import { useAppModal } from "@/components/AppModalProvider";
 
 export default function Index() {
-  return <Redirect href="/(tabs)" />;
+  const [exitConfirmation, setExitConfirmation] = useState(false);
+  const { showNotice } = useAppModal();
+
+  function exitGame() {
+    if (Platform.OS === "android") BackHandler.exitApp();
+    else
+      showNotice(
+        "ゲーム終了",
+        "iOSではアプリを閉じる操作は端末側から行ってください。",
+      );
+  }
+
+  return (
+    <Screen>
+      <View style={styles.start}>
+        <AppText style={styles.title}>PRIVATE ROOM</AppText>
+        <Image
+          source={require("../assets/characters/home-nino.png")}
+          style={styles.hero}
+          resizeMode="contain"
+        />
+        <View style={styles.menu}>
+          <PrimaryButton
+            title="始める"
+            tone="secondary"
+            onPress={() => router.replace("/(tabs)")}
+          />
+          <PrimaryButton
+            title="設定"
+            onPress={() => router.push("/sound-settings")}
+          />
+          <PrimaryButton
+            title="ゲーム終了"
+            onPress={() => setExitConfirmation(true)}
+            tone="danger"
+          />
+        </View>
+        <AppText style={styles.version}>
+          Ver:{Constants.expoConfig?.version ?? "-"}
+        </AppText>
+      </View>
+      <ConfirmModal
+        visible={exitConfirmation}
+        title="ゲームを終了しますか？"
+        message="アプリを終了してスタート画面を閉じます。"
+        confirmLabel="終了する"
+        confirmTone="danger"
+        onCancel={() => setExitConfirmation(false)}
+        onConfirm={() => {
+          setExitConfirmation(false);
+          exitGame();
+        }}
+      />
+    </Screen>
+  );
 }
+
+const styles = StyleSheet.create({
+  start: { minHeight: 620, justifyContent: "center", gap: 24 },
+  title: {
+    color: lightTheme.text,
+    fontSize: 34,
+    lineHeight: 46,
+    fontWeight: "900",
+    letterSpacing: 5,
+    textAlign: "center",
+  },
+  hero: {
+    width: "100%",
+    height: 430,
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 4,
+    backgroundColor: "#000",
+  },
+  menu: { gap: 16 },
+  version: {
+    alignSelf: "flex-end",
+    color: lightTheme.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+});

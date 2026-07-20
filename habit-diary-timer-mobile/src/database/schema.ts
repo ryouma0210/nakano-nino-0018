@@ -1,7 +1,7 @@
 import { db, execute, queryOne, transaction } from "./client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 4;
 
 function createMetaTable() {
   execute(`
@@ -28,7 +28,6 @@ function setVersion(nextVersion: number) {
 
 function migrateToV1() {
   db.execSync(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS habits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -146,39 +145,85 @@ function migrateToV1() {
   `);
 }
 
+function migrateToV2() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS preparation_records (
+      record_date TEXT PRIMARY KEY,
+      checks_json TEXT NOT NULL,
+      completed_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS management_cycles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mode TEXT NOT NULL,
+      dice INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS management_daily_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cycle_id INTEGER NOT NULL,
+      record_date TEXT NOT NULL,
+      instruction TEXT NOT NULL,
+      completed_at TEXT,
+      UNIQUE(cycle_id, record_date),
+      FOREIGN KEY(cycle_id) REFERENCES management_cycles(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_management_cycles_mode ON management_cycles(mode, is_active);
+    CREATE INDEX IF NOT EXISTS idx_management_tasks_date ON management_daily_tasks(record_date);
+    DELETE FROM habits WHERE name IN ('水を飲む', '運動する', '読書する', '早く寝る', '日記を書く');
+  `);
+}
+
+function migrateToV3() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS reward_redemptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reward_key TEXT NOT NULL,
+      reward_name TEXT NOT NULL,
+      points_spent INTEGER NOT NULL,
+      redeemed_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reward_redemptions_date ON reward_redemptions(redeemed_at);
+  `);
+}
+
+function migrateToV4() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS point_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_key TEXT NOT NULL UNIQUE,
+      points INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    ALTER TABLE reward_redemptions ADD COLUMN reward_content TEXT;
+    ALTER TABLE reward_redemptions ADD COLUMN file_uri TEXT;
+    CREATE INDEX IF NOT EXISTS idx_point_transactions_date ON point_transactions(created_at);
+  `);
+}
+
 function seedInitialData() {
-  const existing = queryOne<{ count: number }>("SELECT COUNT(*) AS count FROM habits")?.count ?? 0;
-  if (existing > 0) return;
   const now = toDateTimeKey();
   const today = toDateKey();
-  const habits = [
-    ["水を飲む", "体調", "water", "#4385ed", 8],
-    ["運動する", "健康", "fitness", "#2f8b72", 1],
-    ["読書する", "学習", "book", "#8fce3f", 1],
-    ["早く寝る", "睡眠", "moon", "#7b8581", 1],
-    ["日記を書く", "記録", "pencil", "#f0a11a", 1],
-  ];
-  habits.forEach(([name, category, icon, color, target], index) => {
-    execute(
-      `INSERT INTO habits(name, description, category, icon, color, frequency_type, target_count, start_date, reminder_enabled, display_order, is_active, created_at, updated_at)
-       VALUES(?, ?, ?, ?, ?, 'daily', ?, ?, 0, ?, 1, ?, ?)`,
-      [name, `${name}を続ける`, category, icon, color, target, today, index + 1, now, now],
-    );
-  });
   const timers = [
     ["集中25分", "focus", 1500, 1500, 300, 1],
     ["休憩5分", "break", 300, null, 300, 1],
     ["集中50分", "focus", 3000, 3000, 600, 1],
     ["自由タイマー10分", "custom", 600, null, null, 1],
   ];
-  timers.forEach(([name, type, duration, focus, breakSeconds, setCount]) => {
+  const existingTimers = queryOne<{ count: number }>("SELECT COUNT(*) AS count FROM timer_presets")?.count ?? 0;
+  if (existingTimers === 0) timers.forEach(([name, type, duration, focus, breakSeconds, setCount]) => {
     execute(
       `INSERT INTO timer_presets(name, timer_type, duration_seconds, focus_seconds, break_seconds, set_count, sound_enabled, vibration_enabled, auto_start, is_favorite, created_at, updated_at)
        VALUES(?, ?, ?, ?, ?, ?, 1, 1, 0, 0, ?, ?)`,
       [name, type, duration, focus, breakSeconds, setCount, now, now],
     );
   });
-  execute(
+  const existingJournals = queryOne<{ count: number }>("SELECT COUNT(*) AS count FROM journals")?.count ?? 0;
+  if (existingJournals === 0) execute(
     `INSERT INTO journals(record_date, record_time, title, body, record_type, mood, rating, is_favorite, tags, created_at, updated_at)
      VALUES(?, '21:00', 'はじめての記録', '今日から習慣と日記を記録します。', 'diary', 'good', 4, 1, '開始,サンプル', ?, ?)`,
     [today, now, now],
@@ -186,10 +231,23 @@ function seedInitialData() {
 }
 
 export function initializeDatabase() {
+  db.execSync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
   createMetaTable();
   transaction(() => {
     if (version() < 1) {
       migrateToV1();
+      setVersion(1);
+    }
+    if (version() < 2) {
+      migrateToV2();
+      setVersion(2);
+    }
+    if (version() < 3) {
+      migrateToV3();
+      setVersion(3);
+    }
+    if (version() < 4) {
+      migrateToV4();
       setVersion(DATABASE_VERSION);
     }
     seedInitialData();

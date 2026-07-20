@@ -112,9 +112,13 @@ export type TimerHistory = {
 };
 
 export type AppSettings = {
+  playerName: string;
   darkMode: boolean;
+  backgroundMusicEnabled: boolean;
   notificationsEnabled: boolean;
   soundEnabled: boolean;
+  musicVolume: number;
+  soundVolume: number;
   vibrationEnabled: boolean;
   weekStartsOn: "sunday" | "monday";
   dateFormat: "yyyy/mm/dd" | "yyyy-mm-dd";
