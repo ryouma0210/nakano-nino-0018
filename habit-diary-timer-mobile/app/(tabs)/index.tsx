@@ -1,13 +1,16 @@
+import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
+import { contractService } from "@/services/gameRoomService";
 
 const rooms = [
+  ["敗北部屋", "/(tabs)/defeat"],
   ["準備部屋", "/(tabs)/preparation"],
   ["本日の命令部屋", "/(tabs)/orders"],
   ["調教部屋", "/(tabs)/habits"],
@@ -18,6 +21,18 @@ const rooms = [
 ] as const;
 
 export default function HomeScreen() {
+  const [contractSigned, setContractSigned] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      contractService.load().then((contract) => {
+        if (active) setContractSigned(Boolean(contract.signedAt));
+      });
+      return () => { active = false; };
+    }, []),
+  );
+
   return (
     <Screen>
       <View style={styles.header}>
@@ -36,10 +51,13 @@ export default function HomeScreen() {
           <View key={href} style={styles.roomRow}>
             <View style={styles.button}>
               <PrimaryButton
-                title={title}
+                title={href === "/(tabs)/defeat" && !contractSigned ? "敗北部屋　※未開放" : title}
+                disabled={href === "/(tabs)/defeat" && !contractSigned}
                 tone={
-                  href === "/(tabs)/timer"
-                    ? "danger"
+                  href === "/(tabs)/defeat"
+                    ? "defeat"
+                    : href === "/(tabs)/timer"
+                    ? "punishment"
                     : href === "/(tabs)/contract"
                       ? "contract"
                       : href === "/(tabs)/menu"

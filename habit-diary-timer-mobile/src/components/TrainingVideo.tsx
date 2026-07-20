@@ -31,6 +31,10 @@ function selectRandomVideoIndex(excludeIndex?: number) {
   return candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
 }
 
+function isStoredVideo(file?: StoredFile) {
+  return Boolean(file && /\.mp4$/i.test(file.name));
+}
+
 const markerCount = 3;
 
 function createRandomMarkerOffsets(
@@ -103,7 +107,9 @@ export function TrainingVideo({
   const lastCommentSlot = useRef(-1);
   const videoLoopCount = useRef(0);
   const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
-  const slideMode = slides.length > 0;
+  const storedMode = slides.length > 0;
+  const currentStoredFile = slides[slideIndex % Math.max(1, slides.length)];
+  const showingStoredVideo = storedMode && isStoredVideo(currentStoredFile);
   const player = useVideoPlayer(defaultVideos[0], (instance) => {
     instance.loop = false;
     instance.muted = true;
@@ -143,7 +149,13 @@ export function TrainingVideo({
   }, []);
 
   useEventListener(player, "playToEnd", () => {
-    if (slideMode || !started) return;
+    if (!started) return;
+    if (storedMode) {
+      videoLoopCount.current = 0;
+      setSlideIndex((index) => (index + 1) % slides.length);
+      showRandomComment();
+      return;
+    }
     if (videoLoopCount.current < 2) {
       videoLoopCount.current += 1;
       player.replay();
@@ -165,18 +177,48 @@ export function TrainingVideo({
   });
 
   useEffect(() => {
+    if (!storedMode || !showingStoredVideo || !currentStoredFile) return;
+    player
+      .replaceAsync({ uri: currentStoredFile.uri })
+      .then(() => {
+        player.muted = true;
+        player.volume = 0;
+        player.playbackRate = 1;
+        if (started) player.play();
+        else {
+          player.currentTime = 0.1;
+          player.pause();
+        }
+      })
+      .catch(console.error);
+  }, [currentStoredFile, player, showingStoredVideo, started, storedMode]);
+
+  useEffect(() => {
+    if (!started || !storedMode || showingStoredVideo || slides.length === 0) return;
+    const timer = setInterval(() => {
+      setSlideIndex((index) => (index + 1) % slides.length);
+      showRandomComment();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [showRandomComment, showingStoredVideo, slides.length, started, storedMode]);
+
+  useEffect(() => {
     lastTick.current = Date.now();
     const timer = setInterval(() => {
       const now = Date.now();
-      const activelyPlaying = slideMode ? playing : player.playing;
+      const activelyPlaying = storedMode
+        ? showingStoredVideo
+          ? player.playing
+          : playing
+        : player.playing;
       if (activelyPlaying)
         elapsedMilliseconds.current += now - lastTick.current;
       lastTick.current = now;
       const selectedMode = modes.find((item) => item.key === mode) ?? modes[1];
       const elapsed = elapsedMilliseconds.current / 1000;
       setSessionElapsedSeconds(Math.floor(elapsed));
-      const mediaTime = slideMode ? elapsed : player.currentTime || 0;
-      const mediaDuration = slideMode
+      const mediaTime = storedMode ? elapsed : player.currentTime || 0;
+      const mediaDuration = storedMode
         ? Math.max(1, slides.length * 10)
         : player.duration || 0;
       const rhythmTime = elapsed * selectedMode.rate;
@@ -198,11 +240,10 @@ export function TrainingVideo({
       }
       previousGaugeProgress.current = nextGaugeProgress;
       setGaugeProgress(nextGaugeProgress);
-      if (slideMode) setSlideIndex(Math.floor(mediaTime / 10) % slides.length);
-      if (!slideMode) setPlaying(player.playing);
+      if (!storedMode) setPlaying(player.playing);
     }, 50);
     return () => clearInterval(timer);
-  }, [markerOffsets, mode, player, playEffect, playing, showRandomComment, slideMode, slides.length]);
+  }, [markerOffsets, mode, player, playEffect, playing, showRandomComment, showingStoredVideo, slides.length, storedMode]);
 
   function startTraining() {
     elapsedMilliseconds.current = 0;
@@ -216,11 +257,21 @@ export function TrainingVideo({
     setSessionAudioActive(true);
     playEffect("trainingStart");
     setStarted(true);
-    if (!slideMode) {
+    if (!storedMode) {
       const firstVideoIndex = selectRandomVideoIndex();
       setDefaultVideoIndex(firstVideoIndex);
       player
         .replaceAsync(defaultVideos[firstVideoIndex])
+        .then(() => {
+          player.muted = true;
+          player.volume = 0;
+          player.playbackRate = 1;
+          player.play();
+        })
+        .catch(console.error);
+    } else if (showingStoredVideo && currentStoredFile) {
+      player
+        .replaceAsync({ uri: currentStoredFile.uri })
         .then(() => {
           player.muted = true;
           player.volume = 0;
@@ -234,7 +285,7 @@ export function TrainingVideo({
 
   function completeTraining() {
     if (!started) return;
-    if (!slideMode) player.pause();
+    if (!storedMode || showingStoredVideo) player.pause();
     setPlaying(false);
     setStarted(false);
     stopEffect("trainingStart");
@@ -250,7 +301,7 @@ export function TrainingVideo({
     });
   }
 
-  const media = slideMode ? (
+  const media = storedMode && !showingStoredVideo ? (
     <Image
       source={{ uri: slides[slideIndex]?.uri }}
       style={started ? styles.fullscreenMedia : styles.video}
@@ -347,8 +398,8 @@ export function TrainingVideo({
       {media}
       <View style={styles.mediaBadge}>
         <AppText style={styles.mediaBadgeText}>
-          {slideMode
-            ? `SLIDE ${slideIndex + 1}/${slides.length}`
+          {storedMode
+            ? `格納ファイル ${slideIndex + 1}/${slides.length}`
             : `DEFAULT VIDEO ${defaultVideoIndex + 1}/${defaultVideos.length}`}
         </AppText>
       </View>

@@ -33,7 +33,7 @@ const defaultLines: ConversationLine[] = [
 
 export function RoomConversation({
   roomName,
-  lines = defaultLines,
+  lines,
   contractLines = [],
   characterSource,
 }: Props) {
@@ -53,11 +53,17 @@ export function RoomConversation({
     }, []),
   );
 
-  const visibleLines = contractSigned ? [...lines, ...contractLines] : lines;
+  const normalLines = lines ?? (contractLines.length > 0 ? [] : defaultLines);
+  const contractOnly = normalLines.length === 0 && contractLines.length > 0;
+  const visibleLines = contractOnly
+    ? contractLines
+    : contractSigned
+      ? [...normalLines, ...contractLines]
+      : normalLines;
   const safeIndex = Math.min(index, visibleLines.length - 1);
   const current = visibleLines[safeIndex];
   const isLast = safeIndex === visibleLines.length - 1;
-  const isContractLine = contractSigned && safeIndex >= lines.length;
+  const isContractLine = contractOnly || (contractSigned && safeIndex >= normalLines.length);
   const isContractRoom = roomName === "契約部屋";
   const playerName = settings?.playerName.trim() ?? "";
   const message =

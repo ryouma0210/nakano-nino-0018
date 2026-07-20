@@ -64,7 +64,7 @@ export default function ReportScreen() {
         characterSource={require("../../assets/characters/diary-nino.png")}
         roomName="週間報告部屋"
         lines={[
-          ...roomMessages.report.lines,
+          ...(roomMessages.report.lines ?? []),
           { text: evaluation(reports.week, "week"), withName: true },
         ]}
         contractLines={roomMessages.report.contractLines}

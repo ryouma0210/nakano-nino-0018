@@ -101,7 +101,7 @@ export default function SettingsScreen() {
         <View style={styles.audioRow}>
           <View style={styles.audioText}>
             <AppText>部屋のBGM</AppText>
-            <AppText variant="muted">画面ごとのBGMを再生します。</AppText>
+            <AppText variant="muted">通常画面の共通BGMを再生します。</AppText>
           </View>
           <Switch
             value={Boolean(settings?.backgroundMusicEnabled)}

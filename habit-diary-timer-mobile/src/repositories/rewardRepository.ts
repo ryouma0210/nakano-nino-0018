@@ -27,6 +27,12 @@ export const rewardCatalog = {
     cost: 1000,
     contents: rewardBrutalOrderMessages.map((message) => message.text),
   },
+  voice: {
+    key: "voice",
+    name: "好きボイス3秒♡",
+    cost: 5000,
+    content: "二ノの好きボイス3秒",
+  },
   secret: {
     key: "secret",
     name: "秘密♡交換時のお楽しみ♡",
@@ -121,6 +127,28 @@ export const rewardRepository = {
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('video', ?, ?, ?, ?)",
         [reward.name, reward.cost, name, toDateTimeKey()],
+      );
+      redeemed = true;
+    });
+    return redeemed;
+  },
+
+  hasRedeemed(key: string) {
+    return (queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM reward_redemptions WHERE reward_key=?",
+      [key],
+    )?.count ?? 0) > 0;
+  },
+
+  redeemVoice() {
+    const reward = rewardCatalog.voice;
+    let redeemed = false;
+    transaction(() => {
+      if (this.hasRedeemed(reward.key)) return;
+      if (this.balance().available < reward.cost) return;
+      execute(
+        "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES(?, ?, ?, ?, ?)",
+        [reward.key, reward.name, reward.cost, reward.content, toDateTimeKey()],
       );
       redeemed = true;
     });
