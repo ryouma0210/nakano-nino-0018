@@ -9,6 +9,8 @@ type Props = {
     | "primary"
     | "secondary"
     | "danger"
+    | "punishment"
+    | "defeat"
     | "contract"
     | "preparation"
     | "order"
@@ -21,6 +23,7 @@ type Props = {
 
 export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Props) {
   const { playEffect } = useAppAudio();
+  const darkNavigation = title === "ホームへ戻る" || title === "スタート画面に移動";
   function press() {
     playEffect("button");
     onPress();
@@ -32,6 +35,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
       style={({ pressed }) => [
         styles.button,
         styles[tone],
+        darkNavigation && styles.darkNavigation,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -40,6 +44,8 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         styles.text,
         tone === "secondary" && styles.secondaryText,
         tone === "danger" && styles.dangerText,
+        tone === "punishment" && styles.punishmentText,
+        tone === "defeat" && styles.defeatText,
         tone === "contract" && styles.contractText,
         tone === "preparation" && styles.preparationText,
         tone === "order" && styles.orderText,
@@ -47,6 +53,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "management" && styles.managementText,
         tone === "record" && styles.recordText,
         tone === "reward" && styles.rewardText,
+        darkNavigation && styles.darkNavigationText,
       ]}>{title}</AppText>
     </Pressable>
   );
@@ -73,6 +80,14 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#d9202a",
   },
+  punishment: {
+    borderColor: "#ff3b45",
+    backgroundColor: "#7b2cbf",
+  },
+  defeat: {
+    borderColor: "#fff",
+    backgroundColor: "#ff69b4",
+  },
   contract: {
     borderColor: "#fff",
     backgroundColor: "#7b2cbf",
@@ -87,11 +102,11 @@ const styles = StyleSheet.create({
   },
   training: {
     borderColor: "#fff",
-    backgroundColor: "#6a1b9a",
+    backgroundColor: "#7b2cbf",
   },
   management: {
     borderColor: "#fff",
-    backgroundColor: "#6a1b9a",
+    backgroundColor: "#7b2cbf",
   },
   record: {
     borderColor: "#fff",
@@ -100,6 +115,10 @@ const styles = StyleSheet.create({
   reward: {
     borderColor: "#fff",
     backgroundColor: "#f2c94c",
+  },
+  darkNavigation: {
+    borderColor: "#fff",
+    backgroundColor: "#000",
   },
   disabled: {
     opacity: 0.45,
@@ -115,6 +134,10 @@ const styles = StyleSheet.create({
   dangerText: {
     color: "#fff",
   },
+  punishmentText: {
+    color: "#ff3b45",
+  },
+  defeatText: { color: "#fff" },
   secondaryText: {
     color: "#000",
   },
@@ -127,4 +150,5 @@ const styles = StyleSheet.create({
   managementText: { color: "#fff" },
   recordText: { color: "#fff" },
   rewardText: { color: "#111" },
+  darkNavigationText: { color: "#fff" },
 });

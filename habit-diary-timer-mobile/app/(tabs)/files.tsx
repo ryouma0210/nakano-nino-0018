@@ -18,6 +18,8 @@ import {
 
 export default function FilesScreen() {
   const [files, setFiles] = useState<StoredFile[]>([]);
+  const [purposeFilter, setPurposeFilter] = useState<"all" | "training" | "punishment">("all");
+  const [columns, setColumns] = useState<1 | 3 | 6>(3);
   const [selected, setSelected] = useState<StoredFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
   const load = useCallback(() => {
@@ -33,6 +35,11 @@ export default function FilesScreen() {
   function remove(file: StoredFile) {
     setPendingDelete(file);
   }
+
+  const visibleFiles = files.filter(
+    (file) => purposeFilter === "all" || file.purpose === purposeFilter,
+  );
+  const tileWidth = columns === 1 ? "100%" : columns === 3 ? "31.7%" : "13.8%";
 
   return (
     <Screen>
@@ -54,44 +61,86 @@ export default function FilesScreen() {
       <AppText variant="muted">
         使用量 {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
       </AppText>
+      <Card style={styles.displaySettings}>
+        <AppText variant="label">用途で絞り込み</AppText>
+        <View style={styles.optionRow}>
+          {([
+            ["all", "すべて"],
+            ["training", "調教用"],
+            ["punishment", "お仕置き用"],
+          ] as const).map(([value, label]) => (
+            <Pressable
+              key={value}
+              onPress={() => setPurposeFilter(value)}
+              style={[styles.optionButton, purposeFilter === value && styles.optionButtonSelected]}
+            >
+              <AppText style={[styles.optionText, purposeFilter === value && styles.optionTextSelected]}>
+                {label}
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+        <AppText variant="label">表示サイズ</AppText>
+        <View style={styles.optionRow}>
+          {([1, 3, 6] as const).map((value) => (
+            <Pressable
+              key={value}
+              onPress={() => setColumns(value)}
+              style={[styles.optionButton, columns === value && styles.optionButtonSelected]}
+            >
+              <AppText style={[styles.optionText, columns === value && styles.optionTextSelected]}>
+                {value}列
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+      </Card>
       {files.length === 0 ? (
         <Card>
           <AppText variant="muted">格納されたファイルはありません。</AppText>
         </Card>
       ) : null}
-      {files.map((file) => (
-        <Card key={file.uri}>
-          <Pressable onPress={() => setSelected(file)} style={styles.preview}>
+      {files.length > 0 && visibleFiles.length === 0 ? (
+        <Card><AppText variant="muted">該当するファイルはありません。</AppText></Card>
+      ) : null}
+      <View style={styles.fileGrid}>
+      {visibleFiles.map((file, index) => (
+        <View key={file.uri} style={[styles.fileTile, { width: tileWidth }]}>
+          <Pressable
+            onPress={() => setSelected(file)}
+            style={[styles.preview, columns === 1 ? styles.previewWide : styles.previewSquare]}
+          >
             {/\.(png|jpe?g|webp|gif)$/i.test(file.name) ? (
-              <Image
-                source={{ uri: file.uri }}
-                style={styles.thumbnail}
-                resizeMode="contain"
+              <View style={styles.thumbnailWrap}>
+                <Image source={{ uri: file.uri }} style={styles.thumbnail} resizeMode="contain" />
+                <FileLabel label={`格納ファイル ${index + 1}/${visibleFiles.length}`} />
+              </View>
+            ) : /\.mp4$/i.test(file.name) ? (
+              <VideoThumbnail
+                file={file}
+                label={`格納ファイル ${index + 1}/${visibleFiles.length}`}
               />
             ) : (
               <View style={styles.fileBadge}>
                 <AppText style={styles.fileBadgeText}>
-                  {/\.mp4$/i.test(file.name) ? "▶ VIDEO" : "FILE"}
+                  FILE
                 </AppText>
               </View>
             )}
           </Pressable>
-          <View style={styles.row}>
+          <View style={[styles.row, styles.compactRow]}>
             <View style={styles.grow}>
-              <AppText>{file.name}</AppText>
-              <AppText variant="muted">{formatBytes(file.size)}</AppText>
-              <AppText variant="muted">
-                用途：{file.purpose === "training" ? "調教部屋" : "お仕置き部屋"}
+              <AppText numberOfLines={1} style={styles.compactName}>
+                {file.name}
               </AppText>
             </View>
-            <PrimaryButton
-              title="削除"
-              tone="danger"
-              onPress={() => remove(file)}
-            />
+            <Pressable accessibilityLabel={`${file.name}を削除`} onPress={() => remove(file)} style={styles.compactDelete}>
+              <AppText style={styles.compactDeleteText}>×</AppText>
+            </Pressable>
           </View>
-        </Card>
+        </View>
       ))}
+      </View>
       <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
@@ -116,6 +165,36 @@ export default function FilesScreen() {
         }}
       />
     </Screen>
+  );
+}
+
+function FileLabel({ label }: { label: string }) {
+  return (
+    <View style={styles.videoLabel}>
+      <AppText numberOfLines={1} style={styles.videoLabelText}>{label}</AppText>
+    </View>
+  );
+}
+
+function VideoThumbnail({ file, label }: { file: StoredFile; label: string }) {
+  const player = useVideoPlayer({ uri: file.uri }, (instance) => {
+    instance.loop = false;
+    instance.muted = true;
+    instance.volume = 0;
+    instance.currentTime = 0.1;
+    instance.pause();
+  });
+
+  return (
+    <View style={styles.thumbnailWrap} pointerEvents="none">
+      <VideoView
+        player={player}
+        style={styles.thumbnail}
+        nativeControls={false}
+        contentFit="contain"
+      />
+      <FileLabel label={label} />
+    </View>
   );
 }
 
@@ -177,17 +256,65 @@ function FileViewer({
 const styles = StyleSheet.create({
   uploadButtons: { flexDirection: "row", gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  compactRow: { gap: 4, paddingTop: 5 },
   grow: { flex: 1 },
+  displaySettings: { gap: 8 },
+  optionRow: { flexDirection: "row", gap: 6 },
+  optionButton: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#777",
+    borderRadius: 3,
+    backgroundColor: "#050505",
+  },
+  optionButtonSelected: { borderColor: "#fff", backgroundColor: "#fff" },
+  optionText: { color: "#fff", fontSize: 11, fontWeight: "900" },
+  optionTextSelected: { color: "#000" },
+  fileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  fileTile: {
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 3,
+    padding: 5,
+    backgroundColor: "#090909",
+  },
   preview: {
     width: "100%",
-    height: 180,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#555",
     backgroundColor: "#000",
   },
+  previewWide: { aspectRatio: 16 / 9 },
+  previewSquare: { aspectRatio: 1 },
   thumbnail: { width: "100%", height: "100%" },
+  thumbnailWrap: { width: "100%", height: "100%" },
+  videoLabel: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    borderWidth: 1,
+    borderColor: "#fff",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: "rgba(0,0,0,0.72)",
+  },
+  videoLabelText: { color: "#fff", fontSize: 9, fontWeight: "900" },
+  compactName: { fontSize: 9, lineHeight: 12 },
+  compactDelete: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: "#d9202a",
+  },
+  compactDeleteText: { color: "#fff", fontSize: 14, lineHeight: 18, fontWeight: "900" },
   fileBadge: { alignItems: "center", justifyContent: "center" },
   fileBadgeText: {
     color: "#fff",

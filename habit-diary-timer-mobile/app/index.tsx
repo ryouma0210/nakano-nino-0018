@@ -38,6 +38,10 @@ export default function Index() {
             onPress={() => router.replace("/(tabs)")}
           />
           <PrimaryButton
+            title="設定"
+            onPress={() => router.push("/sound-settings")}
+          />
+          <PrimaryButton
             title="ゲーム終了"
             onPress={() => setExitConfirmation(true)}
             tone="danger"

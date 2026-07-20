@@ -34,57 +34,6 @@ function fade(time, duration, edge = 0.08) {
   return Math.min(1, time / edge, (duration - time) / edge);
 }
 
-function darkDrone(root, tension = 1) {
-  return (time) => {
-    const breath = 0.65 + Math.sin(2 * Math.PI * time / 8) * 0.2;
-    const low = Math.sin(2 * Math.PI * root * time) * 0.07;
-    const fifth = Math.sin(2 * Math.PI * root * 1.5 * time + 0.7) * 0.05;
-    const dissonance = Math.sin(2 * Math.PI * root * (1.059 + tension * 0.008) * time) * 0.04;
-    const audibleLayer = Math.sin(2 * Math.PI * root * 3 * time + 1.2) * 0.035;
-    const pulse = Math.sin(2 * Math.PI * 0.5 * time) > 0.82 ? Math.sin(2 * Math.PI * root * 2 * time) * 0.035 : 0;
-    return (low + fifth + dissonance + audibleLayer + pulse) * breath;
-  };
-}
-
-function musicBox(root, quiet = false) {
-  const notes = [1, 1.2, 1.5, 1.125, 1, 1.334, 1.2, 1.059];
-  return (time) => {
-    const beat = Math.floor(time * 2);
-    const local = (time * 2) % 1;
-    const note = root * notes[beat % notes.length];
-    const decay = Math.exp(-5.2 * local);
-    const bell = Math.sin(2 * Math.PI * note * time) + 0.42 * Math.sin(2 * Math.PI * note * 2.01 * time);
-    const shadow = Math.sin(2 * Math.PI * root / 4 * time) * 0.035;
-    return bell * decay * (quiet ? 0.055 : 0.085) + shadow;
-  };
-}
-
-function dungeonSynth(time) {
-  const roots = [110, 110, 103.83, 92.5];
-  const root = roots[Math.floor(time / 3) % roots.length];
-  const gate = Math.sin(2 * Math.PI * 2 * time) > -0.2 ? 1 : 0.25;
-  return Math.sin(2 * Math.PI * root * time) * 0.09
-    + Math.sin(2 * Math.PI * root * 2 * time) * 0.055
-    + Math.sin(2 * Math.PI * root * 3 * time) * 0.035 * gate;
-}
-
-function tensePulse(time) {
-  const pulse = Math.pow(Math.max(0, Math.sin(2 * Math.PI * 1.5 * time)), 5);
-  return darkDrone(87.3, 1.8)(time) + Math.sin(2 * Math.PI * 174.6 * time) * pulse * 0.075;
-}
-
-function creepyAtmosphere(time) {
-  const scrape = Math.sin(2 * Math.PI * (185 + Math.sin(time * 0.7) * 18) * time) * 0.018;
-  return darkDrone(77.78, 2.4)(time) + scrape * (0.5 + 0.5 * Math.sin(time * 1.3));
-}
-
-writeWav("bgm-start.wav", 12, musicBox(392));
-writeWav("bgm-home.wav", 12, darkDrone(110, 1.2));
-writeWav("bgm-preparation.wav", 12, dungeonSynth);
-writeWav("bgm-training.wav", 12, tensePulse);
-writeWav("bgm-punishment.wav", 12, creepyAtmosphere);
-writeWav("bgm-diary.wav", 12, musicBox(329.63, true));
-writeWav("bgm-system.wav", 12, darkDrone(98, 0.8));
 writeWav("button.wav", 0.12, (t, d) => Math.sin(2 * Math.PI * 660 * t) * 0.3 * fade(t, d, 0.02));
 writeWav("dialogue-next.wav", 0.18, (t, d) => Math.sin(2 * Math.PI * (520 + 700 * t) * t) * 0.25 * fade(t, d, 0.03));
 writeWav("rhythm-hit.wav", 0.14, (t, d) => Math.sin(2 * Math.PI * 880 * t) * 0.32 * fade(t, d, 0.02));

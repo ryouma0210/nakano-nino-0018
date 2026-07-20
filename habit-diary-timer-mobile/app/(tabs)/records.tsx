@@ -16,8 +16,9 @@ import { journalRepository } from "@/repositories/journalRepository";
 import { journalFormSchema, type JournalFormValues } from "@/schemas/forms";
 import type { Journal } from "@/types/models";
 import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
-import { dailyOrderService } from "@/services/gameRoomService";
 import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
+import { dailyOrderService } from "@/services/gameRoomService";
+import { managementRepository } from "@/repositories/roomRepository";
 
 export default function RecordsScreen() {
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -29,6 +30,7 @@ export default function RecordsScreen() {
   });
   const [formVisible, setFormVisible] = useState(false);
   const [editing, setEditing] = useState<Journal | null>(null);
+  const [additionalChecklistItem, setAdditionalChecklistItem] = useState("");
   const [pendingDelete, setPendingDelete] = useState<Journal | null>(null);
   const [pendingDateDelete, setPendingDateDelete] = useState(false);
   const form = useForm<JournalFormValues>({
@@ -45,7 +47,10 @@ export default function RecordsScreen() {
   });
 
   const load = useCallback(() => {
-    setJournals(journalRepository.list(keyword));
+    managementRepository.syncCompletedJournals();
+    dailyOrderService
+      .syncCompletedJournals()
+      .finally(() => setJournals(journalRepository.list(keyword)));
   }, [keyword]);
 
   useEffect(load, [load]);
@@ -55,7 +60,22 @@ export default function RecordsScreen() {
     [journals],
   );
   const displayedJournals = useMemo(
-    () => journals.filter((journal) => journal.record_date === selectedDate),
+    () => journals
+      .filter((journal) => journal.record_date === selectedDate)
+      .sort((left, right) => {
+        const priority = (journal: Journal) => {
+          if (journal.tags?.includes("敗北部屋")) return 0;
+          if (journal.tags?.includes("準備部屋")) return 1;
+          if (journal.tags?.includes("本日の命令")) return 2;
+          if (journal.tags?.includes("射精管理")) return 3;
+          if (journal.tags?.includes("調教") || journal.tags?.includes("射精記録")) return 4;
+          if (journal.tags?.includes("お仕置き")) return 5;
+          return 6;
+        };
+        return priority(left) - priority(right)
+          || left.record_time.localeCompare(right.record_time)
+          || left.id - right.id;
+      }),
     [journals, selectedDate],
   );
   const calendarDays = useMemo(() => {
@@ -73,6 +93,7 @@ export default function RecordsScreen() {
 
   function openCreate() {
     setEditing(null);
+    setAdditionalChecklistItem("");
     form.reset({
       title: "",
       body: "",
@@ -87,6 +108,7 @@ export default function RecordsScreen() {
 
   function openEdit(journal: Journal) {
     setEditing(journal);
+    setAdditionalChecklistItem("");
     form.reset({
       title: journal.title,
       body: journal.body,
@@ -101,7 +123,24 @@ export default function RecordsScreen() {
 
   function save(values: JournalFormValues) {
     if (editing) {
-      journalRepository.update(editing.id, values);
+      if (isProtectedChecklist(editing)) {
+        const additions = additionalChecklistItem
+          .split("\n")
+          .map((item) => item.trim().replace(/^✅\s*/, ""))
+          .filter(Boolean)
+          .map((item) => `✅ ${item}`);
+        journalRepository.update(editing.id, {
+          ...values,
+          recordDate: editing.record_date,
+          title: editing.title,
+          body: additions.length > 0
+            ? `${editing.body}\n${additions.join("\n")}`
+            : editing.body,
+          tags: editing.tags ?? "",
+        });
+      } else {
+        journalRepository.update(editing.id, values);
+      }
     } else {
       journalRepository.create(values);
     }
@@ -111,6 +150,18 @@ export default function RecordsScreen() {
 
   function remove(journal: Journal) {
     setPendingDelete(journal);
+  }
+
+  function isProtectedChecklist(journal: Journal | null) {
+    return Boolean(
+      journal?.tags?.includes("敗北部屋") || journal?.tags?.includes("準備部屋"),
+    );
+  }
+
+  function isImmutableRecord(journal: Journal | null) {
+    return Boolean(
+      journal?.tags?.includes("本日の命令") || journal?.tags?.includes("射精管理"),
+    );
   }
 
   return (
@@ -215,7 +266,8 @@ export default function RecordsScreen() {
           })}
         </View>
         <AppText style={styles.calendarHelp}>
-          選択中：{formatDateJa(selectedDate)}　●は記録のある日です。
+          選択中：{formatDateJa(selectedDate)}{"\n"}
+          ●は記録のある日です。
         </AppText>
       </Card>
 
@@ -247,7 +299,13 @@ export default function RecordsScreen() {
               </View>
               <AppText style={styles.typeBadge}>{journal.record_type}</AppText>
             </View>
-            <AppText numberOfLines={4}>{journal.body}</AppText>
+            <AppText
+              numberOfLines={
+                isProtectedChecklist(journal) || isImmutableRecord(journal) ? undefined : 4
+              }
+            >
+              {journal.body}
+            </AppText>
             <View style={styles.tagRow}>
               {parseTags(journal.tags ?? "").map((tag) => (
                 <AppText key={tag} style={styles.tag}>
@@ -256,16 +314,22 @@ export default function RecordsScreen() {
               ))}
             </View>
             <View style={styles.actions}>
-              <PrimaryButton
-                title="編集"
-                tone="secondary"
-                onPress={() => openEdit(journal)}
-              />
-              <PrimaryButton
-                title="削除"
-                tone="danger"
-                onPress={() => remove(journal)}
-              />
+              {!isImmutableRecord(journal) ? (
+                <PrimaryButton
+                  title="編集"
+                  tone="secondary"
+                  onPress={() => openEdit(journal)}
+                />
+              ) : (
+                <AppText variant="muted">内容固定・削除不可</AppText>
+              )}
+              {!isProtectedChecklist(journal) && !isImmutableRecord(journal) ? (
+                <PrimaryButton
+                  title="削除"
+                  tone="danger"
+                  onPress={() => remove(journal)}
+                />
+              ) : null}
             </View>
           </Card>
         </View>
@@ -292,6 +356,7 @@ export default function RecordsScreen() {
                 label="日付"
                 value={field.value}
                 onChangeText={field.onChange}
+                editable={!isProtectedChecklist(editing)}
                 error={fieldState.error?.message}
               />
             )}
@@ -304,47 +369,66 @@ export default function RecordsScreen() {
                 label="タイトル"
                 value={field.value}
                 onChangeText={field.onChange}
+                editable={!isProtectedChecklist(editing)}
                 error={fieldState.error?.message}
               />
             )}
           />
-          <Controller
-            control={form.control}
-            name="body"
-            render={({ field, fieldState }) => (
+          {isProtectedChecklist(editing) ? (
+            <Card>
+              <AppText variant="label">登録済みの✅項目（変更・削除不可）</AppText>
+              <AppText>{editing?.body}</AppText>
               <TextField
-                label="本文"
-                value={field.value}
-                onChangeText={field.onChange}
+                label="追加する✅項目"
+                value={additionalChecklistItem}
+                onChangeText={setAdditionalChecklistItem}
+                placeholder="追加項目を入力（複数の場合は改行）"
                 multiline
-                error={fieldState.error?.message}
               />
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="rating"
-            render={({ field }) => (
-              <TextField
-                label="評価 1-5"
-                value={String(field.value ?? 3)}
-                onChangeText={field.onChange}
-                keyboardType="number-pad"
+            </Card>
+          ) : (
+            <Controller
+              control={form.control}
+              name="body"
+              render={({ field, fieldState }) => (
+                <TextField
+                  label="本文"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  multiline
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+          )}
+          {!isProtectedChecklist(editing) ? (
+            <>
+              <Controller
+                control={form.control}
+                name="rating"
+                render={({ field }) => (
+                  <TextField
+                    label="評価 1-5"
+                    value={String(field.value ?? 3)}
+                    onChangeText={field.onChange}
+                    keyboardType="number-pad"
+                  />
+                )}
               />
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="tags"
-            render={({ field }) => (
-              <TextField
-                label="タグ"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="仕事, 体調, 学び"
+              <Controller
+                control={form.control}
+                name="tags"
+                render={({ field }) => (
+                  <TextField
+                    label="タグ"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="仕事, 体調, 学び"
+                  />
+                )}
               />
-            )}
-          />
+            </>
+          ) : null}
           <View style={styles.actions}>
             <PrimaryButton
               title="キャンセル"
@@ -358,14 +442,13 @@ export default function RecordsScreen() {
       <ConfirmModal
         visible={pendingDateDelete}
         title="この日のデータをすべて削除しますか？"
-        message={`${formatDateJa(selectedDate)}\n\nこの日に記録された日記・準備・調教・お仕置き・射精管理・ポイントなどをすべて削除します。\n\nこの操作は元に戻せません。`}
+        message={`${formatDateJa(selectedDate)}\n\n準備・調教・お仕置きなどを削除します。\n敗北部屋、本日の命令、射精管理の固定記録は削除されません。\n\nこの操作は元に戻せません。`}
         confirmLabel="すべて削除"
         confirmTone="danger"
         onCancel={() => setPendingDateDelete(false)}
         onConfirm={async () => {
           setPendingDateDelete(false);
           journalRepository.removeDate(selectedDate);
-          await dailyOrderService.remove(selectedDate);
           load();
         }}
       />

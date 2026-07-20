@@ -265,6 +265,9 @@ export default function TimerScreen() {
             </View>
           ) : null}
         </View>
+        <AppText variant="muted">
+          {"【デフォルト動画】または【格納ファイル】どちらか選択してください。"}
+        </AppText>
       </Card>
       <Card>
         <PunishmentMedia

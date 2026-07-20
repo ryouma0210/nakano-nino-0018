@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -27,6 +27,7 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
 }) {
   const [defaultIndex, setDefaultIndex] = useState(() => randomDefaultIndex());
   const [fileIndex, setFileIndex] = useState(0);
+  const defaultLoopCount = useRef(0);
   const currentFile = files[fileIndex % Math.max(1, files.length)];
   const showingStoredVideo = useStored && isVideo(currentFile);
   const player = useVideoPlayer(defaultVideos[defaultIndex], (instance) => {
@@ -45,10 +46,22 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   }, [files.length, useStored]);
 
   useEventListener(player, "playToEnd", () => {
-    if (active) advance();
+    if (!active) return;
+    if (useStored) {
+      advance();
+      return;
+    }
+    if (defaultLoopCount.current < 2) {
+      defaultLoopCount.current += 1;
+      player.replay();
+      return;
+    }
+    defaultLoopCount.current = 0;
+    advance();
   });
 
   useEffect(() => {
+    defaultLoopCount.current = 0;
     const source = showingStoredVideo && currentFile
       ? { uri: currentFile.uri }
       : defaultVideos[defaultIndex];
@@ -57,7 +70,10 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
       player.volume = 0;
       player.playbackRate = 1;
       if (active) player.play();
-      else player.pause();
+      else {
+        player.currentTime = 0.1;
+        player.pause();
+      }
     }).catch(console.error);
   }, [active, currentFile, defaultIndex, player, showingStoredVideo]);
 

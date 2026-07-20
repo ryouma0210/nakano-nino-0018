@@ -24,7 +24,7 @@ export function formatConfiguredMessage(
 }
 
 type RoomMessages = {
-  lines: ConfigurableMessage[];
+  lines?: ConfigurableMessage[];
   contractLines?: ConfigurableMessage[];
 };
 
@@ -36,18 +36,20 @@ export const roomMessages: Record<string, RoomMessages> = {
       namedMessage("あなたの調教記録は、私がここで見守っているわ。"),
     ],
     contractLines: [
-      namedMessage("おい、マゾ犬。奴隷用の首輪は付けてきたのかしら？"),
-      namedMessage("まだ何もしていないのに、なんで興奮しているのかしら。"),
+      plainMessage("おい、マゾ犬。奴隷用の首輪は付けてきたのかしら？"),
+      plainMessage("まだ何もしていないのに、なんで興奮しているのかしら。"),
       namedMessage("部屋に移動する際は、四つん這いで移動しなさい。"),
     ],
   },
   // 記録・管理メニュー：app/(tabs)/menu.tsx
   menu: {
     lines: [
-      namedMessage("記録の確認や設定は、ここから選びなさい。"),
-      namedMessage("ご褒美の交換も忘れないでね。"),
+      plainMessage("記録の確認や設定は、ここから選びなさい。"),
+      plainMessage("ご褒美の交換も忘れないでね。"),
     ],
-    contractLines: [namedMessage("奴隷としての記録もご褒美も、全部ここで私に管理されるのよ♡")],
+    contractLines: [
+      plainMessage("奴隷としての記録もご褒美も、全部ここで私に管理されるのよ♡")
+    ],
   },
   // 準備部屋：app/(tabs)/preparation.tsx
   preparation: {
@@ -56,28 +58,40 @@ export const roomMessages: Record<string, RoomMessages> = {
       namedMessage("必須項目を全部済ませたら、最後の挨拶よ。"),
     ],
     contractLines: [
-      namedMessage("契約した奴隷なら、首輪を着けて土下座で私を待つのが当然よね♡"),
+      plainMessage("契約した奴隷なら、首輪を着けて土下座で私を待つのが当然よね♡"),
       namedMessage("貞操帯辛い？何もしていないのに、中でパンパンね♡"),
+    ],
+  },
+  // 敗北部屋：app/(tabs)/defeat.tsx（契約者限定）
+  defeat: {
+    contractLines: [
+      plainMessage("弱いマゾ、負けたがりのマゾが最初に入る部屋へよ♡アンタもそうなのかしら？"),
+      namedMessage("アンタ、負けに来たんでしょ？全部にチェックして、今日も完全敗北を認めなさい♡"),
+      namedMessage("乳首カリに合わせて、チンピクしなさい♡"),
+      namedMessage("カリ♡ビクン♡カリカリ♡ビクンビクン♡カリカリカリカリカリカリ♡ほら、チンピクしろ♡"),
+      plainMessage("私に見下ろされるために来たの？本当に従順なマゾ犬ね♡"),
     ],
   },
   // 調教部屋：app/(tabs)/habits.tsx
   training: {
     lines: [
       namedMessage("今日の課題を確認するわ。続けるものを選んで。"),
-      namedMessage("達成した課題は、忘れずに記録して。"),
-      namedMessage("積み重ねた日数は、あなたが続けた証拠よ。"),
+      plainMessage("達成した課題は、忘れずに記録して。"),
+      plainMessage("積み重ねた日数は、あなたが続けた証拠よ。"),
     ],
-    contractLines: [namedMessage("私の奴隷になった以上、許可するまで勝手に逝っちゃダメよ♡")],
+    contractLines: [
+      namedMessage("私の奴隷になった以上、許可するまで勝手に逝っちゃダメよ♡")
+    ],
   },
   // お仕置き部屋：app/(tabs)/timer.tsx
   punishment: {
     lines: [
       namedMessage("時間は自分で決めなさい。"),
-      namedMessage("黒いスペードがピンクの丸へ到達したら、表示された場所へビンタよ。"),
+      plainMessage("黒いスペードがピンクの丸へ到達したら、表示された場所へビンタよ。"),
     ],
     contractLines: [
-      namedMessage("契約済みの奴隷なら、最低30分以上。お仕置きから逃げずに最後まで受けなさい♡"),
-      namedMessage("貞操帯着用している人は、金玉ビンタのみよ♡"),
+      plainMessage("契約済みの奴隷なら、最低30分以上。お仕置きから逃げずに最後まで受けなさい♡"),
+      plainMessage("貞操帯着用している人は、金玉ビンタのみよ♡"),
     ],
   },
   // 射精管理部屋：app/(tabs)/management.tsx
@@ -86,66 +100,80 @@ export const roomMessages: Record<string, RoomMessages> = {
       namedMessage("今日はどちらの管理方法にする？"),
       namedMessage("選んだ方法に合わせて、指示を変えてあげる。"),
     ],
-    contractLines: [namedMessage("契約した奴隷なんだから、もちろん貞操帯付けて受けるわよね♡")],
+    contractLines: [
+      plainMessage("契約した奴隷なんだから、もちろん貞操帯付けて受けるわよね♡")
+    ],
   },
   // 射精管理の実行画面：src/components/ManagementRoom.tsx
   managementSession: {
     lines: [
-      namedMessage("まずサイコロで管理期間を決めるわ。"),
-      namedMessage("最終日までは、毎日違う指示を確認して。"),
+      plainMessage("まずサイコロで管理期間を決めるわ。"),
+      plainMessage("最終日までは、毎日違う指示を確認して。"),
     ],
     contractLines: [
-      namedMessage("契約した奴隷の射精は私の管理下よ。最終日まで勝手なことは禁止♡"),
+      plainMessage("契約した奴隷の射精は私の管理下よ。最終日まで勝手なことは禁止♡"),
     ],
   },
   // 本日の命令部屋：app/(tabs)/orders.tsx
   orders: {
     lines: [
-      namedMessage("今日の命令は一度だけ抽選できるわ。"),
+      plainMessage("今日の命令は一度だけ抽選できるわ。"),
       namedMessage("決まったら、最後まで実行して。"),
     ],
-    contractLines: [namedMessage("契約したんだから、どんな命令でも絶対服従でしょ。返事は『はい、二ノ様』でしょ♡")],
+    contractLines: [
+      plainMessage("契約したんだから、どんな命令でも絶対服従でしょ。返事は『はい、二ノ様』でしょ♡")
+    ],
   },
   // 調教日記部屋：app/(tabs)/records.tsx
   records: {
     lines: [
       namedMessage("今日あったことを、ここに残して。"),
-      namedMessage("気持ちも評価も、正直に書けばいいわ。"),
+      plainMessage("気持ちも評価も、正直に書けばいいわ。"),
       namedMessage("過去の記録は、いつでも読み返せるわよ。"),
     ],
-    contractLines: [namedMessage("奴隷として何をされたか、恥ずかしいことまで全部正直に残しなさい♡")],
+    contractLines: [
+      plainMessage("奴隷として何をされたか、恥ずかしいことまで全部正直に残しなさい♡")
+    ],
   },
   // ファイル格納部屋：app/(tabs)/files.tsx
   files: {
     lines: [
       namedMessage("残しておきたいファイルは、ここへ格納して。"),
-      namedMessage("不要になったものは選んで削除できるわ。"),
+      plainMessage("不要になったものは選んで削除できるわ。"),
     ],
-    contractLines: [namedMessage("奴隷好みのオカズを全部ここに入れなさい♡私に弱点晒せ♡")],
+    contractLines: [
+      plainMessage("奴隷好みのオカズを全部ここに入れなさい♡私に弱点晒せ♡")
+    ],
   },
   // ご褒美部屋：app/(tabs)/rewards.tsx
   rewards: {
     lines: [
-      namedMessage("命令を達成した分だけポイントをあげる。"),
+      plainMessage("命令を達成した分だけポイントをあげる。"),
       namedMessage("貯めたポイントで、好きなご褒美を選びなさい♡"),
     ],
-    contractLines: [namedMessage("契約した奴隷にも、ご主人様からのご褒美は必要よね♡")],
+    contractLines: [
+      plainMessage("契約した奴隷にも、ご主人様からのご褒美は必要よね♡")
+    ],
   },
   // コレクション部屋：app/(tabs)/collection.tsx
   collection: {
     lines: [
       namedMessage("獲得したご褒美と称号を、ここへ集めておいたわ。"),
-      namedMessage("動画もコメントも、好きなときに見返しなさい♡"),
+      plainMessage("動画もコメントも、好きなときに見返しなさい♡"),
     ],
-    contractLines: [namedMessage("契約内容もここに保管してあるわ。忘れたとは言わせないわよ♡")],
+    contractLines: [
+      plainMessage("契約内容もここに保管してあるわ。忘れたとは言わせないわよ♡")
+    ],
   },
   // 称号・実績画面：app/(tabs)/achievements.tsx
   achievements: {
     lines: [
       namedMessage("積み重ねた結果を見せてあげる。"),
-      namedMessage("未獲得の称号も、条件を満たせば解放よ。"),
+      plainMessage("未獲得の称号も、条件を満たせば解放よ。"),
     ],
-    contractLines: [namedMessage("契約後の実績は、あなたがどれだけ従順な奴隷かを示す証拠よ♡")],
+    contractLines: [
+      plainMessage("契約後の実績は、あなたがどれだけ従順な奴隷かを示す証拠よ♡")
+    ],
   },
   // 設定画面：app/(tabs)/settings.tsx
   settings: {
@@ -153,19 +181,25 @@ export const roomMessages: Record<string, RoomMessages> = {
       namedMessage("保存量の確認や初期化は、ここで行えるわ。"),
       namedMessage("初期化したデータは戻せないから、よく確認して。"),
     ],
-    contractLines: [namedMessage("奴隷として積み上げた記録、勝手に消す前によく考えなさい。")],
+    contractLines: [
+      plainMessage("奴隷として積み上げた記録、勝手に消す前によく考えなさい。")
+    ],
   },
   // 契約部屋（契約成立前）：app/(tabs)/contract.tsx
   contract: {
     lines: [
       namedMessage("二ノ様の奴隷になりますか？"),
-      namedMessage("一度奴隷になると、契約を解除できません。"),
+      plainMessage("一度奴隷になると、契約を解除できません。"),
     ],
   },
   // 週間報告部屋：app/(tabs)/report.tsx
   report: {
-    lines: [namedMessage("本日から今月までの記録を、私がまとめて評価してあげる。")],
-    contractLines: [namedMessage("奴隷としての働きは、数字にも残るのよ。毎週きちんと報告を確認しなさい♡")],
+    lines: [
+      namedMessage("本日から今月までの記録を、私がまとめて評価してあげる。")
+    ],
+    contractLines: [
+      plainMessage("奴隷としての働きは、数字にも残るのよ。毎週きちんと報告を確認しなさい♡")
+    ],
   },
 };
 
@@ -173,28 +207,28 @@ export const roomMessages: Record<string, RoomMessages> = {
 export const trainingStageMessages = {
   warmup: [
     namedMessage("リズムを守りなさい♡"),
-    namedMessage("四つん這いで受けると気持ちいいわよ♡"),
-    namedMessage("姿勢を崩さないで♡ゆっくり丁寧に続けなさい♡"),
+    plainMessage("四つん這いで受けると気持ちいいわよ♡"),
+    plainMessage("姿勢を崩さないで♡ゆっくり丁寧に続けなさい♡"),
     namedMessage("私に集中しなさい♡"),
   ],
   training: [
     namedMessage("もっとマゾらしくアヘアへしながら腰振りなさい♡"),
-    namedMessage("根本から先端まで♡カリ首引っ掛けて♡"),
-    namedMessage("何、手緩めているのかしら？もっと強く握りしめて♡"),
-    namedMessage("ばぁ～か♡あぁ～ほ♡ざぁ～こ♡まぁ～ぞ♡変態マゾ死ね♡"),
-    namedMessage("聞こえないわよ？もっと『二ノ様好き♡』って連呼しなさい♡"),
-    namedMessage("なに？もう逝きそうなの？我慢しろ♡変態♡"),
-    namedMessage("ダ～メ♡まだ我慢♡『乳首』もいじりなさい♡カリカリカリ…♡"),
+    plainMessage("根本から先端まで♡カリ首引っ掛けて♡"),
+    plainMessage("何、手緩めているのかしら？もっと強く握りしめて♡"),
+    plainMessage("ばぁ～か♡あぁ～ほ♡ざぁ～こ♡まぁ～ぞ♡変態マゾ死ね♡"),
+    plainMessage("聞こえないわよ？もっと『二ノ様好き♡』って連呼しなさい♡"),
+    plainMessage("なに？もう逝きそうなの？我慢しろ♡変態♡"),
+    plainMessage("ダ～メ♡まだ我慢♡『乳首』もいじりなさい♡カリカリカリ…♡"),
     namedMessage("ふふ♡情けない顔ね♡もっと舌出して、白目向いて『アヘ顔』晒しなさい♡"),
-    namedMessage("我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしなさい♡"),
+    plainMessage("我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしなさい♡"),
     namedMessage("もっと一定の速さで腰を振って、私のリズムについてきなさい♡"),
     namedMessage("手を止める許可なんて出してないわよ♡そのまま続けなさい♡"),
     namedMessage("先端ばかり触ってないで♡根元からゆっくり扱いなさい♡"),
     namedMessage("もっと声を出して♡誰の命令で動いているのか言ってみなさい♡"),
     namedMessage("その情けない顔、ちゃんと私に見せなさい♡隠したらダメよ♡"),
-    namedMessage("右手が疲れたなら左手に替えなさい♡休憩とは言ってないわ♡"),
-    namedMessage("速く♡ゆっくり♡また速く♡私の言葉どおりに切り替えなさい♡"),
-    namedMessage("もう震えているの？まだ終わりじゃないわ♡しっかり耐えなさい♡"),
+    plainMessage("右手が疲れたなら左手に替えなさい♡休憩とは言ってないわ♡"),
+    plainMessage("速く♡ゆっくり♡また速く♡私の言葉どおりに切り替えなさい♡"),
+    plainMessage("もう震えているの？まだ終わりじゃないわ♡しっかり耐えなさい♡"),
     namedMessage("もっと腰を前に出して♡一回ずつ丁寧に数えながら続けなさい♡"),
     namedMessage("目を逸らさないで♡私を見ながら『もっとください』って懇願しなさい♡"),
   ],
@@ -219,24 +253,24 @@ export const trainingStageMessages = {
 // お仕置き部屋の実行中コメント：app/(tabs)/timer.tsx
 export const punishmentSessionMessages = [
   namedMessage("リズムが変わっても逃げちゃダメよ♡"),
-  namedMessage("痛い？辛い？知らないわ、もっと強くやれよ。変態"),
-  namedMessage("何、緩めているの？ちゃんとリズム通りにしなさい♡"),
-  namedMessage("死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡"),
-  namedMessage("精子死ね♡チンポ死ね♡金玉死ね♡マゾ死ね♡"),
+  plainMessage("痛い？辛い？知らないわ、もっと強くやれよ。変態"),
+  plainMessage("何、緩めているの？ちゃんとリズム通りにしなさい♡"),
+  plainMessage("死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡"),
+  plainMessage("精子死ね♡チンポ死ね♡金玉死ね♡マゾ死ね♡"),
   namedMessage("まさかこんなのでお漏らししないわよね♡"),
-  namedMessage("ギブアップしたい？最後まで耐えてみなさい♡"),
-  namedMessage("もっと正確に♡強く狙え♡"),
+  namedMessage("ギブアップしたい？ダメに決まっているでしょｗ最後まで耐えてみなさい♡"),
+  plainMessage("もっと正確に強く狙え♡"),
   namedMessage("痛がるだけじゃダメ。きちんと回数を声に出して数えなさい♡"),
-  namedMessage("私が終わりと言うまで、お仕置きは続くわよ♡"),
+  plainMessage("私が終わりと言うまで、お仕置きは続くわよ♡"),
 ] as const;
 
 // 準備部屋の動画ループコメント：app/(tabs)/preparation.tsx
 export const preparationLoopMessages = [
   plainMessage("ふぅ～～～～～～～♡"),
   namedMessage("ほら、早く勃起させなさい♡"),
-  namedMessage("ふふ♡ビクビクさせてチョロすぎ♡"),
-  namedMessage("まだ足りないの？欲張りね♡"),
-  namedMessage("準備できるまで、何度でもしてあげる♡"),
+  plainMessage("ふふ♡ビクビクさせてチョロすぎ♡"),
+  namedMessage("まだ足りないの？欲張りさんね♡"),
+  plainMessage("準備できるまで、何度でもしてあげる♡"),
   namedMessage("勃起しろ♡チンピクしろ♡"),
 ] as const;
 
@@ -249,6 +283,14 @@ export const preparationChecklistMessages = [
   { text: "3日間以上オナ禁したこと。", required: false },
   { text: "首輪（犬用でも可）を装着していること。", required: false },
   { text: "貞操帯を装着していること。", required: false },
+] as const;
+
+// 敗北部屋の強制チェック項目：app/(tabs)/defeat.tsx
+export const defeatChecklistMessages = [
+  "準備部屋で全てのチェック項目を完了すること。",
+  "調教を5回受けること♡",
+  "お仕置き部屋で60分以上受けること♡",
+  "私に直接お貢ぎすること♡",
 ] as const;
 
 // ご褒美部屋で交換し、コレクション部屋で閲覧する罵倒コメント：
@@ -293,7 +335,7 @@ export const rewardBrutalOrderMessages = [
   plainMessage("60分間、強い刺激1分と完全停止2分を交互に繰り返しなさい。射精しそうになったら停止時間を5分追加よ。"),
   plainMessage("鏡に情けない姿を映しながら寸止めを15回。毎回、自分が二ノ様の奴隷だと声に出しなさい。"),
   plainMessage("首輪を着けたまま膝立ちで30分待機。5分ごとに『もっと厳しくしてください』と10回お願いしなさい。"),
-  plainMessage("乳首を左右交互に45分刺激しなさい。途中で手を止めたら、その時点から15分追加よ。射精は禁止。"),
+  plainMessage("両乳首に選択バサミを装着し、左右交互に45分刺激しなさい。途中で手を止めたら、その時点から15分追加よ。射精は禁止。"),
   plainMessage("土下座の姿勢を保ったまま『私は二ノ様の所有物です』と100回言い、終わったら正座で20分反省しなさい。"),
   plainMessage("弱い刺激だけで60分耐えなさい。絶対に射精せず、10分ごとに現在の我慢度を声に出して報告すること。"),
   plainMessage("寸止め10回、腰振り300回、土下座30回を1セットとして合計3セット。すべて終えてから1000文字以上の反省文を書きなさい。"),
@@ -301,7 +343,7 @@ export const rewardBrutalOrderMessages = [
 
 // ご褒美部屋の秘密交換コメント：app/(tabs)/rewards.tsx
 export const rewardSecretMessages = [
-  plainMessage("調教1回無料プレゼント。私に連絡してきなさい♡"),
+  namedMessage("調教1回無料プレゼント。私に連絡してきなさい♡"),
 ] as const;
 
 export function findRewardMessage(key: string, text: string) {
@@ -328,7 +370,7 @@ export const managementInstructionMessages = {
   ],
   chastity: [
     plainMessage("お仕置き30分＆アナル責め30分"),
-    plainMessage("お仕置き40分＆乳首責めカリカリ20分"),
+    plainMessage("お仕置き40分＆両乳首洗濯バサミ着用"),
     plainMessage("お仕置き30分＆貞操帯越しにシコシコ30分"),
     plainMessage("お仕置き30分＆乳首責めしながらチンピク30分"),
     plainMessage("お仕置き30分＆金玉潰し10分"),

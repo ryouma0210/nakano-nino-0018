@@ -1,5 +1,6 @@
 import { execute, query, queryOne } from "@/database/client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
+import { journalRepository } from "@/repositories/journalRepository";
 
 type CycleDates = { start_date: string; end_date: string };
 type TrainingJournal = { duration_seconds: number | null; body: string };
@@ -19,6 +20,14 @@ export const achievementRepository = {
        VALUES('お仕置き', ?, ?, ?, 'completed', 0, ?)`,
       [now, now, Math.floor(actualSeconds), now],
     );
+    journalRepository.create({
+      recordDate: toDateKey(),
+      title: "お仕置き記録",
+      body: `お仕置き部屋で${Math.floor(actualSeconds)}秒受けました。`,
+      recordType: "diary",
+      tags: "お仕置き,実施記録",
+      durationSeconds: Math.floor(actualSeconds),
+    });
   },
 
   summary() {

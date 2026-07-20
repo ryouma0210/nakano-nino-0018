@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+/* eslint-disable react-hooks/immutability */
+import { useCallback, useEffect, useState } from "react";
 import { Modal, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { useVideoPlayer, VideoView } from "expo-video";
+import { useAudioPlayer } from "expo-audio";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -70,18 +72,26 @@ function unlockedTitles(contract: ContractSettings | null) {
   return [
     ...achievementMessages.training.map((achievement) => ({
       name: achievement.name,
+      condition: achievement.condition,
+      progress: `${value.trainingCount}回 / ${achievement.count}回`,
       unlocked: value.trainingCount >= achievement.count,
     })),
     ...achievementMessages.punishment.map((achievement) => ({
       name: achievement.name,
+      condition: achievement.condition,
+      progress: `${value.punishmentMinutes}分 / ${achievement.minutes}分`,
       unlocked: value.punishmentMinutes >= achievement.minutes,
     })),
     ...achievementMessages.management.map((achievement) => ({
       name: achievement.name,
+      condition: achievement.condition,
+      progress: `${value.managementDays}日 / ${achievement.days}日`,
       unlocked: value.managementDays >= achievement.days,
     })),
     ...achievementMessages.contract.map((achievement) => ({
       name: achievement.name,
+      condition: achievement.condition,
+      progress: `${days}日 / ${achievement.days}日`,
       unlocked: days >= achievement.days,
     })),
   ].filter((title) => title.unlocked);
@@ -99,11 +109,8 @@ export default function CollectionScreen() {
   }, []);
   useFocusEffect(load);
 
-  const videos = rewards.filter((item) => item.reward_key === "video");
-  const praises = rewards.filter((item) => item.reward_key === "praise");
-  const insults = rewards.filter((item) => item.reward_key === "insult");
-  const others = rewards.filter(
-    (item) => !["video", "praise", "insult"].includes(item.reward_key),
+  const sortedRewards = [...rewards].sort(
+    (left, right) => left.points_spent - right.points_spent || left.id - right.id,
   );
   const titles = unlockedTitles(contract);
   const achievements = achievementRepository.summary();
@@ -118,45 +125,20 @@ export default function CollectionScreen() {
         contractLines={roomMessages.collection.contractLines}
       />
 
-      <CollectionSection title="獲得済み動画" empty={videos.length === 0}>
-        {videos.map((item) => (
-          <CollectionVideo key={item.id} item={item} />
-        ))}
-      </CollectionSection>
-
-      <CollectionSection title="称賛コメント" empty={praises.length === 0}>
-        {praises.map((item) => (
-          <RewardText
-            key={item.id}
-            text={formatRewardText(item, playerName)}
-          />
-        ))}
-      </CollectionSection>
-
-      <CollectionSection title="罵倒コメント" empty={insults.length === 0}>
-        {insults.map((item) => (
-          <RewardText key={item.id} text={formatRewardText(item, playerName)} />
-        ))}
-      </CollectionSection>
-
-      {others.length > 0 ? (
-        <CollectionSection title="その他のご褒美" empty={false}>
-          {others.map((item) => (
-            <RewardText key={item.id} text={formatRewardText(item, playerName)} />
-          ))}
-        </CollectionSection>
-      ) : null}
-
-      <CollectionSection title="獲得済み称号" empty={titles.length === 0}>
+      <Card style={styles.achievementCard}>
+        <AppText variant="subtitle">称号</AppText>
+        {titles.length === 0 ? (
+          <AppText variant="muted">まだ称号を獲得していません。</AppText>
+        ) : null}
         {titles.map((title) => (
           <View key={title.name} style={styles.collectionRow}>
             <AppText style={styles.titleText}>🏆 {title.name}</AppText>
+            <AppText>達成条件：{title.condition}</AppText>
+            <AppText variant="muted">現在値：{title.progress}</AppText>
           </View>
         ))}
-      </CollectionSection>
-
-      <Card style={styles.achievementCard}>
-        <AppText variant="subtitle">調教時間の実績</AppText>
+        <View style={styles.ruleDivider} />
+        <AppText variant="label">調教時間の実績</AppText>
         <View style={styles.achievementTimes}>
           <View style={styles.achievementTimeItem}>
             <AppText variant="muted">調教最速</AppText>
@@ -199,6 +181,22 @@ export default function CollectionScreen() {
         )}
       </Card>
 
+      <Card style={styles.collectionCard}>
+        <AppText variant="subtitle">ご褒美（使用Pt順）</AppText>
+        {sortedRewards.length === 0 ? (
+          <AppText variant="muted">まだご褒美を獲得していません。</AppText>
+        ) : null}
+        {sortedRewards.map((item) =>
+          item.reward_key === "video" ? (
+            <CollectionVideo key={item.id} item={item} />
+          ) : item.reward_key === "voice" ? (
+            <CollectionVoice key={item.id} item={item} />
+          ) : (
+            <RewardText key={item.id} item={item} playerName={playerName} />
+          ),
+        )}
+      </Card>
+
       <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
@@ -208,27 +206,74 @@ export default function CollectionScreen() {
   );
 }
 
-function CollectionSection({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: boolean;
-  children: ReactNode;
-}) {
+function RewardText({ item, playerName }: { item: RewardRedemption; playerName: string }) {
   return (
-    <Card style={styles.collectionCard}>
-      <AppText variant="subtitle">{title}</AppText>
-      {empty ? <AppText variant="muted">まだ獲得していません。</AppText> : children}
-    </Card>
+    <View style={styles.collectionRow}>
+      <AppText>{formatRewardText(item, playerName)}</AppText>
+      <RewardMetadata item={item} />
+    </View>
   );
 }
 
-function RewardText({ text }: { text: string }) {
+function RewardMetadata({ item }: { item: RewardRedemption }) {
+  return (
+    <AppText style={styles.rewardMetadata}>
+      {item.reward_name} / 使用：{item.points_spent}pt
+    </AppText>
+  );
+}
+
+function CollectionVoice({ item }: { item: RewardRedemption }) {
+  const { showNotice } = useAppModal();
+  const voiceModule = require("../../assets/audio/ninosukiboisu.m4a");
+  const player = useAudioPlayer(voiceModule);
+
+  useEffect(() => {
+    player.loop = true;
+    return () => player.pause();
+  }, [player]);
+
+  function play() {
+    player.seekTo(0).then(() => player.play()).catch(console.error);
+  }
+
+  function stop() {
+    player.pause();
+    player.seekTo(0).catch(console.error);
+  }
+
+  async function save() {
+    try {
+      const permission = await MediaLibrary.requestPermissionsAsync(true, ["audio"]);
+      if (!permission.granted) {
+        showNotice(
+          "保存権限が必要です",
+          "ボイスを保存するには、音声ファイルへの保存を許可してください。",
+        );
+        return;
+      }
+      const asset = Asset.fromModule(voiceModule);
+      await asset.downloadAsync();
+      await MediaLibrary.saveToLibraryAsync(asset.localUri ?? asset.uri);
+      showNotice("保存完了", "好きボイス3秒を音声ファイル（M4A）として保存しました。");
+    } catch (error) {
+      showNotice(
+        "ボイスを保存できません",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   return (
     <View style={styles.collectionRow}>
-      <AppText>{text}</AppText>
+      <AppText style={styles.videoName}>{item.reward_content ?? "好きボイス3秒"}</AppText>
+      <AppText variant="muted">音声のみ・映像は表示されません。</AppText>
+      <RewardMetadata item={item} />
+      <View style={styles.videoActions}>
+        <PrimaryButton title="再生" onPress={play} />
+        <PrimaryButton title="停止" tone="secondary" onPress={stop} />
+        <PrimaryButton title="保存" tone="secondary" onPress={save} />
+      </View>
     </View>
   );
 }
@@ -279,6 +324,7 @@ function CollectionVideo({ item }: { item: RewardRedemption }) {
   return (
     <View style={styles.collectionRow}>
       <AppText style={styles.videoName}>{item.reward_content}</AppText>
+      <RewardMetadata item={item} />
       <View style={styles.videoActions}>
         <PrimaryButton
           title="再生"
@@ -345,6 +391,7 @@ const styles = StyleSheet.create({
   },
   titleText: { color: "#f2c94c", fontWeight: "900" },
   videoName: { fontWeight: "900" },
+  rewardMetadata: { color: "#999", fontSize: 10, lineHeight: 14 },
   videoActions: { flexDirection: "row", gap: 8 },
   ruleDivider: { height: 1, backgroundColor: "#555" },
   videoModal: {

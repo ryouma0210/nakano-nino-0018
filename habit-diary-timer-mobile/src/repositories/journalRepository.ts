@@ -15,6 +15,23 @@ type JournalInput = {
 };
 
 export const journalRepository = {
+  upsertSystemRecord(input: JournalInput, uniqueTag: string) {
+    const now = toDateTimeKey();
+    const existing = queryOne<{ id: number }>(
+      "SELECT id FROM journals WHERE record_date=? AND tags LIKE ? LIMIT 1",
+      [input.recordDate, `%${uniqueTag}%`],
+    );
+    const tags = [input.tags, uniqueTag].filter(Boolean).join(",");
+    if (existing) {
+      execute(
+        "UPDATE journals SET title=?, body=?, duration_seconds=?, tags=?, updated_at=? WHERE id=?",
+        [input.title, input.body, input.durationSeconds ?? null, tags, now, existing.id],
+      );
+      return existing.id;
+    }
+    return this.create({ ...input, tags });
+  },
+
   list(keyword = "") {
     const like = `%${keyword.trim()}%`;
     if (!keyword.trim()) {
@@ -86,6 +103,11 @@ export const journalRepository = {
       [id],
     );
     transaction(() => {
+      if (
+        journal?.tags?.includes("敗北部屋")
+        || journal?.tags?.includes("本日の命令")
+        || journal?.tags?.includes("射精管理")
+      ) return;
       if (journal && (journal.title === "準備部屋チェック" || journal.tags?.includes("準備部屋"))) {
         execute("DELETE FROM preparation_records WHERE record_date = ?", [journal.record_date]);
       }
@@ -95,37 +117,33 @@ export const journalRepository = {
 
   removeDate(recordDate: string) {
     const likeDate = `${recordDate}%`;
-    const managementTasks = query<{ id: number }>(
-      "SELECT id FROM management_daily_tasks WHERE record_date = ?",
-      [recordDate],
-    );
     transaction(() => {
-      managementTasks.forEach((task) => {
-        execute("DELETE FROM point_transactions WHERE source_key = ?", [
-          `management-task:${task.id}`,
-        ]);
-      });
       execute("DELETE FROM point_transactions WHERE source_key = ?", [
         `training:${recordDate}`,
       ]);
-      execute("DELETE FROM point_transactions WHERE source_key = ?", [
-        `daily-order:${recordDate}`,
-      ]);
-      execute("DELETE FROM point_transactions WHERE created_at LIKE ?", [
-        likeDate,
-      ]);
+      execute(
+        `DELETE FROM point_transactions
+         WHERE created_at LIKE ?
+           AND source_key NOT LIKE 'daily-order:%'
+           AND source_key NOT LIKE 'management-task:%'`,
+        [likeDate],
+      );
       execute("DELETE FROM reward_redemptions WHERE redeemed_at LIKE ?", [
         likeDate,
-      ]);
-      execute("DELETE FROM management_daily_tasks WHERE record_date = ?", [
-        recordDate,
       ]);
       execute("DELETE FROM preparation_records WHERE record_date = ?", [
         recordDate,
       ]);
       execute("DELETE FROM habit_records WHERE record_date = ?", [recordDate]);
       execute("DELETE FROM timer_histories WHERE started_at LIKE ?", [likeDate]);
-      execute("DELETE FROM journals WHERE record_date = ?", [recordDate]);
+      execute(
+        `DELETE FROM journals
+         WHERE record_date = ?
+           AND COALESCE(tags, '') NOT LIKE '%敗北部屋%'
+           AND COALESCE(tags, '') NOT LIKE '%本日の命令%'
+           AND COALESCE(tags, '') NOT LIKE '%射精管理%'`,
+        [recordDate],
+      );
       execute(
         "DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM journal_tags)",
       );

@@ -4,6 +4,7 @@ import {
   managementFinalDayMessages,
   managementInstructionMessages,
 } from "@/constants/messages";
+import { journalRepository } from "@/repositories/journalRepository";
 
 export type PreparationRecord = {
   record_date: string;
@@ -89,6 +90,40 @@ export const preparationRepository = {
   },
 };
 
+export const defeatRepository = {
+  find(date = toDateKey()) {
+    const journal = queryOne<{ body: string }>(
+      "SELECT body FROM journals WHERE record_date = ? AND tags LIKE '%敗北部屋%' LIMIT 1",
+      [date],
+    );
+    if (!journal) return undefined;
+    return journal.body
+      .split("\n")
+      .filter((line) => line.startsWith("✅ "))
+      .map((line) => line.slice(2));
+  },
+
+  save(checks: string[], date = toDateKey()) {
+    const now = toDateTimeKey();
+    const body = `敗北部屋での強制チェック項目\n${checks.map((item) => `✅ ${item}`).join("\n")}\n\n本日の完全敗北を認めました♡`;
+    transaction(() => {
+      const existing = queryOne<{ id: number }>(
+        "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%敗北部屋%' LIMIT 1",
+        [date],
+      );
+      if (existing) {
+        execute("UPDATE journals SET body=?, updated_at=? WHERE id=?", [body, now, existing.id]);
+      } else {
+        execute(
+          `INSERT INTO journals(record_date, record_time, title, body, record_type, is_favorite, tags, created_at, updated_at)
+           VALUES(?, ?, '敗北部屋記録', ?, 'diary', 0, '敗北部屋,チェック,調教記録', ?, ?)`,
+          [date, toTimeKey(), body, now, now],
+        );
+      }
+    });
+  },
+};
+
 const instructions: Record<ManagementMode, string[]> = {
   release: managementInstructionMessages.release.map((message) => message.text),
   chastity: managementInstructionMessages.chastity.map((message) => message.text),
@@ -99,7 +134,26 @@ const finalDayInstructions: Record<ManagementMode, string[]> = {
   chastity: managementFinalDayMessages.chastity.map((message) => message.text),
 };
 
+function saveManagementTaskJournal(task: ManagementDailyTask) {
+  journalRepository.upsertSystemRecord(
+    {
+      recordDate: task.record_date,
+      title: "射精管理記録",
+      body: `射精管理の本日の指示\n${task.instruction}\n\n実施完了`,
+      recordType: "diary",
+      tags: "射精管理,本日の指示,完了,削除不可",
+    },
+    `射精管理タスク${task.id}`,
+  );
+}
+
 export const managementRepository = {
+  syncCompletedJournals() {
+    query<ManagementDailyTask>(
+      "SELECT * FROM management_daily_tasks WHERE completed_at IS NOT NULL ORDER BY record_date, id",
+    ).forEach(saveManagementTaskJournal);
+  },
+
   active(mode: ManagementMode) {
     return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE mode=? AND is_active=1 ORDER BY id DESC LIMIT 1", [mode]);
   },
@@ -155,8 +209,11 @@ export const managementRepository = {
           instruction,
           existing.id,
         ]);
-        return { ...existing, instruction };
+        const updated = { ...existing, instruction };
+        if (updated.completed_at) saveManagementTaskJournal(updated);
+        return updated;
       }
+      if (existing.completed_at) saveManagementTaskJournal(existing);
       return existing;
     }
     const choices = instructions[cycle.mode];
@@ -171,7 +228,15 @@ export const managementRepository = {
   },
 
   complete(taskId: number) {
-    execute("UPDATE management_daily_tasks SET completed_at=? WHERE id=?", [toDateTimeKey(), taskId]);
+    const completedAt = toDateTimeKey();
+    execute("UPDATE management_daily_tasks SET completed_at=? WHERE id=?", [completedAt, taskId]);
+    const task = queryOne<ManagementDailyTask>(
+      "SELECT * FROM management_daily_tasks WHERE id=?",
+      [taskId],
+    );
+    if (task) {
+      saveManagementTaskJournal(task);
+    }
   },
 
   finish(cycleId: number) {

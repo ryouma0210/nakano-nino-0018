@@ -74,8 +74,8 @@ export default function HabitsScreen() {
   const [trainingResult, setTrainingResult] = useState<TrainingCompletion | null>(
     null,
   );
-  const [trainingImages, setTrainingImages] = useState<StoredFile[]>([]);
-  const [mediaMode, setMediaMode] = useState<"default" | "slides">("default");
+  const [trainingFiles, setTrainingFiles] = useState<StoredFile[]>([]);
+  const [mediaMode, setMediaMode] = useState<"default" | "stored">("default");
   const form = useForm<HabitFormValues>({
     resolver: zodResolver(habitFormSchema) as never,
     defaultValues: {
@@ -99,11 +99,11 @@ export default function HabitsScreen() {
   useFocusEffect(
     useCallback(() => {
       fileStorageService.list("training").then((files) => {
-        const images = files.filter((file) =>
-          /\.(png|jpe?g|webp|gif)$/i.test(file.name),
+        const supportedFiles = files.filter((file) =>
+          /\.(mp4|png|jpe?g|webp|gif)$/i.test(file.name),
         );
-        setTrainingImages(images);
-        if (images.length === 0) setMediaMode("default");
+        setTrainingFiles(supportedFiles);
+        if (supportedFiles.length === 0) setMediaMode("default");
       });
     }, []),
   );
@@ -167,25 +167,25 @@ export default function HabitsScreen() {
               onPress={() => setMediaMode("default")}
             />
           </View>
-          {trainingImages.length > 0 ? (
+          {trainingFiles.length > 0 ? (
             <View style={styles.mediaChoice}>
               <PrimaryButton
-                title={`格納画像 (${trainingImages.length})`}
-                tone={mediaMode === "slides" ? "primary" : "secondary"}
-                onPress={() => setMediaMode("slides")}
+                title={`格納ファイル (${trainingFiles.length})`}
+                tone={mediaMode === "stored" ? "primary" : "secondary"}
+                onPress={() => setMediaMode("stored")}
               />
             </View>
           ) : null}
         </View>
         <AppText variant="muted">
-          {"【デフォルト動画】または【格納した画像】どちらか選択してください。"}
+          {"【デフォルト動画】または【格納ファイル】どちらか選択してください。"}
         </AppText>
       </Card>
 
       <TrainingVideo
         key={mediaMode}
         onComplete={completeTraining}
-        slides={mediaMode === "slides" ? trainingImages : []}
+        slides={mediaMode === "stored" ? trainingFiles : []}
       />
 
       {habits.map((habit) => {

@@ -87,6 +87,7 @@ export default function RewardsScreen() {
   const availableRewardVideos = rewardVideos.filter(
     (video) => !acquiredVideoNames.has(video.name),
   );
+  const voiceAcquired = acquired.some((item) => item.reward_key === "voice");
 
   function exchangeRandom(key: RandomRewardKey) {
     const reward = rewardCatalog[key];
@@ -126,6 +127,26 @@ export default function RewardsScreen() {
           return showNotice("ポイント不足", "所持ポイントが足りません。");
         reload();
         showNotice("秘密のご褒美♡", content);
+      },
+    });
+  }
+
+  function exchangeVoice() {
+    const reward = rewardCatalog.voice;
+    setConfirmation({
+      title: "好きボイス3秒と交換しますか？",
+      message: `${reward.cost}ptを消費します。\n\n交換後はコレクション部屋からいつでも再生できます。映像は表示されません。`,
+      onConfirm: () => {
+        if (!rewardRepository.redeemVoice()) {
+          return showNotice(
+            "交換できません",
+            rewardRepository.hasRedeemed("voice")
+              ? "このボイスは交換済みです。"
+              : "所持ポイントが足りません。",
+          );
+        }
+        reload();
+        showNotice("ボイス獲得♡", "好きボイス3秒を獲得しました。コレクション部屋で再生できます。");
       },
     });
   }
@@ -183,7 +204,7 @@ export default function RewardsScreen() {
         </AppText>
       </Card>
 
-      {(["insult", "praise", "brutal"] as const).map((key) => {
+      {(["insult", "praise"] as const).map((key) => {
         const reward = rewardCatalog[key];
         const remaining = rewardRepository.remaining(key).length;
         if (remaining === 0) return null;
@@ -222,6 +243,43 @@ export default function RewardsScreen() {
               />
             </View>
           ))}
+        </Card>
+      ) : null}
+
+      {rewardRepository.remaining("brutal").length > 0 ? (
+        <Card>
+          <AppText variant="subtitle">{rewardCatalog.brutal.name}</AppText>
+          <AppText variant="muted">
+            消費：{rewardCatalog.brutal.cost}pt／未獲得：
+            {rewardRepository.remaining("brutal").length}種類
+          </AppText>
+          <PrimaryButton
+            title={
+              balance.available >= rewardCatalog.brutal.cost
+                ? `${rewardCatalog.brutal.cost}ptでランダム交換`
+                : `あと${rewardCatalog.brutal.cost - balance.available}pt`
+            }
+            disabled={balance.available < rewardCatalog.brutal.cost}
+            onPress={() => exchangeRandom("brutal")}
+          />
+        </Card>
+      ) : null}
+
+      {!voiceAcquired ? (
+        <Card>
+          <AppText variant="subtitle">{rewardCatalog.voice.name}</AppText>
+          <AppText variant="muted">
+            消費：5,000pt／映像なしのボイスご褒美です。
+          </AppText>
+          <PrimaryButton
+            title={
+              balance.available >= rewardCatalog.voice.cost
+                ? "5000ptで交換"
+                : `あと${rewardCatalog.voice.cost - balance.available}pt`
+            }
+            disabled={balance.available < rewardCatalog.voice.cost}
+            onPress={exchangeVoice}
+          />
         </Card>
       ) : null}
 
