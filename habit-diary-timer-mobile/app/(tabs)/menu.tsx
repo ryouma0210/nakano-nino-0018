@@ -38,12 +38,14 @@ export default function MenuScreen() {
             tone={
               title === "設定"
                 ? "secondary"
+                : title === "ご褒美"
+                  ? "defeat"
                 : title === "ファイル格納"
                   ? "preparation"
                 : title === "週間報告" || title === "調教日記"
                   ? "record"
-                  : title === "コレクション" || title === "ご褒美"
-                    ? "reward"
+                  : title === "コレクション"
+                    ? "collection"
                     : "primary"
             }
             onPress={() => router.push(href)}

@@ -56,7 +56,9 @@ function createRandomMarkerOffsets(
     if (hasEnoughSpace) selected.push(slot);
     if (selected.length === count) break;
   }
-  return selected.sort((a, b) => a - b).map((slot) => slot / slotCount);
+  const offsets = selected.sort((a, b) => a - b).map((slot) => slot / slotCount);
+  const firstOffset = offsets[0] ?? 0;
+  return offsets.map((offset) => offset - firstOffset);
 }
 
 const modes = [
@@ -92,6 +94,8 @@ export function TrainingVideo({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
+  const [gaugeElapsed, setGaugeElapsed] = useState(0);
+  const [gaugeStarted, setGaugeStarted] = useState(false);
   const [gaugeProgress, setGaugeProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
@@ -225,6 +229,8 @@ export function TrainingVideo({
         : player.duration || 0;
       const rhythmTime = Math.max(0, elapsed - 3) * selectedMode.rate;
       const nextGaugeProgress = (rhythmTime % 5) / 5;
+      setGaugeStarted(elapsed >= 3);
+      setGaugeElapsed(rhythmTime);
       const commentSlot = Math.floor(elapsed / 10);
       if (activelyPlaying && commentSlot !== lastCommentSlot.current) {
         lastCommentSlot.current = commentSlot;
@@ -234,8 +240,9 @@ export function TrainingVideo({
       setDuration(mediaDuration);
       if (activelyPlaying && elapsed >= 3) {
         const reachedTarget = markerOffsets.some((offset) => {
-          const previousPhase = (previousGaugeProgress.current + offset) % 1;
-          const nextPhase = (nextGaugeProgress + offset) % 1;
+          if (rhythmTime < offset * 5) return false;
+          const previousPhase = (previousGaugeProgress.current - offset + 1) % 1;
+          const nextPhase = (nextGaugeProgress - offset + 1) % 1;
           return nextPhase < previousPhase;
         });
         if (reachedTarget) playEffect("trainingRhythm");
@@ -250,6 +257,9 @@ export function TrainingVideo({
   function startTraining() {
     elapsedMilliseconds.current = 0;
     setSessionElapsedSeconds(0);
+    setGaugeElapsed(0);
+    setGaugeStarted(false);
+    setGaugeProgress(0);
     lastTick.current = Date.now();
     previousGaugeProgress.current = 0;
     setMarkerOffsets(createRandomMarkerOffsets(markerCount));
@@ -336,8 +346,11 @@ export function TrainingVideo({
       >
         <View style={styles.line} />
         <View style={styles.hitPoint} />
-        {(!started || sessionElapsedSeconds >= 3) && Array.from({ length: markerCount }, (_, index) => {
-          const phase = (gaugeProgress + markerOffsets[index]) % 1;
+        {Array.from({ length: markerCount }, (_, index) => {
+          const offset = markerOffsets[index];
+          if (started && !gaugeStarted) return null;
+          if (started && gaugeElapsed < offset * 5) return null;
+          const phase = (gaugeProgress - offset + 1) % 1;
           const travelWidth = Math.max(0, trackWidth - 56);
           const left = 26 + (1 - phase) * travelWidth;
           const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;

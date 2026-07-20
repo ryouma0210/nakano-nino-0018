@@ -17,6 +17,7 @@ type Props = {
     | "training"
     | "management"
     | "record"
+    | "collection"
     | "reward";
   disabled?: boolean;
 };
@@ -52,6 +53,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "training" && styles.trainingText,
         tone === "management" && styles.managementText,
         tone === "record" && styles.recordText,
+        tone === "collection" && styles.collectionText,
         tone === "reward" && styles.rewardText,
         darkNavigation && styles.darkNavigationText,
       ]}>{title}</AppText>
@@ -112,6 +114,10 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#1f5fae",
   },
+  collection: {
+    borderColor: "#fff",
+    backgroundColor: "#f28c28",
+  },
   reward: {
     borderColor: "#fff",
     backgroundColor: "#f2c94c",
@@ -149,6 +155,7 @@ const styles = StyleSheet.create({
   trainingText: { color: "#fff" },
   managementText: { color: "#fff" },
   recordText: { color: "#fff" },
+  collectionText: { color: "#fff" },
   rewardText: { color: "#111" },
   darkNavigationText: { color: "#fff" },
 });

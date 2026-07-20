@@ -56,7 +56,9 @@ function createRandomMarkerOffsets(
     if (hasEnoughSpace) selected.push(slot);
     if (selected.length === count) break;
   }
-  return selected.sort((a, b) => a - b).map((slot) => slot / slotCount);
+  const offsets = selected.sort((a, b) => a - b).map((slot) => slot / slotCount);
+  const firstOffset = offsets[0] ?? 0;
+  return offsets.map((offset) => offset - firstOffset);
 }
 
 export default function TimerScreen() {
@@ -135,8 +137,9 @@ export default function TimerScreen() {
       gaugePosition.current += deltaSeconds * gaugeSpeed.current;
       const nextGaugeProgress = (gaugePosition.current / 5) % 1;
       const reachedTarget = markerOffsets.some((offset) => {
-        const previousPhase = (previousGaugeProgress.current + offset) % 1;
-        const nextPhase = (nextGaugeProgress + offset) % 1;
+        if (gaugePosition.current < offset * 5) return false;
+        const previousPhase = (previousGaugeProgress.current - offset + 1) % 1;
+        const nextPhase = (nextGaugeProgress - offset + 1) % 1;
         return nextPhase < previousPhase;
       });
       if (reachedTarget) {
@@ -348,7 +351,9 @@ export default function TimerScreen() {
             <View style={styles.line} />
             <View style={styles.hitPoint} />
               {Math.max(0, totalSeconds - remaining) >= 3 && Array.from({ length: markerCount }, (_, index) => {
-                const phase = (gaugeElapsed / 5 + markerOffsets[index]) % 1;
+                const offset = markerOffsets[index];
+                if (gaugeElapsed < offset * 5) return null;
+                const phase = (gaugeElapsed / 5 - offset + 1) % 1;
                 const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
                 return (

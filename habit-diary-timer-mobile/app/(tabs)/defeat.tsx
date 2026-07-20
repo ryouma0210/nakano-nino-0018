@@ -72,7 +72,7 @@ export default function DefeatScreen() {
       Animated.parallel([
         Animated.sequence([
           Animated.timing(heartOpacity, {
-            toValue: 1,
+            toValue: 0.5,
             duration: 250,
             useNativeDriver: true,
           }),
@@ -188,12 +188,15 @@ export default function DefeatScreen() {
         {heartLayers.map((layer) => (
           <View key={layer.size} style={styles.heartLayer}>
             <AppText
+              numberOfLines={1}
               style={[
                 styles.heart,
                 {
                   color: layer.color,
                   fontSize: layer.size,
-                  lineHeight: layer.size,
+                  lineHeight: layer.size * 1.22,
+                  width: layer.size * 1.35,
+                  height: layer.size * 1.3,
                 },
               ]}
             >
@@ -231,6 +234,7 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
   heartLayer: {
     position: "absolute",
@@ -240,10 +244,14 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
   heart: {
     fontWeight: "900",
     textAlign: "center",
+    textAlignVertical: "center",
+    includeFontPadding: false,
+    overflow: "visible",
     textShadowColor: "rgba(96,0,128,0.5)",
     textShadowRadius: 8,
   },

@@ -38,6 +38,9 @@ export const contractService = {
   async save(value: ContractSettings) {
     await AsyncStorage.setItem(CONTRACT_KEY, JSON.stringify(value));
   },
+  async clear() {
+    await AsyncStorage.removeItem(CONTRACT_KEY);
+  },
 };
 
 export const dailyOrderService = {
@@ -79,6 +82,12 @@ export const dailyOrderService = {
   },
   async remove(date = toDateKey()) {
     await AsyncStorage.removeItem(`${ORDER_PREFIX}${date}`);
+  },
+  async clearOrders() {
+    const keys = (await AsyncStorage.getAllKeys()).filter((key) =>
+      key.startsWith(ORDER_PREFIX),
+    );
+    if (keys.length) await AsyncStorage.multiRemove(keys);
   },
   async syncCompletedJournals() {
     const keys = (await AsyncStorage.getAllKeys()).filter((key) => key.startsWith(ORDER_PREFIX));
