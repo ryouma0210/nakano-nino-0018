@@ -8,7 +8,11 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
-import { roomMessages } from "@/constants/messages";
+import {
+  defeatChecklistMessages,
+  preparationChecklistMessages,
+  roomMessages,
+} from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
@@ -18,7 +22,11 @@ import type { Journal } from "@/types/models";
 import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
 import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
 import { dailyOrderService } from "@/services/gameRoomService";
-import { managementRepository } from "@/repositories/roomRepository";
+import {
+  defeatRepository,
+  managementRepository,
+  preparationRepository,
+} from "@/repositories/roomRepository";
 
 export default function RecordsScreen() {
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -124,20 +132,17 @@ export default function RecordsScreen() {
   function save(values: JournalFormValues) {
     if (editing) {
       if (isProtectedChecklist(editing)) {
+        const existingChecks = checklistItemsInBody(editing.body);
         const additions = additionalChecklistItem
           .split("\n")
           .map((item) => item.trim().replace(/^✅\s*/, ""))
-          .filter(Boolean)
-          .map((item) => `✅ ${item}`);
-        journalRepository.update(editing.id, {
-          ...values,
-          recordDate: editing.record_date,
-          title: editing.title,
-          body: additions.length > 0
-            ? `${editing.body}\n${additions.join("\n")}`
-            : editing.body,
-          tags: editing.tags ?? "",
-        });
+          .filter(Boolean);
+        const checks = Array.from(new Set([...existingChecks, ...additions]));
+        if (editing.tags?.includes("敗北部屋")) {
+          defeatRepository.save(checks, editing.record_date);
+        } else {
+          preparationRepository.save(checks, editing.record_date);
+        }
       } else {
         journalRepository.update(editing.id, values);
       }
@@ -162,6 +167,52 @@ export default function RecordsScreen() {
     return Boolean(
       journal?.tags?.includes("本日の命令") || journal?.tags?.includes("射精管理"),
     );
+  }
+
+  function journalCardStyle(journal: Journal) {
+    const tags = journal.tags ?? "";
+    if (tags.includes("敗北部屋")) return styles.defeatRecordCard;
+    if (tags.includes("準備部屋")) return styles.preparationRecordCard;
+    if (tags.includes("本日の命令")) return styles.orderRecordCard;
+    if (tags.includes("射精管理")) return styles.managementRecordCard;
+    if (tags.includes("お仕置き")) return styles.punishmentRecordCard;
+    if (tags.includes("調教") || tags.includes("射精記録")) {
+      return styles.trainingRecordCard;
+    }
+    return undefined;
+  }
+
+  function checklistItemsInBody(body: string) {
+    return body
+      .split("\n")
+      .filter((line) => line.startsWith("✅ "))
+      .map((line) => line.slice(2).trim());
+  }
+
+  function checklistOptions(journal: Journal | null) {
+    if (journal?.tags?.includes("敗北部屋")) return [...defeatChecklistMessages];
+    if (journal?.tags?.includes("準備部屋")) {
+      return preparationChecklistMessages.map((item) => item.text);
+    }
+    return [];
+  }
+
+  const registeredChecklistItems = editing
+    ? checklistItemsInBody(editing.body)
+    : [];
+  const availableChecklistItems = checklistOptions(editing).filter(
+    (item) => !registeredChecklistItems.includes(item),
+  );
+  const selectedChecklistItems = additionalChecklistItem
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  function toggleAdditionalChecklistItem(item: string) {
+    const next = selectedChecklistItems.includes(item)
+      ? selectedChecklistItems.filter((selected) => selected !== item)
+      : [...selectedChecklistItems, item];
+    setAdditionalChecklistItem(next.join("\n"));
   }
 
   return (
@@ -288,7 +339,7 @@ export default function RecordsScreen() {
 
       {displayedJournals.map((journal) => (
         <View key={journal.id} style={styles.dateGroup}>
-          <Card>
+          <Card style={journalCardStyle(journal)}>
             <View style={styles.journalHeader}>
               <View style={styles.grow}>
                 <AppText variant="subtitle">{journal.title}</AppText>
@@ -378,13 +429,25 @@ export default function RecordsScreen() {
             <Card>
               <AppText variant="label">登録済みの✅項目（変更・削除不可）</AppText>
               <AppText>{editing?.body}</AppText>
-              <TextField
-                label="追加する✅項目"
-                value={additionalChecklistItem}
-                onChangeText={setAdditionalChecklistItem}
-                placeholder="追加項目を入力（複数の場合は改行）"
-                multiline
-              />
+              <AppText variant="label">追加できる✅項目</AppText>
+              {availableChecklistItems.length === 0 ? (
+                <AppText variant="muted">
+                  画面上のすべての項目がチェック済みです。
+                </AppText>
+              ) : (
+                availableChecklistItems.map((item) => (
+                  <Pressable
+                    key={item}
+                    onPress={() => toggleAdditionalChecklistItem(item)}
+                    style={styles.checklistChoice}
+                  >
+                    <AppText style={styles.checklistChoiceMark}>
+                      {selectedChecklistItems.includes(item) ? "✅" : "□"}
+                    </AppText>
+                    <AppText style={styles.grow}>{item}</AppText>
+                  </Pressable>
+                ))
+              )}
             </Card>
           ) : (
             <Controller
@@ -435,7 +498,14 @@ export default function RecordsScreen() {
               tone="secondary"
               onPress={() => setFormVisible(false)}
             />
-            <PrimaryButton title="保存" onPress={form.handleSubmit(save)} />
+            <PrimaryButton
+              title="保存"
+              disabled={
+                isProtectedChecklist(editing) &&
+                selectedChecklistItems.length === 0
+              }
+              onPress={form.handleSubmit(save)}
+            />
           </View>
         </Screen>
       </Modal>
@@ -551,7 +621,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  checklistChoice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#666",
+    paddingVertical: 12,
+  },
+  checklistChoiceMark: { width: 30, fontSize: 20, lineHeight: 28 },
   dateGroup: { gap: 8 },
+  defeatRecordCard: { borderWidth: 2, borderColor: "#ff69b4" },
+  preparationRecordCard: { borderWidth: 2, borderColor: "#7cb342" },
+  orderRecordCard: { borderWidth: 2, borderColor: "#29b6f6" },
+  managementRecordCard: { borderWidth: 2, borderColor: "#ff9800" },
+  trainingRecordCard: { borderWidth: 2, borderColor: "#b388ff" },
+  punishmentRecordCard: { borderWidth: 2, borderColor: "#ff3b45" },
   dateHeadingRow: {
     flexDirection: "row",
     alignItems: "center",

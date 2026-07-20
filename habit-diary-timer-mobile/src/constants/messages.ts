@@ -65,11 +65,11 @@ export const roomMessages: Record<string, RoomMessages> = {
   // 敗北部屋：app/(tabs)/defeat.tsx（契約者限定）
   defeat: {
     contractLines: [
-      plainMessage("弱いマゾ、負けたがりのマゾが最初に入る部屋へよ♡アンタもそうなのかしら？"),
-      namedMessage("アンタ、負けに来たんでしょ？全部にチェックして、今日も完全敗北を認めなさい♡"),
-      namedMessage("乳首カリに合わせて、チンピクしなさい♡"),
-      namedMessage("カリ♡ビクン♡カリカリ♡ビクンビクン♡カリカリカリカリカリカリ♡ほら、チンピクしろ♡"),
-      plainMessage("私に見下ろされるために来たの？本当に従順なマゾ犬ね♡"),
+      namedMessage("弱いマゾ、負けたがりのマゾが最初に入る部屋へよ♡アンタもそうなのかしら？"),
+      plainMessage("アンタ、負けに来たんでしょ？全部にチェックして、今日も完全敗北を認めなさい♡"),
+      plainMessage("乳首カリに合わせて、チンピクしなさい♡"),
+      plainMessage("カリ♡ビクン♡カリカリ♡ビクンビクン♡カリカリカリカリカリカリ♡ほら、チンピクしろ♡"),
+      namedMessage("私に見下ろされるために来たの？本当に従順なマゾ犬ね♡"),
     ],
   },
   // 調教部屋：app/(tabs)/habits.tsx

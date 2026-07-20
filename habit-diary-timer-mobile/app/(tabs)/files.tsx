@@ -19,7 +19,7 @@ import {
 export default function FilesScreen() {
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [purposeFilter, setPurposeFilter] = useState<"all" | "training" | "punishment">("all");
-  const [columns, setColumns] = useState<1 | 3 | 6>(3);
+  const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [selected, setSelected] = useState<StoredFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
   const load = useCallback(() => {
@@ -39,7 +39,7 @@ export default function FilesScreen() {
   const visibleFiles = files.filter(
     (file) => purposeFilter === "all" || file.purpose === purposeFilter,
   );
-  const tileWidth = columns === 1 ? "100%" : columns === 3 ? "31.7%" : "13.8%";
+  const tileWidth = columns === 1 ? "100%" : columns === 2 ? "48.8%" : "31.7%";
 
   return (
     <Screen>
@@ -82,7 +82,7 @@ export default function FilesScreen() {
         </View>
         <AppText variant="label">表示サイズ</AppText>
         <View style={styles.optionRow}>
-          {([1, 3, 6] as const).map((value) => (
+          {([1, 2, 3] as const).map((value) => (
             <Pressable
               key={value}
               onPress={() => setColumns(value)}

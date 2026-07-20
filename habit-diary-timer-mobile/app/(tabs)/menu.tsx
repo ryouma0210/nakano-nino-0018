@@ -38,7 +38,9 @@ export default function MenuScreen() {
             tone={
               title === "設定"
                 ? "secondary"
-                : title === "週間報告" || title === "調教日記" || title === "ファイル格納"
+                : title === "ファイル格納"
+                  ? "preparation"
+                : title === "週間報告" || title === "調教日記"
                   ? "record"
                   : title === "コレクション" || title === "ご褒美"
                     ? "reward"

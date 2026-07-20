@@ -114,7 +114,7 @@ export default function SettingsScreen() {
           <View style={styles.audioText}>
             <AppText>効果音</AppText>
             <AppText variant="muted">
-              ボタン・会話・リズム・完了音を再生します。
+              ボタン・会話・リズム・完了音を再生します。※乳首責め/耳舐めなどの音声はこちらになります。
             </AppText>
           </View>
           <Switch

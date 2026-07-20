@@ -17,6 +17,8 @@ export function additionalContractRules(contract: ContractSettings) {
     .filter(Boolean);
   return [
     `お仕置きは最低${contract.maxPunishmentMinutes}分受けること。`,
+    "敗北部屋を解放する。",
+    "各画面に契約者向けコメントを追加する。（赤文字表記）",
     ...notes,
   ];
 }

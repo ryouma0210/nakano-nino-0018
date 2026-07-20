@@ -26,7 +26,9 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   fullscreen?: boolean;
 }) {
   const [defaultIndex, setDefaultIndex] = useState(() => randomDefaultIndex());
-  const [fileIndex, setFileIndex] = useState(0);
+  const [fileIndex, setFileIndex] = useState(() =>
+    files.length > 0 ? Math.floor(Math.random() * files.length) : 0,
+  );
   const defaultLoopCount = useRef(0);
   const currentFile = files[fileIndex % Math.max(1, files.length)];
   const showingStoredVideo = useStored && isVideo(currentFile);
