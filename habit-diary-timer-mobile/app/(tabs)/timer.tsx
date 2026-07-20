@@ -124,6 +124,7 @@ export default function TimerScreen() {
       const now = Date.now();
       const deltaSeconds = Math.max(0, now - lastGaugeTick.current) / 1000;
       lastGaugeTick.current = now;
+      if (now - startedAt.current < 3000) return;
       if (now >= nextSpeedChangeAt.current) {
         const next =
           gaugeSpeeds[Math.floor(Math.random() * gaugeSpeeds.length)];
@@ -270,12 +271,14 @@ export default function TimerScreen() {
         </AppText>
       </Card>
       <Card>
-        <PunishmentMedia
-          key={mediaMode}
-          active={false}
-          files={punishmentFiles}
-          useStored={mediaMode === "stored"}
-        />
+        {!running ? (
+          <PunishmentMedia
+            key={mediaMode}
+            active={false}
+            files={punishmentFiles}
+            useStored={mediaMode === "stored"}
+          />
+        ) : null}
         <TextField
           label={`時間（分）・最低 ${minMinutes}分`}
           value={minutes}
@@ -344,7 +347,7 @@ export default function TimerScreen() {
           >
             <View style={styles.line} />
             <View style={styles.hitPoint} />
-              {Array.from({ length: markerCount }, (_, index) => {
+              {Math.max(0, totalSeconds - remaining) >= 3 && Array.from({ length: markerCount }, (_, index) => {
                 const phase = (gaugeElapsed / 5 + markerOffsets[index]) % 1;
                 const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;

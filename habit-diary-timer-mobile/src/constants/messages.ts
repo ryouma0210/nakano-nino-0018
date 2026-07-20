@@ -65,7 +65,7 @@ export const roomMessages: Record<string, RoomMessages> = {
   // 敗北部屋：app/(tabs)/defeat.tsx（契約者限定）
   defeat: {
     contractLines: [
-      namedMessage("弱いマゾ、負けたがりのマゾが最初に入る部屋へよ♡アンタもそうなのかしら？"),
+      namedMessage("この部屋は、弱いマゾ/負けたがりのマゾが最初に入る部屋へよ♡アンタもそうなのかしら？"),
       plainMessage("アンタ、負けに来たんでしょ？全部にチェックして、今日も完全敗北を認めなさい♡"),
       plainMessage("乳首カリに合わせて、チンピクしなさい♡"),
       plainMessage("カリ♡ビクン♡カリカリ♡ビクンビクン♡カリカリカリカリカリカリ♡ほら、チンピクしろ♡"),
@@ -87,9 +87,11 @@ export const roomMessages: Record<string, RoomMessages> = {
   punishment: {
     lines: [
       namedMessage("時間は自分で決めなさい。"),
+      plainMessage("スリッパがあるならそれを使って叩きなさい♡"),
       plainMessage("黒いスペードがピンクの丸へ到達したら、表示された場所へビンタよ。"),
     ],
     contractLines: [
+      plainMessage("ディルドがあるならそれを使って叩きなさい♡"),
       plainMessage("契約済みの奴隷なら、最低30分以上。お仕置きから逃げずに最後まで受けなさい♡"),
       plainMessage("貞操帯着用している人は、金玉ビンタのみよ♡"),
     ],

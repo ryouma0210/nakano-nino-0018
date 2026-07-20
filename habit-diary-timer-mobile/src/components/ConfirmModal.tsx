@@ -14,12 +14,13 @@ type Props = {
 };
 
 export function ConfirmModal({ visible, title, message, confirmLabel = "確認", confirmTone = "primary", showCancel = true, onConfirm, onCancel }: Props) {
+  const normalizedMessage = message.replace(/\\n/g, "\n");
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <View style={styles.dialog}>
           <AppText variant="subtitle">{title}</AppText>
-          <AppText style={styles.message}>{message}</AppText>
+          <AppText style={styles.message}>{normalizedMessage}</AppText>
           <View style={styles.actions}>
             {showCancel ? (
               <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" onPress={onCancel} /></View>

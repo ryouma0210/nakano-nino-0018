@@ -46,14 +46,16 @@ export default function PreparationScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      preparationPlayer.play();
       const enabled = Boolean(settings?.soundEnabled);
       setSessionAudioActive(enabled);
       if (enabled) playEffect("preparationLoop");
       return () => {
+        preparationPlayer.pause();
         stopEffect("preparationLoop");
         setSessionAudioActive(false);
       };
-    }, [playEffect, setSessionAudioActive, settings?.soundEnabled, stopEffect]),
+    }, [playEffect, preparationPlayer, setSessionAudioActive, settings?.soundEnabled, stopEffect]),
   );
 
   useFocusEffect(useCallback(() => {
