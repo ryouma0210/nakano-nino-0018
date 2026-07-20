@@ -49,7 +49,6 @@ export function AudioProvider({ children }: PropsWithChildren) {
     bgm.loop = true;
     bgm.volume = settings.musicVolume;
     if (settings.backgroundMusicEnabled && !sessionAudioActive) bgm.play();
-    return () => bgm.pause();
   }, [bgm, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {

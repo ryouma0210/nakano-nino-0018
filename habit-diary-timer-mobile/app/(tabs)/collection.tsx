@@ -198,6 +198,11 @@ export default function CollectionScreen() {
       </Card>
 
       <PrimaryButton
+        title="記録・管理メニューへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/menu")}
+      />
+      <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
@@ -230,7 +235,6 @@ function CollectionVoice({ item }: { item: RewardRedemption }) {
 
   useEffect(() => {
     player.loop = true;
-    return () => player.pause();
   }, [player]);
 
   function play() {
