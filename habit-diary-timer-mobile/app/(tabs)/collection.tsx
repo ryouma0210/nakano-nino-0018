@@ -4,6 +4,7 @@ import { Modal, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
+import * as FileSystem from "expo-file-system/legacy";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useAudioPlayer } from "expo-audio";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,16 +38,16 @@ import {
 import { secondsToClock } from "@/utils/date";
 
 const rewardVideos = [
-  { name: "準備動画", module: require("../../assets/videos/preparation_1.mp4") },
-  { name: "調教動画 1", module: require("../../assets/videos/habits_1.mp4") },
-  { name: "調教動画 2", module: require("../../assets/videos/habits_2.mp4") },
-  { name: "調教動画 3", module: require("../../assets/videos/habits_3.mp4") },
-  { name: "調教動画 4", module: require("../../assets/videos/habits_4.mp4") },
-  { name: "調教動画 5", module: require("../../assets/videos/habits_5.mp4") },
-  { name: "調教動画 6", module: require("../../assets/videos/habits_6.mp4") },
-  { name: "お仕置き動画 1", module: require("../../assets/videos/timer_1.mp4") },
-  { name: "お仕置き動画 2", module: require("../../assets/videos/timer_2.mp4") },
-  { name: "契約成立動画", module: require("../../assets/videos/contract_1.mp4") },
+  { name: "準備動画", fileName: "nino-preparation.mp4", module: require("../../assets/videos/preparation_1.mp4") },
+  { name: "調教動画 1", fileName: "nino-training-01.mp4", module: require("../../assets/videos/habits_1.mp4") },
+  { name: "調教動画 2", fileName: "nino-training-02.mp4", module: require("../../assets/videos/habits_2.mp4") },
+  { name: "調教動画 3", fileName: "nino-training-03.mp4", module: require("../../assets/videos/habits_3.mp4") },
+  { name: "調教動画 4", fileName: "nino-training-04.mp4", module: require("../../assets/videos/habits_4.mp4") },
+  { name: "調教動画 5", fileName: "nino-training-05.mp4", module: require("../../assets/videos/habits_5.mp4") },
+  { name: "調教動画 6", fileName: "nino-training-06.mp4", module: require("../../assets/videos/habits_6.mp4") },
+  { name: "お仕置き動画 1", fileName: "nino-punishment-01.mp4", module: require("../../assets/videos/timer_1.mp4") },
+  { name: "お仕置き動画 2", fileName: "nino-punishment-02.mp4", module: require("../../assets/videos/timer_2.mp4") },
+  { name: "契約成立動画", fileName: "nino-contract.mp4", module: require("../../assets/videos/contract_1.mp4") },
 ] as const;
 
 function contractDays(signedAt?: string) {
@@ -258,7 +259,13 @@ function CollectionVoice({ item }: { item: RewardRedemption }) {
       }
       const asset = Asset.fromModule(voiceModule);
       await asset.downloadAsync();
-      await MediaLibrary.saveToLibraryAsync(asset.localUri ?? asset.uri);
+      const namedUri = `${FileSystem.cacheDirectory}nino-love-voice.m4a`;
+      await FileSystem.deleteAsync(namedUri, { idempotent: true });
+      await FileSystem.copyAsync({
+        from: asset.localUri ?? asset.uri,
+        to: namedUri,
+      });
+      await MediaLibrary.saveToLibraryAsync(namedUri);
       showNotice("保存完了", "好きボイス3秒を音声ファイル（M4A）として保存しました。");
     } catch (error) {
       showNotice(
@@ -306,7 +313,13 @@ function CollectionVideo({ item }: { item: RewardRedemption }) {
       }
       const asset = Asset.fromModule(bundled.module);
       await asset.downloadAsync();
-      await MediaLibrary.saveToLibraryAsync(asset.localUri ?? asset.uri);
+      const namedUri = `${FileSystem.cacheDirectory}${bundled.fileName}`;
+      await FileSystem.deleteAsync(namedUri, { idempotent: true });
+      await FileSystem.copyAsync({
+        from: asset.localUri ?? asset.uri,
+        to: namedUri,
+      });
+      await MediaLibrary.saveToLibraryAsync(namedUri);
       showNotice("保存完了", "動画を端末のギャラリーへ保存しました。");
     } catch (error) {
       showNotice(
