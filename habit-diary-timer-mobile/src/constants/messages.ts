@@ -208,7 +208,7 @@ export const roomMessages: Record<string, RoomMessages> = {
 // 調教部屋の実行中コメント：src/components/TrainingVideo.tsx
 export const trainingStageMessages = {
   warmup: [
-    namedMessage("リズムを守りなさい♡"),
+    namedMessage("しっかりリズムを守りなさい♡"),
     plainMessage("四つん這いで受けると気持ちいいわよ♡"),
     plainMessage("姿勢を崩さないで♡ゆっくり丁寧に続けなさい♡"),
     namedMessage("私に集中しなさい♡"),
@@ -225,7 +225,7 @@ export const trainingStageMessages = {
     plainMessage("我慢汁止まらないわね♡指ですくって舐めたり、乳首にヌリヌリしなさい♡"),
     namedMessage("もっと一定の速さで腰を振って、私のリズムについてきなさい♡"),
     namedMessage("手を止める許可なんて出してないわよ♡そのまま続けなさい♡"),
-    namedMessage("先端ばかり触ってないで♡根元からゆっくり扱いなさい♡"),
+    plainMessage("先端ばかり触ってないで♡根元からゆっくり扱いなさい♡"),
     namedMessage("もっと声を出して♡誰の命令で動いているのか言ってみなさい♡"),
     namedMessage("その情けない顔、ちゃんと私に見せなさい♡隠したらダメよ♡"),
     plainMessage("右手が疲れたなら左手に替えなさい♡休憩とは言ってないわ♡"),
@@ -260,8 +260,8 @@ export const punishmentSessionMessages = [
   plainMessage("死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡"),
   plainMessage("精子死ね♡チンポ死ね♡金玉死ね♡マゾ死ね♡"),
   namedMessage("まさかこんなのでお漏らししないわよね♡"),
-  namedMessage("ギブアップしたい？ダメに決まっているでしょｗ最後まで耐えてみなさい♡"),
-  plainMessage("もっと正確に強く狙え♡"),
+  plainMessage("ギブアップしたい？ダメに決まっているでしょｗ最後まで耐えてみなさい♡"),
+  plainMessage("もっと正確に強く狙いなさい♡"),
   namedMessage("痛がるだけじゃダメ。きちんと回数を声に出して数えなさい♡"),
   plainMessage("私が終わりと言うまで、お仕置きは続くわよ♡"),
 ] as const;
@@ -339,7 +339,7 @@ export const rewardBrutalOrderMessages = [
   plainMessage("首輪を着けたまま膝立ちで30分待機。5分ごとに『もっと厳しくしてください』と10回お願いしなさい。"),
   plainMessage("両乳首に選択バサミを装着し、左右交互に45分刺激しなさい。途中で手を止めたら、その時点から15分追加よ。射精は禁止。"),
   plainMessage("土下座の姿勢を保ったまま『私は二ノ様の所有物です』と100回言い、終わったら正座で20分反省しなさい。"),
-  plainMessage("弱い刺激だけで60分耐えなさい。絶対に射精せず、10分ごとに現在の我慢度を声に出して報告すること。"),
+  plainMessage("亀頭刺激だけで60分耐えなさい。絶対に射精せず、10分ごとに現在の我慢度を声に出して報告すること。"),
   plainMessage("寸止め10回、腰振り300回、土下座30回を1セットとして合計3セット。すべて終えてから1000文字以上の反省文を書きなさい。"),
 ] as const;
 
@@ -458,17 +458,15 @@ export const dailyOrderMessages = [
   plainMessage("下着を脱いで正座し、5分間待機しなさい。"),
   plainMessage("寸止めを1回するたびに『二ノ様好き』と5回言い、合計3セット行いなさい。"),
   plainMessage("両手を後ろに組み、膝立ちの姿勢を3分間保ちなさい。"),
-  plainMessage("刺激を30秒、停止を30秒の間隔で10セット行いなさい。"),
-  plainMessage("今日は刺激を始めても、命令完了まで射精してはいけません。"),
+  plainMessage("亀頭刺激を30秒、休憩10秒の間隔で10セット行いなさい。"),
   plainMessage("首輪を着けて土下座し、二ノ様への誓いを声に出して読みなさい。"),
-  plainMessage("弱い刺激だけで10分間耐え、最後まで射精せずに終えなさい。"),
+  plainMessage("亀頭刺激を10分間耐え、最後まで射精せずに終えなさい。"),
   plainMessage("寸止めを3回したあと、正座して5分間反省しなさい。"),
-  plainMessage("四つん這いで『もっと命令してください』と10回言いなさい。"),
+  plainMessage("四つん這いで寸止めを行い、『もっと命令してください』と10回言いなさい。"),
   plainMessage("鏡の前で自分の服従姿勢を確認し、最もきれいな土下座を10回しなさい。"),
-  plainMessage("乳首を刺激しながら、ゆっくり腰を50回振りなさい。"),
-  plainMessage("今日の命令を始める前に、首輪を着けて一礼しなさい。"),
-  plainMessage("寸止めを5回行い、それぞれの間に1分間待機しなさい。"),
-  plainMessage("命令中は『やめたい』ではなく『もっとください』と5回言いなさい。"),
+  plainMessage("乳首を刺激しながら、腰を50回振りなさい。"),
+  plainMessage("寸止めを5回行い、休憩30秒の間隔でやりなさい。"),
+  plainMessage("命令中は『やめたい』ではなく『もっとください』と言いなさい。"),
   plainMessage("今日の命令を終えた感想と次回の目標を調教日記に残しなさい。"),
 ] as const;
 
