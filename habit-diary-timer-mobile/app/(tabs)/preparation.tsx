@@ -51,7 +51,9 @@ export default function PreparationScreen() {
       setSessionAudioActive(enabled);
       if (enabled) playEffect("preparationLoop");
       return () => {
-        preparationPlayer.pause();
+        // useVideoPlayer が画面破棄時にプレイヤーを自動解放する。
+        // ここで pause() すると、解放処理との順序次第で
+        // ERR_USING_RELEASED_SHARED_OBJECT が発生するため呼び出さない。
         stopEffect("preparationLoop");
         setSessionAudioActive(false);
       };

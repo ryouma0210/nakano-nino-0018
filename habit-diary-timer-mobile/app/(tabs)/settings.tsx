@@ -232,9 +232,9 @@ export default function SettingsScreen() {
         tone="danger"
         onPress={() => router.replace("/start")}
       />
-      <Card>
-        <AppText variant="subtitle">一部データ初期化</AppText>
-        <AppText variant="muted">削除する項目にチェックを付けてください。</AppText>
+      <Card style={styles.partialResetCard}>
+        <AppText variant="subtitle" style={styles.partialResetText}>一部データ初期化</AppText>
+        <AppText style={styles.partialResetText}>削除する項目にチェックを付けてください。</AppText>
         {partialResetItems.map((item) => {
           const checked = partialSelection.includes(item.key);
           return (
@@ -247,8 +247,8 @@ export default function SettingsScreen() {
                 <AppText style={styles.checkmark}>{checked ? "✓" : ""}</AppText>
               </View>
               <View style={styles.audioText}>
-                <AppText>{item.label}</AppText>
-                <AppText variant="muted">{item.description}</AppText>
+                <AppText style={styles.partialResetText}>{item.label}</AppText>
+                <AppText style={styles.partialResetDescription}>{item.description}</AppText>
               </View>
             </Pressable>
           );
@@ -337,12 +337,15 @@ function VolumeRow({
 }
 
 const styles = StyleSheet.create({
+  partialResetCard: { borderColor: "#ff3b45" },
+  partialResetText: { color: "#ff3b45" },
+  partialResetDescription: { color: "#d96a70" },
   resetOption: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     borderTopWidth: 1,
-    borderTopColor: "#444",
+    borderTopColor: "#8f252c",
     paddingVertical: 10,
   },
   checkbox: {
@@ -351,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#fff",
+    borderColor: "#ff3b45",
     backgroundColor: "#000",
   },
   checkboxChecked: { backgroundColor: "#d9202a" },
