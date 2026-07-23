@@ -1,3 +1,3 @@
-// モバイル版とWindows版で共通のメッセージ定義。
-// 文言を変更するときは、ルートの shared/messages.ts だけを編集する。
-export * from "../../../shared/messages";
+// scripts/sync-shared.cjsがルート/sharedから同期する生成ファイルを参照します。
+// 文言を変更するときは、ルートのshared/messages.tsだけを編集してください。
+export * from "../shared/messages";

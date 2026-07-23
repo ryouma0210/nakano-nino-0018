@@ -1,2 +1,2 @@
-// モバイル版とWindows版で共通の契約ルール。
-export * from "../../../shared/contract";
+// scripts/sync-shared.cjsがルート/sharedから同期する生成ファイルを参照します。
+export * from "../shared/contract";
