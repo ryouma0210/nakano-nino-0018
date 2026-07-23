@@ -8,11 +8,13 @@ on:
       - production
     paths:
       - "nino-room-windows/**"
+      - "shared/**"
+      - "habit-diary-timer-mobile/assets/**"
       - ".github/workflows/build-windows-app.yml"
 
 jobs:
   build:
-    name: Build Windows ZIP and Installer
+    name: Build Windows Installer
     runs-on: windows-latest
     defaults:
       run:
@@ -49,13 +51,11 @@ jobs:
             "DEPLOY_ENV=stg" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
 
-      - name: Upload Windows files as workflow artifacts
+      - name: Upload Windows installer as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: nino-${{ github.ref_name }}-windows
-          path: |
-            nino-room-windows/release/Nino Room-0.1.0-win.zip
-            nino-room-windows/release/Nino Room Setup 0.1.0.exe
+          path: nino-room-windows/release/Nino Room Setup 0.1.0.exe
           if-no-files-found: error
 
       - name: Install rclone
@@ -77,9 +77,8 @@ jobs:
           [IO.File]::WriteAllBytes((Join-Path $configDirectory "rclone.conf"), $bytes)
         working-directory: .
 
-      - name: Upload Windows ZIP and installer to Google Drive
+      - name: Upload Windows installer to Google Drive
         shell: pwsh
         run: |
-          rclone copyto "nino-room-windows/release/Nino Room-0.1.0-win.zip" "gdrive:nino-$env:DEPLOY_ENV-windows.zip" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
           rclone copyto "nino-room-windows/release/Nino Room Setup 0.1.0.exe" "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
         working-directory: .

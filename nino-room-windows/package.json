@@ -7,7 +7,7 @@
     "sync:shared": "node scripts/sync-assets.cjs",
     "dev": "npm run sync:shared && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build:web": "npm run sync:shared && vite build",
-    "build:windows": "npm run build:web && electron-builder --win zip nsis",
+    "build:windows": "npm run build:web && electron-builder --win nsis",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx"
   },
@@ -40,13 +40,22 @@
       "electron/**/*",
       "package.json"
     ],
+    "extraFiles": [
+      {
+        "from": "説明書.txt",
+        "to": "説明書.txt"
+      }
+    ],
     "directories": {
       "output": "release"
     },
     "win": {
-      "target": ["zip", "nsis"]
+      "icon": "build/icon.ico",
+      "target": ["nsis"]
     },
     "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true
