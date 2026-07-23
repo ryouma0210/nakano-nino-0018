@@ -1,11 +1,14 @@
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain } = require("electron");
 const fs = require("node:fs");
+const http = require("node:http");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const MIN_ZOOM = 0.75;
 const MAX_ZOOM = 2;
 let mainWindow;
+let staticServer;
+let staticServerUrl;
 
 function settingsPath() {
   return path.join(app.getPath("userData"), "window-state.json");
@@ -59,18 +62,64 @@ function createWindow() {
 
   if (state.maximized) mainWindow.maximize();
   mainWindow.webContents.setZoomFactor(state.zoom ?? 1);
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else if (!app.isPackaged) {
-    mainWindow.loadURL("http://127.0.0.1:5173");
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "dist-web", "index.html"));
-  }
+  mainWindow.loadURL(staticServerUrl);
 
   mainWindow.on("close", saveWindowState);
 }
 
-app.whenReady().then(() => {
+function contentType(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".html") return "text/html; charset=utf-8";
+  if (extension === ".js") return "text/javascript; charset=utf-8";
+  if (extension === ".css") return "text/css; charset=utf-8";
+  if (extension === ".json") return "application/json; charset=utf-8";
+  if (extension === ".wasm") return "application/wasm";
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".mp4") return "video/mp4";
+  if (extension === ".m4a") return "audio/mp4";
+  if (extension === ".wav") return "audio/wav";
+  return "application/octet-stream";
+}
+
+function startStaticServer() {
+  const root = path.resolve(__dirname, "..", "dist-web");
+  staticServer = http.createServer((request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+    const decodedPath = decodeURIComponent(requestUrl.pathname);
+    const relativePath = decodedPath === "/" ? "index.html" : decodedPath.slice(1);
+    const filePath = path.resolve(root, relativePath);
+
+    if (!filePath.startsWith(`${root}${path.sep}`) && filePath !== root) {
+      response.writeHead(403);
+      response.end("Forbidden");
+      return;
+    }
+
+    fs.stat(filePath, (statError, stat) => {
+      if (statError || !stat.isFile()) {
+        fs.createReadStream(path.join(root, "index.html")).pipe(response);
+        return;
+      }
+
+      response.writeHead(200, { "Content-Type": contentType(filePath) });
+      fs.createReadStream(filePath).pipe(response);
+    });
+  });
+
+  return new Promise((resolve) => {
+    staticServer.listen(0, "127.0.0.1", () => {
+      const address = staticServer.address();
+      staticServerUrl = `http://127.0.0.1:${address.port}/`;
+      resolve();
+    });
+  });
+}
+
+app.whenReady().then(async () => {
+  await startStaticServer();
   createWindow();
   globalShortcut.register("F11", () => {
     mainWindow?.setFullScreen(!mainWindow.isFullScreen());
@@ -126,4 +175,7 @@ ipcMain.handle("files:remove", (_event, filePath) => {
 });
 
 app.on("window-all-closed", () => app.quit());
-app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+  staticServer?.close();
+});

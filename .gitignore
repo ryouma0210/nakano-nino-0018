@@ -2,6 +2,7 @@ node_modules/
 .expo/
 .expo-test/
 dist/
+dist-web-electron/
 build/
 .env
 .env.*
