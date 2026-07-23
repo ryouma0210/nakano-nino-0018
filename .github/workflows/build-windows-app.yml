@@ -9,7 +9,7 @@ on:
     paths:
       - "nino-room-windows/**"
       - "shared/**"
-      - "habit-diary-timer-mobile/assets/**"
+      - "habit-diary-timer-mobile/**"
       - ".github/workflows/build-windows-app.yml"
 
 jobs:
@@ -29,13 +29,23 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: nino-room-windows/package-lock.json
+          cache-dependency-path: |
+            nino-room-windows/package-lock.json
+            habit-diary-timer-mobile/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
+      - name: Install mobile dependencies
+        run: npm ci
+        working-directory: habit-diary-timer-mobile
+
+      - name: Typecheck Windows shell
         run: npm run typecheck
+
+      - name: Typecheck mobile app
+        run: npm run typecheck
+        working-directory: habit-diary-timer-mobile
 
       - name: Build Windows application
         run: npm run build:windows
