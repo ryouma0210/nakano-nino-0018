@@ -4,8 +4,9 @@
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "build:web": "vite build",
+    "sync:shared": "node scripts/sync-assets.cjs",
+    "dev": "npm run sync:shared && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build:web": "npm run sync:shared && vite build",
     "build:windows": "npm run build:web && electron-builder --win zip nsis",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx"
