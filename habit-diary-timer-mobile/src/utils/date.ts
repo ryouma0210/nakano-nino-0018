@@ -1,2 +1,2 @@
-// モバイル版とWindows版で共通の日付・時間処理。
-export * from "../../../shared/date";
+// scripts/sync-shared.cjsがルート/sharedから同期する生成ファイルを参照します。
+export * from "../shared/date";
