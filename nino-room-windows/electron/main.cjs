@@ -107,7 +107,7 @@ function createWindow() {
     staticServerUrl,
   });
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    if (level >= 2 || /error|exception|failed|timeout/i.test(message)) {
+    if (level >= 1 || /error|exception|failed|timeout|warn|unsupported/i.test(message)) {
       appendLog("renderer:console", { level, message, line, sourceId });
     }
   });
@@ -261,6 +261,9 @@ ipcMain.handle("window:toggle-fullscreen", () => {
 });
 ipcMain.on("renderer:error", (_event, error) => {
   appendLog("renderer:error", error);
+});
+ipcMain.handle("log:write", (_event, label, payload) => {
+  appendLog(label, payload);
 });
 
 app.on("second-instance", () => {

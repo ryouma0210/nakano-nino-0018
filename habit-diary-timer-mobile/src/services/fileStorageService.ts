@@ -1,7 +1,9 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { Platform } from "react-native";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
+const webStorageKey = "nino-room-web-files-v2";
 export type FilePurpose = "training" | "punishment";
 
 function purposeDirectory(purpose: FilePurpose) {
@@ -22,6 +24,72 @@ async function ensurePurposeDirectory(purpose: FilePurpose) {
 
 export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose };
 
+function webAvailable() {
+  return Platform.OS === "web" && typeof document !== "undefined" && typeof localStorage !== "undefined";
+}
+
+function webReadFiles(): StoredFile[] {
+  try {
+    return JSON.parse(localStorage.getItem(webStorageKey) ?? "[]") as StoredFile[];
+  } catch {
+    return [];
+  }
+}
+
+function webWriteFiles(files: StoredFile[]) {
+  try {
+    localStorage.setItem(webStorageKey, JSON.stringify(files));
+  } catch (error) {
+    console.error("ファイル格納の保存に失敗しました。", error);
+  }
+}
+
+function webPickFiles(purpose: FilePurpose): Promise<boolean> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,video/*,audio/*";
+    input.multiple = false;
+    input.style.display = "none";
+    document.body.appendChild(input);
+
+    let settled = false;
+    function finish(value: boolean) {
+      if (settled) return;
+      settled = true;
+      input.remove();
+      resolve(value);
+    }
+
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) {
+        finish(false);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const files = webReadFiles();
+        const safeName = file.name.replace(/[\\/:*?"<>|]/g, "_");
+        files.push({
+          name: `${Date.now()}_${safeName}`,
+          uri: String(reader.result ?? ""),
+          size: file.size,
+          purpose,
+        });
+        webWriteFiles(files);
+        finish(true);
+      };
+      reader.onerror = () => finish(false);
+      reader.readAsDataURL(file);
+    });
+
+    window.setTimeout(() => {
+      input.click();
+    }, 0);
+  });
+}
+
 async function readFiles(directory: string, purpose: FilePurpose) {
   const info = await FileSystem.getInfoAsync(directory);
   if (!info.exists) return [];
@@ -37,6 +105,11 @@ async function readFiles(directory: string, purpose: FilePurpose) {
 
 export const fileStorageService = {
   async list(purpose?: FilePurpose): Promise<StoredFile[]> {
+    if (webAvailable()) {
+      return webReadFiles()
+        .filter((file) => !purpose || file.purpose === purpose)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
     await ensureDirectory();
     const legacyFiles = await readFiles(uploadDirectory, "training");
     const trainingFiles = await readFiles(purposeDirectory("training"), "training");
@@ -47,6 +120,7 @@ export const fileStorageService = {
   },
 
   async pickAndStore(purpose: FilePurpose = "training") {
+    if (webAvailable()) return webPickFiles(purpose);
     await ensurePurposeDirectory(purpose);
     const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: false });
     if (result.canceled) return false;
@@ -57,10 +131,18 @@ export const fileStorageService = {
   },
 
   async remove(uri: string) {
+    if (webAvailable()) {
+      webWriteFiles(webReadFiles().filter((file) => file.uri !== uri));
+      return;
+    }
     await FileSystem.deleteAsync(uri, { idempotent: true });
   },
 
   async clear() {
+    if (webAvailable()) {
+      webWriteFiles([]);
+      return;
+    }
     await FileSystem.deleteAsync(uploadDirectory, { idempotent: true });
     await ensureDirectory();
   },

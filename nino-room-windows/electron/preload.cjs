@@ -39,4 +39,5 @@ contextBridge.exposeInMainWorld("ninoDesktop", {
   listFiles: () => ipcRenderer.invoke("files:list"),
   pickFiles: () => ipcRenderer.invoke("files:pick"),
   removeFile: (filePath) => ipcRenderer.invoke("files:remove", filePath),
+  writeLog: (label, payload) => ipcRenderer.invoke("log:write", label, payload),
 });
