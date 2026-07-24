@@ -62,6 +62,12 @@ function createWindow() {
 
   if (state.maximized) mainWindow.maximize();
   mainWindow.webContents.setZoomFactor(state.zoom ?? 1);
+  mainWindow.webContents.on("did-fail-load", (_event, code, description, validatedURL) => {
+    console.error(`[load failed] ${code} ${description}: ${validatedURL}`);
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[renderer gone]", details);
+  });
   mainWindow.loadURL(staticServerUrl);
 
   mainWindow.on("close", saveWindowState);
@@ -84,6 +90,31 @@ function contentType(filePath) {
   return "application/octet-stream";
 }
 
+function responseHeaders(filePath) {
+  return {
+    "Content-Type": contentType(filePath),
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Resource-Policy": "same-origin",
+  };
+}
+
+function sendFile(response, filePath) {
+  fs.readFile(filePath, (readError, data) => {
+    if (readError) {
+      response.writeHead(500);
+      response.end("Internal Server Error");
+      return;
+    }
+
+    response.writeHead(200, {
+      ...responseHeaders(filePath),
+      "Content-Length": data.byteLength,
+    });
+    response.end(data);
+  });
+}
+
 function startStaticServer() {
   const root = path.resolve(__dirname, "..", "dist-web");
   staticServer = http.createServer((request, response) => {
@@ -100,12 +131,11 @@ function startStaticServer() {
 
     fs.stat(filePath, (statError, stat) => {
       if (statError || !stat.isFile()) {
-        fs.createReadStream(path.join(root, "index.html")).pipe(response);
+        sendFile(response, path.join(root, "index.html"));
         return;
       }
 
-      response.writeHead(200, { "Content-Type": contentType(filePath) });
-      fs.createReadStream(filePath).pipe(response);
+      sendFile(response, filePath);
     });
   });
 
