@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, globalShortcut, ipcMain } = require("electro
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const util = require("node:util");
 const { pathToFileURL } = require("node:url");
 
 const MIN_ZOOM = 0.75;
@@ -9,6 +10,23 @@ const MAX_ZOOM = 2;
 let mainWindow;
 let staticServer;
 let staticServerUrl;
+
+function logPath() {
+  return path.join(app.getPath("userData"), "nino-room-error.log");
+}
+
+function appendLog(label, payload) {
+  try {
+    const message = typeof payload === "string" ? payload : util.inspect(payload, { depth: 8, breakLength: 120 });
+    fs.appendFileSync(
+      logPath(),
+      `[${new Date().toISOString()}] ${label}\n${message}\n\n`,
+      "utf8",
+    );
+  } catch {
+    // ログ書き込み自体の失敗ではアプリを落とさない。
+  }
+}
 
 function settingsPath() {
   return path.join(app.getPath("userData"), "window-state.json");
@@ -62,11 +80,42 @@ function createWindow() {
 
   if (state.maximized) mainWindow.maximize();
   mainWindow.webContents.setZoomFactor(state.zoom ?? 1);
+  appendLog("app:start", {
+    version: app.getVersion(),
+    userData: app.getPath("userData"),
+    staticServerUrl,
+  });
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (level >= 2 || /error|exception|failed|timeout/i.test(message)) {
+      appendLog("renderer:console", { level, message, line, sourceId });
+    }
+  });
   mainWindow.webContents.on("did-fail-load", (_event, code, description, validatedURL) => {
-    console.error(`[load failed] ${code} ${description}: ${validatedURL}`);
+    appendLog("renderer:did-fail-load", { code, description, validatedURL });
   });
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error("[renderer gone]", details);
+    appendLog("renderer:gone", details);
+  });
+  mainWindow.webContents.on("did-finish-load", () => {
+    setTimeout(async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      try {
+        const snapshot = await mainWindow.webContents.executeJavaScript(`
+          ({
+            title: document.title,
+            bodyText: document.body.innerText.slice(0, 1000),
+            rootText: document.getElementById('root')?.innerText.slice(0, 1000) ?? null,
+            rootHtmlLength: document.getElementById('root')?.innerHTML.length ?? null,
+            scriptCount: document.scripts.length,
+            crossOriginIsolated: globalThis.crossOriginIsolated,
+            hasSharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+          })
+        `);
+        appendLog("renderer:snapshot", snapshot);
+      } catch (error) {
+        appendLog("renderer:snapshot-error", error);
+      }
+    }, 3000);
   });
   mainWindow.loadURL(staticServerUrl);
 
@@ -170,6 +219,9 @@ ipcMain.handle("window:get-state", () => ({
 }));
 ipcMain.handle("window:toggle-fullscreen", () => {
   mainWindow?.setFullScreen(!mainWindow.isFullScreen());
+});
+ipcMain.on("renderer:error", (_event, error) => {
+  appendLog("renderer:error", error);
 });
 function storedFilesDirectory() {
   const directory = path.join(app.getPath("userData"), "stored-files");

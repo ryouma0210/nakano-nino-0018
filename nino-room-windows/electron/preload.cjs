@@ -1,5 +1,32 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+function serializeError(error) {
+  if (!error) return null;
+  return {
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+  };
+}
+
+window.addEventListener("error", (event) => {
+  ipcRenderer.send("renderer:error", {
+    type: "error",
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    error: serializeError(event.error),
+  });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  ipcRenderer.send("renderer:error", {
+    type: "unhandledrejection",
+    reason: serializeError(event.reason) ?? String(event.reason),
+  });
+});
+
 contextBridge.exposeInMainWorld("ninoDesktop", {
   getWindowState: () => ipcRenderer.invoke("window:get-state"),
   setZoom: (zoom) => ipcRenderer.invoke("window:set-zoom", zoom),
