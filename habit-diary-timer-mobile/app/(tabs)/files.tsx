@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image as NativeImage, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Image as NativeImage, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import {
   createVideoPlayer,
@@ -56,6 +56,7 @@ export default function FilesScreen() {
     const generated: Record<string, GeneratedVideoThumbnail> = {};
 
     async function generateSequentially() {
+      if (Platform.OS === "web") return;
       const videos = files.filter((file) => /\.mp4$/i.test(file.name));
       for (const file of videos) {
         if (!active) break;
@@ -253,7 +254,11 @@ function VideoThumbnail({
 }) {
   return (
     <View style={styles.thumbnailWrap} pointerEvents="none">
-      {thumbnail ? (
+      {Platform.OS === "web" ? (
+        <View style={[styles.thumbnail, styles.thumbnailLoading]}>
+          <AppText style={styles.thumbnailLoadingText}>VIDEO</AppText>
+        </View>
+      ) : thumbnail ? (
         <ExpoImage
           source={thumbnail}
           style={styles.thumbnail}

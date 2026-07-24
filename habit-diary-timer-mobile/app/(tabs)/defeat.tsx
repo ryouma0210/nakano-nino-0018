@@ -20,13 +20,13 @@ import { defeatRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
 const heartLayers = [
-  { size: 820, color: "#b000ff" },
-  { size: 700, color: "#fff" },
-  { size: 580, color: "#c52cff" },
-  { size: 460, color: "#fff" },
-  { size: 340, color: "#df5cff" },
-  { size: 220, color: "#fff" },
-  { size: 100, color: "#f08cff" },
+  { size: 560, color: "#b000ff" },
+  { size: 470, color: "#fff" },
+  { size: 390, color: "#c52cff" },
+  { size: 310, color: "#fff" },
+  { size: 230, color: "#df5cff" },
+  { size: 150, color: "#fff" },
+  { size: 72, color: "#f08cff" },
 ] as const;
 
 export default function DefeatScreen() {
@@ -188,15 +188,13 @@ export default function DefeatScreen() {
         {heartLayers.map((layer) => (
           <View key={layer.size} style={styles.heartLayer}>
             <AppText
-              numberOfLines={1}
               style={[
                 styles.heart,
                 {
                   color: layer.color,
                   fontSize: layer.size,
                   lineHeight: layer.size * 1.22,
-                  width: layer.size * 1.35,
-                  height: layer.size * 1.3,
+                  height: layer.size * 1.25,
                 },
               ]}
             >
@@ -210,7 +208,7 @@ export default function DefeatScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#ff8fbd" },
+  root: { flex: 1, backgroundColor: "#ff8fbd", overflow: "hidden" },
   content: { gap: 14, paddingHorizontal: 16 },
   whiteText: { color: "#fff" },
   dateText: { color: "#fff", fontWeight: "900" },
@@ -234,7 +232,7 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "visible",
+    overflow: "hidden",
   },
   heartLayer: {
     position: "absolute",
@@ -244,9 +242,10 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "visible",
+    overflow: "hidden",
   },
   heart: {
+    width: "100%",
     fontWeight: "900",
     textAlign: "center",
     textAlignVertical: "center",

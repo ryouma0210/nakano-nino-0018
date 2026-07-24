@@ -10,6 +10,7 @@ import { ErrorDetailsScreen } from "@/components/ErrorDetailsScreen";
 import { AudioProvider } from "@/audio/AudioProvider";
 import { formatError } from "@/utils/error";
 import { AppModalProvider } from "@/components/AppModalProvider";
+import { appendWebErrorLog } from "@/utils/webErrorLog";
 
 type ErrorHandler = (error: Error, isFatal?: boolean) => void;
 type ErrorUtilsApi = { getGlobalHandler?: () => ErrorHandler; setGlobalHandler: (handler: ErrorHandler) => void };
@@ -35,6 +36,36 @@ function RootContent() {
   }, []);
 
   useEffect(() => {
+    const previousConsoleWarn = console.warn;
+    const previousConsoleError = console.error;
+    console.warn = (...args) => {
+      appendWebErrorLog("console.warn", args);
+      previousConsoleWarn(...args);
+    };
+    console.error = (...args) => {
+      appendWebErrorLog("console.error", args);
+      previousConsoleError(...args);
+    };
+
+    const handleError = (event: ErrorEvent) => {
+      appendWebErrorLog("window.error", {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error instanceof Error ? formatError(event.error) : String(event.error),
+      });
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      appendWebErrorLog("window.unhandledrejection", {
+        reason: event.reason instanceof Error ? formatError(event.reason) : String(event.reason),
+      });
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("error", handleError);
+      window.addEventListener("unhandledrejection", handleRejection);
+    }
+
     const errorUtils = (globalThis as typeof globalThis & { ErrorUtils?: ErrorUtilsApi }).ErrorUtils;
     const previousHandler = errorUtils?.getGlobalHandler?.();
     errorUtils?.setGlobalHandler((error, isFatal) => {
@@ -43,6 +74,12 @@ function RootContent() {
     });
     initialize();
     return () => {
+      console.warn = previousConsoleWarn;
+      console.error = previousConsoleError;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("error", handleError);
+        window.removeEventListener("unhandledrejection", handleRejection);
+      }
       if (previousHandler) errorUtils?.setGlobalHandler(previousHandler);
     };
   }, [initialize]);

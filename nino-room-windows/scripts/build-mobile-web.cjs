@@ -41,6 +41,7 @@ const mobileShellStyle = `
       body {
         display: flex;
         justify-content: center;
+        margin: 0;
       }
 
       #root {
@@ -48,7 +49,7 @@ const mobileShellStyle = `
         max-width: 430px;
         height: 100vh;
         background: #050505;
-        overflow-x: hidden;
+        overflow: hidden;
         position: relative;
       }
 
@@ -164,10 +165,18 @@ const mobileShellStyle = `
           },
         });
 
+        let tuneTimer = 0;
+        const scheduleTune = () => {
+          window.clearTimeout(tuneTimer);
+          tuneTimer = window.setTimeout(tune, 120);
+        };
+
         const tuneRhythmMarks = () => {
           document.querySelectorAll("div, span").forEach((element) => {
+            if (element.dataset?.ninoTuned === "1") return;
             const text = element.textContent?.trim();
             if (text !== "Q" && text !== "シコ") return;
+            element.dataset.ninoTuned = "1";
             element.style.display = "inline-flex";
             element.style.alignItems = "center";
             element.style.justifyContent = "center";
@@ -183,15 +192,14 @@ const mobileShellStyle = `
 
         const tuneVideos = () => {
           document.querySelectorAll("video").forEach((video) => {
+            if (video.dataset?.ninoTuned === "1") return;
+            video.dataset.ninoTuned = "1";
             video.muted = true;
             video.defaultMuted = true;
             video.playsInline = true;
             video.loop = true;
             video.autoplay = true;
             video.removeAttribute("controls");
-            if (video.paused) {
-              video.play().catch(() => {});
-            }
           });
         };
 
@@ -200,22 +208,24 @@ const mobileShellStyle = `
           tuneVideos();
         };
         window.addEventListener("load", tune);
-        window.addEventListener("pointerdown", () => setTimeout(tune, 50), true);
-        setInterval(tune, 1000);
-        new MutationObserver(tune).observe(document.documentElement, {
+        window.addEventListener("pointerdown", scheduleTune, true);
+        window.addEventListener("popstate", scheduleTune);
+        new MutationObserver(scheduleTune).observe(document.documentElement, {
           childList: true,
           subtree: true,
-          attributes: true,
         });
       })();
     </script>`;
 
-if (!indexHtml.includes("nino-desktop-mobile-shell")) {
-  fs.writeFileSync(
-    indexPath,
-    indexHtml.replace("</head>", `${mobileShellStyle}\n  </head>`),
-  );
-}
+const cleanedIndexHtml = indexHtml
+  .replace(/\s*<script id="nino-desktop-env">[\s\S]*?<\/script>/g, "")
+  .replace(/\s*<style id="nino-desktop-mobile-shell">[\s\S]*?<\/style>/g, "")
+  .replace(/\s*<script id="nino-desktop-web-sound-guard">[\s\S]*?<\/script>/g, "");
+
+fs.writeFileSync(
+  indexPath,
+  cleanedIndexHtml.replace("</head>", `${mobileShellStyle}\n  </head>`),
+);
 
 function listFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
