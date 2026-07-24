@@ -52,7 +52,10 @@ export type RewardRedemption = {
   redeemed_at: string;
 };
 
-const stgBonus = process.env.EXPO_PUBLIC_APP_ENV === "stg" ? 99999 : 0;
+const runtimeAppEnv =
+  process.env.EXPO_PUBLIC_APP_ENV ??
+  (globalThis as typeof globalThis & { __NINO_APP_ENV__?: string }).__NINO_APP_ENV__;
+const stgBonus = runtimeAppEnv === "stg" ? 99999 : 0;
 const pointChangeListeners = new Set<() => void>();
 
 export const pointRepository = {

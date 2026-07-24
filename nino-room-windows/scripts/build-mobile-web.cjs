@@ -25,11 +25,17 @@ execFileSync(
 
 const indexPath = path.join(outputDirectory, "index.html");
 const indexHtml = fs.readFileSync(indexPath, "utf8");
+const appEnv = process.env.EXPO_PUBLIC_APP_ENV ?? process.env.NINO_APP_ENV ?? "stg";
 const mobileShellStyle = `
+    <script id="nino-desktop-env">
+      window.__NINO_APP_ENV__ = ${JSON.stringify(appEnv)};
+    </script>
     <style id="nino-desktop-mobile-shell">
       html,
       body {
         background: #050505;
+        height: 100%;
+        overflow: hidden;
       }
 
       body {
@@ -40,10 +46,14 @@ const mobileShellStyle = `
       #root {
         width: min(100vw, 430px);
         max-width: 430px;
-        min-height: 100%;
+        height: 100vh;
         background: #050505;
         overflow-x: hidden;
         position: relative;
+      }
+
+      #root > * {
+        max-width: 430px;
       }
 
       #root * {
@@ -57,6 +67,9 @@ const mobileShellStyle = `
         align-items: center !important;
         justify-content: center !important;
         line-height: 1 !important;
+        min-width: 42px !important;
+        min-height: 42px !important;
+        font-size: 22px !important;
         overflow: visible !important;
       }
 
@@ -64,10 +77,79 @@ const mobileShellStyle = `
         pointer-events: none !important;
         opacity: 0.5 !important;
         overflow: hidden !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+        max-width: 430px !important;
       }
     </style>
     <script id="nino-desktop-web-sound-guard">
       (() => {
+        if (!window.ninoDesktop) {
+          const FILES_KEY = "nino-room-web-files-v1";
+          const readFiles = () => {
+            try {
+              return JSON.parse(localStorage.getItem(FILES_KEY) || "[]");
+            } catch {
+              return [];
+            }
+          };
+          const writeFiles = (files) => localStorage.setItem(FILES_KEY, JSON.stringify(files));
+          const chooseFiles = () =>
+            new Promise((resolve) => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.multiple = true;
+              input.accept = "image/*,video/*,audio/*";
+              input.style.display = "none";
+              document.body.appendChild(input);
+              input.addEventListener("change", async () => {
+                const existing = readFiles();
+                const selected = Array.from(input.files || []);
+                const added = await Promise.all(
+                  selected.map(
+                    (file) =>
+                      new Promise((fileResolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          fileResolve({
+                            name: file.name,
+                            path: "web:" + Date.now() + ":" + file.name,
+                            url: String(reader.result || ""),
+                            size: file.size,
+                          });
+                        };
+                        reader.onerror = () => fileResolve(null);
+                        reader.readAsDataURL(file);
+                      }),
+                  ),
+                );
+                const files = [...existing, ...added.filter(Boolean)];
+                writeFiles(files);
+                input.remove();
+                resolve(files);
+              });
+              input.addEventListener("cancel", () => {
+                input.remove();
+                resolve(readFiles());
+              });
+              input.click();
+            });
+          window.ninoDesktop = {
+            getWindowState: async () => ({ zoom: 1, fullScreen: false }),
+            setZoom: async () => undefined,
+            toggleFullScreen: async () => undefined,
+            onZoomChanged: () => () => undefined,
+            listFiles: async () => readFiles(),
+            pickFiles: chooseFiles,
+            removeFile: async (filePath) => {
+              const files = readFiles().filter((file) => file.path !== filePath);
+              writeFiles(files);
+              return files;
+            },
+          };
+        }
+
         const WEB_VOLUME_SCALE = 0.55;
         const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "volume");
         if (!descriptor?.set || !descriptor?.get || HTMLMediaElement.prototype.__ninoVolumeGuard) return;
@@ -80,6 +162,50 @@ const mobileShellStyle = `
           set(value) {
             descriptor.set.call(this, Math.max(0, Math.min(1, Number(value) * WEB_VOLUME_SCALE)));
           },
+        });
+
+        const tuneRhythmMarks = () => {
+          document.querySelectorAll("div, span").forEach((element) => {
+            const text = element.textContent?.trim();
+            if (text !== "Q" && text !== "シコ") return;
+            element.style.display = "inline-flex";
+            element.style.alignItems = "center";
+            element.style.justifyContent = "center";
+            element.style.textAlign = "center";
+            element.style.lineHeight = "1";
+            element.style.fontWeight = "900";
+            element.style.fontSize = text === "Q" ? "24px" : "16px";
+            element.style.minWidth = text === "Q" ? "44px" : "48px";
+            element.style.minHeight = text === "Q" ? "44px" : "48px";
+            element.style.overflow = "visible";
+          });
+        };
+
+        const tuneVideos = () => {
+          document.querySelectorAll("video").forEach((video) => {
+            video.muted = true;
+            video.defaultMuted = true;
+            video.playsInline = true;
+            video.loop = true;
+            video.autoplay = true;
+            video.removeAttribute("controls");
+            if (video.paused) {
+              video.play().catch(() => {});
+            }
+          });
+        };
+
+        const tune = () => {
+          tuneRhythmMarks();
+          tuneVideos();
+        };
+        window.addEventListener("load", tune);
+        window.addEventListener("pointerdown", () => setTimeout(tune, 50), true);
+        setInterval(tune, 1000);
+        new MutationObserver(tune).observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
         });
       })();
     </script>`;

@@ -49,7 +49,11 @@ function loadStore(): Store {
 }
 
 function saveStore() {
-  storage().setItem(STORAGE_KEY, JSON.stringify(loadStore()));
+  try {
+    storage().setItem(STORAGE_KEY, JSON.stringify(loadStore()));
+  } catch (error) {
+    console.error("WEB DB save failed", error);
+  }
 }
 
 function table(name: string) {
@@ -128,6 +132,7 @@ function matchWhere(row: Row, whereSql: string | undefined, params: BindParam[])
   const parts = whereSql
     .replace(/\s+LIMIT\s+\d+.*$/i, "")
     .replace(/\s+ORDER\s+BY\s+.+$/i, "")
+    .replace(/\s+GROUP\s+BY\s+.+$/i, "")
     .split(/\s+AND\s+/i)
     .map((part) => part.trim())
     .filter(Boolean);
@@ -165,7 +170,9 @@ function orderRows(rows: Row[], sql: string) {
 }
 
 function selectRows(sql: string, params: BindParam[]) {
-  const match = sql.match(/^SELECT\s+(.+?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+.+?)?(?:\s+LIMIT\s+\d+)?$/i);
+  const match = sql.match(
+    /^SELECT\s+(.+?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.+?))?(?:\s+GROUP\s+BY\s+.+?)?(?:\s+ORDER\s+BY\s+.+?)?(?:\s+LIMIT\s+\d+)?$/i,
+  );
   if (!match) return [];
   const [, columns, name, whereSql] = match;
   let rows = table(name).filter((row) => matchWhere(row, whereSql, params));
@@ -190,6 +197,9 @@ function selectRows(sql: string, params: BindParam[]) {
 
 function insert(sql: string, params: BindParam[]): ExecuteResult {
   const normalized = normalizeSql(sql);
+  if (/^INSERT(?:\s+OR\s+IGNORE)?\s+INTO\s+point_transactions/i.test(normalized) && /\sSELECT\s+/i.test(normalized)) {
+    return { changes: 0, lastInsertRowId };
+  }
   const match = normalized.match(/^INSERT(?:\s+OR\s+IGNORE)?\s+INTO\s+([a-zA-Z0-9_]+)\s*\((.+?)\)\s+VALUES\s*\((.+?)\)/i);
   if (!match) return { changes: 0, lastInsertRowId };
   const [, name, columnsSql, valuesSql] = match;
@@ -226,11 +236,11 @@ function update(sql: string, params: BindParam[]): ExecuteResult {
   if (!match) return { changes: 0, lastInsertRowId };
   const [, name, setSql, whereSql] = match;
   const setParts = splitComma(setSql);
+  const setParamCount = setParts.reduce((count, part) => count + (part.includes("?") ? 1 : 0), 0);
   let changes = 0;
   table(name).forEach((row) => {
-    const setParams = [...params];
-    const whereParamCount = setParts.filter((part) => part.includes("?")).length;
-    const whereParams = params.slice(whereParamCount);
+    const setParams = params.slice(0, setParamCount);
+    const whereParams = params.slice(setParamCount);
     if (!matchWhere(row, whereSql, whereParams)) return;
     setParts.forEach((part) => {
       const [column, token] = part.split("=").map((item) => item.trim());
