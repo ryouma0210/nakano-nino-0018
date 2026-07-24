@@ -42,8 +42,47 @@ const mobileShellStyle = `
         max-width: 430px;
         min-height: 100%;
         background: #050505;
+        overflow-x: hidden;
+        position: relative;
       }
-    </style>`;
+
+      #root * {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+
+      [data-nino-symbol],
+      [aria-label="rhythm-symbol"] {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        overflow: visible !important;
+      }
+
+      [data-nino-defeat-heart] {
+        pointer-events: none !important;
+        opacity: 0.5 !important;
+        overflow: hidden !important;
+      }
+    </style>
+    <script id="nino-desktop-web-sound-guard">
+      (() => {
+        const WEB_VOLUME_SCALE = 0.55;
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "volume");
+        if (!descriptor?.set || !descriptor?.get || HTMLMediaElement.prototype.__ninoVolumeGuard) return;
+        Object.defineProperty(HTMLMediaElement.prototype, "__ninoVolumeGuard", { value: true });
+        Object.defineProperty(HTMLMediaElement.prototype, "volume", {
+          configurable: true,
+          get() {
+            return descriptor.get.call(this);
+          },
+          set(value) {
+            descriptor.set.call(this, Math.max(0, Math.min(1, Number(value) * WEB_VOLUME_SCALE)));
+          },
+        });
+      })();
+    </script>`;
 
 if (!indexHtml.includes("nino-desktop-mobile-shell")) {
   fs.writeFileSync(
