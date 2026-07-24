@@ -25,6 +25,17 @@ type Props = {
 export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Props) {
   const { playEffect } = useAppAudio();
   const darkNavigation = title === "ホームへ戻る" || title === "スタート画面に移動";
+  const activeSubmit =
+    !disabled &&
+    !darkNavigation &&
+    tone !== "danger" &&
+    (
+      title.includes("保存") ||
+      title.includes("登録") ||
+      title.includes("命令完了") ||
+      title === "完了" ||
+      title.startsWith("準備完了")
+    );
   function press() {
     playEffect("button");
     onPress();
@@ -37,6 +48,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         styles.button,
         styles[tone],
         darkNavigation && styles.darkNavigation,
+        activeSubmit && styles.activeSubmit,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -56,6 +68,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "collection" && styles.collectionText,
         tone === "reward" && styles.rewardText,
         darkNavigation && styles.darkNavigationText,
+        activeSubmit && styles.activeSubmitText,
       ]}>{title}</AppText>
     </Pressable>
   );
@@ -126,6 +139,10 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#000",
   },
+  activeSubmit: {
+    borderColor: "#fff",
+    backgroundColor: "#7cb342",
+  },
   disabled: {
     opacity: 0.45,
   },
@@ -158,4 +175,5 @@ const styles = StyleSheet.create({
   collectionText: { color: "#fff" },
   rewardText: { color: "#111" },
   darkNavigationText: { color: "#fff" },
+  activeSubmitText: { color: "#fff" },
 });

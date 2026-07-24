@@ -46,6 +46,7 @@ export default function SettingsScreen() {
   const [partialResetConfirmation, setPartialResetConfirmation] = useState(false);
   const [partialSelection, setPartialSelection] = useState<PartialResetKey[]>([]);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [showResetOptions, setShowResetOptions] = useState(false);
   const loadSize = useCallback(() => {
     fileStorageService.totalSize().then(setCacheSize);
   }, []);
@@ -232,39 +233,48 @@ export default function SettingsScreen() {
         tone="danger"
         onPress={() => router.replace("/start")}
       />
-      <Card style={styles.partialResetCard}>
-        <AppText variant="subtitle" style={styles.partialResetText}>一部データ初期化</AppText>
-        <AppText style={styles.partialResetText}>削除する項目にチェックを付けてください。</AppText>
-        {partialResetItems.map((item) => {
-          const checked = partialSelection.includes(item.key);
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => togglePartial(item.key)}
-              style={styles.resetOption}
-            >
-              <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                <AppText style={styles.checkmark}>{checked ? "✓" : ""}</AppText>
-              </View>
-              <View style={styles.audioText}>
-                <AppText style={styles.partialResetText}>{item.label}</AppText>
-                <AppText style={styles.partialResetDescription}>{item.description}</AppText>
-              </View>
-            </Pressable>
-          );
-        })}
-        <PrimaryButton
-          title="選択したデータを初期化"
-          tone="danger"
-          disabled={partialSelection.length === 0}
-          onPress={() => setPartialResetConfirmation(true)}
-        />
-      </Card>
       <PrimaryButton
-        title="全データを初期化"
+        title="初期化する"
         tone="danger"
-        onPress={resetAll}
+        onPress={() => setShowResetOptions((current) => !current)}
       />
+      {showResetOptions ? (
+        <>
+          <Card style={styles.partialResetCard}>
+            <AppText variant="subtitle" style={styles.partialResetText}>一部データ初期化</AppText>
+            <AppText style={styles.partialResetText}>削除する項目にチェックを付けてください。</AppText>
+            {partialResetItems.map((item) => {
+              const checked = partialSelection.includes(item.key);
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => togglePartial(item.key)}
+                  style={styles.resetOption}
+                >
+                  <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                    <AppText style={styles.checkmark}>{checked ? "✓" : ""}</AppText>
+                  </View>
+                  <View style={styles.audioText}>
+                    <AppText style={styles.partialResetText}>{item.label}</AppText>
+                    <AppText style={styles.partialResetDescription}>{item.description}</AppText>
+                  </View>
+                </Pressable>
+              );
+            })}
+            <PrimaryButton
+              title="選択したデータを初期化"
+              tone="danger"
+              disabled={partialSelection.length === 0}
+              onPress={() => setPartialResetConfirmation(true)}
+            />
+          </Card>
+          <PrimaryButton
+            title="全データを初期化"
+            tone="danger"
+            onPress={resetAll}
+          />
+        </>
+      ) : null}
       <ConfirmModal
         visible={partialResetConfirmation}
         title="選択したデータを初期化しますか？"
