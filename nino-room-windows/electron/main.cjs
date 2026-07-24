@@ -28,6 +28,26 @@ function appendLog(label, payload) {
   }
 }
 
+function visibleErrorHtml(title, details) {
+  return `<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nino Room Error</title>
+    <style>
+      body { margin: 0; background: #050505; color: #fff; font-family: sans-serif; padding: 32px; }
+      h1 { color: #ff3348; font-size: 28px; }
+      pre { white-space: pre-wrap; border: 1px solid #ff3348; padding: 16px; color: #ffb8bf; }
+    </style>
+  </head>
+  <body>
+    <h1>${title}</h1>
+    <p>ログ: ${logPath()}</p>
+    <pre>${String(details).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</pre>
+  </body>
+</html>`;
+}
+
 function settingsPath() {
   return path.join(app.getPath("userData"), "window-state.json");
 }
@@ -150,9 +170,10 @@ function responseHeaders(filePath) {
 
 function sendFile(response, filePath) {
   fs.readFile(filePath, (readError, data) => {
-    if (readError) {
+      if (readError) {
+      appendLog("static:read-error", { filePath, error: readError });
       response.writeHead(500);
-      response.end("Internal Server Error");
+      response.end(visibleErrorHtml("読み込みエラー", readError.stack ?? readError.message));
       return;
     }
 
@@ -198,8 +219,19 @@ function startStaticServer() {
 }
 
 app.whenReady().then(async () => {
-  await startStaticServer();
-  createWindow();
+  try {
+    await startStaticServer();
+    createWindow();
+  } catch (error) {
+    appendLog("app:startup-error", error);
+    mainWindow = new BrowserWindow({
+      width: 520,
+      height: 900,
+      backgroundColor: "#050505",
+      autoHideMenuBar: true,
+    });
+    await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(visibleErrorHtml("起動エラー", error.stack ?? error.message ?? error))}`);
+  }
   globalShortcut.register("F11", () => {
     mainWindow?.setFullScreen(!mainWindow.isFullScreen());
   });
