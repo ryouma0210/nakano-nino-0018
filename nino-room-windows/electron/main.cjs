@@ -7,6 +7,7 @@ const { pathToFileURL } = require("node:url");
 
 const MIN_ZOOM = 0.75;
 const MAX_ZOOM = 2;
+const STATIC_SERVER_PORT = 48218;
 let mainWindow;
 let staticServer;
 let staticServerUrl;
@@ -209,13 +210,19 @@ function startStaticServer() {
     });
   });
 
-  return new Promise((resolve) => {
-    staticServer.listen(0, "127.0.0.1", () => {
+  return new Promise((resolve, reject) => {
+    staticServer.on("error", reject);
+    staticServer.listen(STATIC_SERVER_PORT, "127.0.0.1", () => {
       const address = staticServer.address();
       staticServerUrl = `http://127.0.0.1:${address.port}/`;
       resolve();
     });
   });
+}
+
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  app.quit();
 }
 
 app.whenReady().then(async () => {
@@ -254,6 +261,12 @@ ipcMain.handle("window:toggle-fullscreen", () => {
 });
 ipcMain.on("renderer:error", (_event, error) => {
   appendLog("renderer:error", error);
+});
+
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
 });
 function storedFilesDirectory() {
   const directory = path.join(app.getPath("userData"), "stored-files");
