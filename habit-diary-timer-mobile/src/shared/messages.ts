@@ -51,6 +51,16 @@ export const roomMessages: Record<string, RoomMessages> = {
       plainMessage("奴隷としての記録もご褒美も、全部ここで私に管理されるのよ♡")
     ],
   },
+  // ループ音声：app/(tabs)/loop-audio.tsx
+  loopAudio: {
+    lines: [
+      plainMessage("好きな音声を選びなさい。止めるまでずっと流してあげるわ。"),
+      plainMessage("裏でアプリを開いたままなら、音声はループ再生されるわよ。"),
+    ],
+    contractLines: [
+      plainMessage("契約済みなら、音声を流したまま私の命令を思い出しなさい♡"),
+    ],
+  },
   // 準備部屋：app/(tabs)/preparation.tsx
   preparation: {
     lines: [

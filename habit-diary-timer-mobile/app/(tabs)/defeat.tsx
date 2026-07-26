@@ -20,13 +20,12 @@ import { defeatRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
 const heartLayers = [
-  { size: 560, color: "#b000ff" },
-  { size: 470, color: "#fff" },
-  { size: 390, color: "#c52cff" },
-  { size: 310, color: "#fff" },
-  { size: 230, color: "#df5cff" },
-  { size: 150, color: "#fff" },
-  { size: 72, color: "#f08cff" },
+  { scale: 1, borderColor: "#b000ff" },
+  { scale: 0.82, borderColor: "#fff" },
+  { scale: 0.66, borderColor: "#c52cff" },
+  { scale: 0.5, borderColor: "#fff" },
+  { scale: 0.34, borderColor: "#df5cff" },
+  { scale: 0.2, borderColor: "#fff" },
 ] as const;
 
 export default function DefeatScreen() {
@@ -186,20 +185,18 @@ export default function DefeatScreen() {
         ]}
       >
         {heartLayers.map((layer) => (
-          <View key={layer.size} style={styles.heartLayer}>
-            <AppText
-              style={[
-                styles.heart,
-                {
-                  color: layer.color,
-                  fontSize: layer.size,
-                  lineHeight: layer.size * 1.22,
-                  height: layer.size * 1.25,
-                },
-              ]}
-            >
-              ♡
-            </AppText>
+          <View
+            key={layer.scale}
+            style={[
+              styles.heartShape,
+              {
+                borderColor: layer.borderColor,
+                transform: [{ rotate: "-45deg" }, { scale: layer.scale }],
+              },
+            ]}
+          >
+            <View style={[styles.heartCircle, styles.heartCircleTop, { borderColor: layer.borderColor }]} />
+            <View style={[styles.heartCircle, styles.heartCircleRight, { borderColor: layer.borderColor }]} />
           </View>
         ))}
       </Animated.View>
@@ -234,24 +231,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  heartLayer: {
+  heartShape: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
+    width: 300,
+    height: 300,
+    borderLeftWidth: 26,
+    borderBottomWidth: 26,
+    borderBottomLeftRadius: 24,
+    opacity: 0.95,
   },
-  heart: {
-    width: "100%",
-    fontWeight: "900",
-    textAlign: "center",
-    textAlignVertical: "center",
-    includeFontPadding: false,
-    overflow: "visible",
-    textShadowColor: "rgba(96,0,128,0.5)",
-    textShadowRadius: 8,
+  heartCircle: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderWidth: 26,
+    borderRadius: 150,
+  },
+  heartCircleTop: {
+    top: -150,
+    left: 0,
+  },
+  heartCircleRight: {
+    top: 0,
+    right: -150,
   },
 });

@@ -8,6 +8,7 @@ import { lightTheme } from "@/constants/theme";
 import { roomMessages } from "@/constants/messages";
 
 const menuItems = [
+  ["ループ音声", "/(tabs)/loop-audio"],
   ["週間報告", "/(tabs)/report"],
   ["調教日記", "/(tabs)/records"],
   ["ファイル格納", "/(tabs)/files"],
@@ -42,6 +43,8 @@ export default function MenuScreen() {
                   ? "defeat"
                 : title === "ファイル格納"
                   ? "preparation"
+                : title === "ループ音声"
+                  ? "collection"
                 : title === "週間報告" || title === "調教日記"
                   ? "record"
                   : title === "コレクション"

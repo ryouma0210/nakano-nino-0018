@@ -5,11 +5,15 @@ import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
 type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
+export type LoopAudioName = "earLick" | "nippleScratch";
 type AudioContextValue = {
   settings: AppSettings | null;
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
   playEffect: (name: EffectName) => void;
   stopEffect: (name: EffectName) => void;
+  loopAudioName: LoopAudioName | null;
+  playLoopAudio: (name: LoopAudioName) => void;
+  stopLoopAudio: () => void;
   setSessionAudioActive: (active: boolean) => void;
 };
 
@@ -18,6 +22,9 @@ const AudioContext = createContext<AudioContextValue>({
   updateAudioSettings: async () => {},
   playEffect: () => {},
   stopEffect: () => {},
+  loopAudioName: null,
+  playLoopAudio: () => {},
+  stopLoopAudio: () => {},
   setSessionAudioActive: () => {},
 });
 
@@ -26,6 +33,7 @@ const bgmSource = require("../../assets/audio/kyouhunomori.mp4");
 export function AudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
+  const [loopAudioName, setLoopAudioName] = useState<LoopAudioName | null>(null);
   const bgm = useAudioPlayer(null);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
@@ -36,9 +44,15 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
   const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.mp4"));
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
+  const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
+  const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
 
   useEffect(() => {
-    setAudioModeAsync({ interruptionMode: "mixWithOthers", playsInSilentMode: true }).catch(console.error);
+    setAudioModeAsync({
+      interruptionMode: "mixWithOthers",
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+    }).catch(console.error);
     settingsService.load().then(setSettings);
   }, []);
 
@@ -48,8 +62,8 @@ export function AudioProvider({ children }: PropsWithChildren) {
     bgm.replace(bgmSource);
     bgm.loop = true;
     bgm.volume = settings.musicVolume;
-    if (settings.backgroundMusicEnabled && !sessionAudioActive) bgm.play();
-  }, [bgm, sessionAudioActive, settings]);
+    if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) bgm.play();
+  }, [bgm, loopAudioName, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -72,15 +86,47 @@ export function AudioProvider({ children }: PropsWithChildren) {
     player.seekTo(0).catch(console.error);
   }, [button, complete, defeatLoop, dialogue, ejaculation, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
+  const stopLoopAudio = useCallback(() => {
+    earLickLoop.pause();
+    nippleScratchLoop.pause();
+    earLickLoop.seekTo(0).catch(console.error);
+    nippleScratchLoop.seekTo(0).catch(console.error);
+    setLoopAudioName(null);
+    setSessionAudioActive(false);
+  }, [earLickLoop, nippleScratchLoop]);
+
+  const playLoopAudio = useCallback((name: LoopAudioName) => {
+    if (!settings?.soundEnabled) return;
+    const nextPlayer = name === "earLick" ? earLickLoop : nippleScratchLoop;
+    const otherPlayer = name === "earLick" ? nippleScratchLoop : earLickLoop;
+    otherPlayer.pause();
+    otherPlayer.seekTo(0).catch(console.error);
+    nextPlayer.loop = true;
+    nextPlayer.volume = settings.soundVolume;
+    setSessionAudioActive(true);
+    setLoopAudioName(name);
+    nextPlayer.seekTo(0).then(() => nextPlayer.play()).catch(console.error);
+  }, [earLickLoop, nippleScratchLoop, settings]);
+
+  useEffect(() => {
+    if (!settings || !loopAudioName) return;
+    const player = loopAudioName === "earLick" ? earLickLoop : nippleScratchLoop;
+    player.volume = settings.soundVolume;
+    if (!settings.soundEnabled) stopLoopAudio();
+  }, [earLickLoop, loopAudioName, nippleScratchLoop, settings, stopLoopAudio]);
+
   const value = useMemo(
     () => ({
       settings,
       updateAudioSettings,
       playEffect,
       stopEffect,
+      loopAudioName,
+      playLoopAudio,
+      stopLoopAudio,
       setSessionAudioActive,
     }),
-    [playEffect, settings, stopEffect, updateAudioSettings],
+    [loopAudioName, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
 }
