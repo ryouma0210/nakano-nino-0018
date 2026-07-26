@@ -8,7 +8,6 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
-import { TextField } from "@/components/TextField";
 import { execute } from "@/database/client";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
@@ -33,27 +32,22 @@ const partialResetItems: {
   { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置きの全記録" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
   { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・契約後の追加ルール" },
-  { key: "settings", label: "名前・サウンド設定", description: "設定を初期値へ戻します" },
+  { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
   { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画" },
 ];
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
   const { showNotice } = useAppModal();
-  const [playerName, setPlayerName] = useState("");
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
   const [partialResetConfirmation, setPartialResetConfirmation] = useState(false);
   const [partialSelection, setPartialSelection] = useState<PartialResetKey[]>([]);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [showResetOptions, setShowResetOptions] = useState(false);
   const loadSize = useCallback(() => {
     fileStorageService.totalSize().then(setCacheSize);
   }, []);
   useEffect(loadSize, [loadSize]);
-  useEffect(() => {
-    if (settings) setPlayerName(settings.playerName);
-  }, [settings]);
   useFocusEffect(loadSize);
 
   function resetAll() {
@@ -109,10 +103,12 @@ export default function SettingsScreen() {
     }
     if (selected.has("contract")) await contractService.clear();
     if (selected.has("settings")) {
-      execute("DELETE FROM app_settings");
-      await settingsService.reset();
-      await updateAudioSettings(defaultSettings);
-      setPlayerName(defaultSettings.playerName);
+      await updateAudioSettings({
+        backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,
+        soundEnabled: defaultSettings.soundEnabled,
+        musicVolume: defaultSettings.musicVolume,
+        soundVolume: defaultSettings.soundVolume,
+      });
       await notificationService.cancelAll();
     }
     if (selected.has("files")) await fileStorageService.clear();
@@ -141,33 +137,6 @@ export default function SettingsScreen() {
         lines={roomMessages.settings.lines}
         contractLines={roomMessages.settings.contractLines}
       />
-      <Card>
-        <AppText variant="subtitle">呼ばれたい名前</AppText>
-        <AppText variant="muted">
-          設定した名前を、各部屋の会話や調教中のコメントで呼びます。
-        </AppText>
-        <TextField
-          label="名前"
-          value={playerName}
-          onChangeText={setPlayerName}
-          placeholder="名前を入力"
-          maxLength={20}
-          autoCorrect={false}
-        />
-        <PrimaryButton
-          title="名前を保存"
-          onPress={async () => {
-            const normalized = playerName.trim();
-            setPlayerName(normalized);
-            await updateAudioSettings({ playerName: normalized });
-            setSavedMessage(
-              normalized
-                ? `これから「${normalized}」と呼びます。`
-                : "名前の呼びかけを解除しました。",
-            );
-          }}
-        />
-      </Card>
       <Card>
         <AppText variant="subtitle">サウンド</AppText>
         <View style={styles.audioRow}>
@@ -286,15 +255,6 @@ export default function SettingsScreen() {
           setPartialResetConfirmation(false);
           executePartialReset();
         }}
-      />
-      <ConfirmModal
-        visible={savedMessage !== null}
-        title="保存しました"
-        message={savedMessage ?? ""}
-        confirmLabel="閉じる"
-        showCancel={false}
-        onCancel={() => setSavedMessage(null)}
-        onConfirm={() => setSavedMessage(null)}
       />
       <ConfirmModal
         visible={resetConfirmation}
