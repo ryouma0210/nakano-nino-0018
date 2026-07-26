@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useEventListener } from "expo";

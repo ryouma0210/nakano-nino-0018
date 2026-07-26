@@ -14,6 +14,7 @@ const menuItems = [
   ["ファイル格納", "/(tabs)/files"],
   ["コレクション", "/(tabs)/collection"],
   ["ご褒美", "/(tabs)/rewards"],
+  ["マイページ", "/(tabs)/mypage"],
   ["設定", "/(tabs)/settings"],
 ] as const;
 
@@ -41,6 +42,8 @@ export default function MenuScreen() {
                 ? "secondary"
                 : title === "ご褒美"
                   ? "defeat"
+                : title === "マイページ"
+                  ? "reward"
                 : title === "ファイル格納"
                   ? "preparation"
                 : title === "ループ音声"

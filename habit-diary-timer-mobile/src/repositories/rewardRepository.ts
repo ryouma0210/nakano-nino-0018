@@ -39,6 +39,7 @@ export const rewardCatalog = {
     cost: 10000,
     contents: rewardSecretMessages.map((message) => message.text),
   },
+  outfit: { key: "outfit", name: "二ノ様の衣装交換♡", cost: 50 },
 } as const;
 
 export type RandomRewardKey = "insult" | "praise" | "brutal";
@@ -222,5 +223,27 @@ export const rewardRepository = {
       redeemed = true;
     });
     return redeemed ? reward.contents[0] : null;
+  },
+
+  hasRedeemedOutfit(key: string) {
+    return (queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM reward_redemptions WHERE reward_key='outfit' AND file_uri=?",
+      [key],
+    )?.count ?? 0) > 0;
+  },
+
+  redeemOutfit(key: string, name: string) {
+    const reward = rewardCatalog.outfit;
+    let redeemed = false;
+    transaction(() => {
+      if (this.hasRedeemedOutfit(key)) return;
+      if (this.balance().available < reward.cost) return;
+      execute(
+        "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, file_uri, redeemed_at) VALUES('outfit', ?, ?, ?, ?, ?)",
+        [reward.name, reward.cost, name, key, toDateTimeKey()],
+      );
+      redeemed = true;
+    });
+    return redeemed;
   },
 };

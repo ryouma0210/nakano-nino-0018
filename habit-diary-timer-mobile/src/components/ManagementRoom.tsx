@@ -13,7 +13,7 @@ import {
   type ManagementDailyTask,
   type ManagementMode,
 } from "@/repositories/roomRepository";
-import { formatDateJa } from "@/utils/date";
+import { formatDateJa, toDateKey } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { pointRepository } from "@/repositories/rewardRepository";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -40,6 +40,9 @@ export function ManagementRoom({
   const [task, setTask] = useState<ManagementDailyTask | null>(() =>
     initialCycle ? managementRepository.todayTask(initialCycle) : null,
   );
+  const [tasks, setTasks] = useState<ManagementDailyTask[]>(() =>
+    initialCycle ? managementRepository.tasks(initialCycle) : [],
+  );
   const [rolling, setRolling] = useState(false);
   const [rerollConfirmation, setRerollConfirmation] = useState(false);
   const [changeModeConfirmation, setChangeModeConfirmation] = useState(false);
@@ -51,6 +54,7 @@ export function ManagementRoom({
       const next = managementRepository.roll(mode, dice);
       setCycle(next);
       setTask(managementRepository.todayTask(next));
+      setTasks(managementRepository.tasks(next));
       setRolling(false);
     }, 650);
   }
@@ -64,6 +68,7 @@ export function ManagementRoom({
       "射精管理の本日の命令を完了",
     );
     setTask({ ...task, completed_at: new Date().toISOString() });
+    setTasks(managementRepository.tasks(cycle));
     if (task.record_date >= cycle.end_date)
       managementRepository.finish(cycle.id);
   }
@@ -82,6 +87,7 @@ export function ManagementRoom({
       const next = managementRepository.reroll(currentCycleId, mode, dice);
       setCycle(next);
       setTask(managementRepository.todayTask(next));
+      setTasks(managementRepository.tasks(next));
       setRolling(false);
     }, 650);
   }
@@ -99,8 +105,11 @@ export function ManagementRoom({
     if (cycle) managementRepository.removeCycle(cycle.id);
     setCycle(null);
     setTask(null);
+    setTasks([]);
     onChangeMode?.();
   }
+
+  const today = toDateKey();
 
   return (
     <Screen>
@@ -150,6 +159,12 @@ export function ManagementRoom({
             <AppText variant="muted">
               {formatDateJa(cycle.start_date)} ～ {formatDateJa(cycle.end_date)}
             </AppText>
+            <ManagementBoard
+              cycle={cycle}
+              tasks={tasks}
+              today={today}
+              playerName={settings?.playerName.trim() ?? ""}
+            />
             <PrimaryButton
               title={rolling ? "サイコロを振っています" : "サイコロを振り直す"}
               tone="danger"
@@ -215,6 +230,72 @@ function formatManagementInstruction(text: string, playerName: string) {
   return message ? formatConfiguredMessage(message, playerName) : text;
 }
 
+function ManagementBoard({
+  cycle,
+  tasks,
+  today,
+  playerName,
+}: {
+  cycle: ManagementCycle;
+  tasks: ManagementDailyTask[];
+  today: string;
+  playerName: string;
+}) {
+  return (
+    <View style={styles.board}>
+      <View style={styles.boardHeader}>
+        <AppText style={styles.boardTitle}>管理すごろく</AppText>
+        <AppText style={styles.boardHelp}>
+          未来日の命令は当日まで？？？よ。
+        </AppText>
+      </View>
+      <View style={styles.boardGrid}>
+        <View style={[styles.boardCell, styles.startCell]}>
+          <AppText style={styles.cellDate}>START</AppText>
+          <AppText style={styles.cellText}>管理開始</AppText>
+        </View>
+        {tasks.map((item, index) => {
+          const isToday = item.record_date === today;
+          const isPast = item.record_date < today;
+          const isFuture = item.record_date > today;
+          const isFinal = item.record_date >= cycle.end_date;
+          const revealed = isPast || isToday;
+          const instruction = revealed
+            ? formatManagementInstruction(item.instruction, playerName)
+            : "？？？";
+          return (
+            <View
+              key={item.id}
+              style={[
+                styles.boardCell,
+                isFinal && styles.finalCell,
+                isToday && styles.todayCell,
+                item.completed_at && styles.completedCell,
+              ]}
+            >
+              <AppText style={styles.cellDate}>
+                {index + 1}日目 / {formatDateJa(item.record_date)}
+              </AppText>
+              <AppText style={styles.cellStatus}>
+                {isFinal ? "射精日" : isFuture ? "未開放" : item.completed_at ? "完了" : isToday ? "本日" : "未完了"}
+              </AppText>
+              <AppText
+                style={[
+                  styles.cellText,
+                  isFuture && styles.hiddenText,
+                  isFinal && styles.finalText,
+                ]}
+              >
+                {instruction}
+              </AppText>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   dice: {
     alignItems: "center",
@@ -242,5 +323,71 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
     lineHeight: 34,
+  },
+  board: {
+    gap: 10,
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#555",
+    paddingTop: 12,
+  },
+  boardHeader: { gap: 3 },
+  boardTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  boardHelp: {
+    color: lightTheme.muted,
+    fontSize: 11,
+    lineHeight: 18,
+  },
+  boardGrid: { gap: 8 },
+  boardCell: {
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#5b2a33",
+    borderRadius: 8,
+    padding: 10,
+    backgroundColor: "#21040a",
+  },
+  startCell: {
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  todayCell: {
+    borderColor: "#fff",
+    backgroundColor: "#4a1020",
+  },
+  finalCell: {
+    borderColor: lightTheme.danger,
+    backgroundColor: "#2a0308",
+  },
+  completedCell: {
+    borderColor: "#7cb342",
+  },
+  cellDate: {
+    color: lightTheme.muted,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  cellStatus: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  cellText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 20,
+  },
+  hiddenText: {
+    color: lightTheme.muted,
+    fontSize: 18,
+    letterSpacing: 3,
+  },
+  finalText: {
+    color: "#ff8a92",
   },
 });

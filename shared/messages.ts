@@ -41,6 +41,25 @@ export const roomMessages: Record<string, RoomMessages> = {
       namedMessage("部屋に移動する際は、四つん這いで移動しなさい。"),
     ],
   },
+  // 部屋一覧：app/(tabs)/rooms.tsx
+  rooms: {
+    lines: [
+      namedMessage("今日はどの部屋で過ごすの？"),
+      plainMessage("命令、調教、管理、お仕置き。好きなところへ行きなさい。"),
+    ],
+    contractLines: [
+      plainMessage("マゾ犬なら、どの部屋でも私の命令が絶対よ♡"),
+    ],
+  },
+  // 二ノ様の控室：app/(tabs)/nino-room.tsx
+  ninoRoom: {
+    lines: [
+      plainMessage("ここは私の控室よ。表情や衣装、演出を確認する場所ね。"),
+    ],
+    contractLines: [
+      plainMessage("私を見る目も少しは従順になったかしら♡"),
+    ],
+  },
   // 記録・管理メニュー：app/(tabs)/menu.tsx
   menu: {
     lines: [
@@ -60,6 +79,16 @@ export const roomMessages: Record<string, RoomMessages> = {
     contractLines: [
       plainMessage("音声を流したまま私の調教受けたらどうなるかしらね♡"),
       plainMessage("一度聞いてしまったら、もう逆らえないｗ私の命令でも思い出して発情してろ♡"),
+    ],
+  },
+  // マイページ：app/(tabs)/mypage.tsx
+  mypage: {
+    lines: [
+      plainMessage("あなたのステータスと、私からの評価を確認する場所よ。"),
+      plainMessage("性癖タイプを設定しておけば、私の見方も少し変わるわ♡"),
+    ],
+    contractLines: [
+      plainMessage("契約済みの奴隷なら、自分の性癖も評価も逃げずに見なさい♡"),
     ],
   },
   // 準備部屋：app/(tabs)/preparation.tsx
