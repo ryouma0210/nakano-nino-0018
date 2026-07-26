@@ -37,8 +37,8 @@ export default function HomeScreen() {
                   href === "/(tabs)/menu"
                     ? "secondary"
                     : href === "/(tabs)/nino-room"
-                      ? "reward"
-                      : "primary"
+                      ? "defeat"
+                      : "contract"
                 }
                 onPress={() => router.push(href)}
               />
