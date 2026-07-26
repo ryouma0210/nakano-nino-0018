@@ -5,6 +5,7 @@ export default function TabLayout() {
     <Stack screenOptions={{ headerShown: false, animation: "none" }}>
       <Stack.Screen name="index" options={{ title: "ホーム" }} />
       <Stack.Screen name="menu" options={{ title: "記録・管理メニュー" }} />
+      <Stack.Screen name="loop-audio" options={{ title: "ループ音声" }} />
       <Stack.Screen name="habits" options={{ title: "調教部屋" }} />
       <Stack.Screen name="records" options={{ title: "調教日記部屋" }} />
       <Stack.Screen name="timer" options={{ title: "お仕置き部屋" }} />
