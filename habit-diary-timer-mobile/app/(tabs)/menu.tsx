@@ -8,10 +8,10 @@ import { lightTheme } from "@/constants/theme";
 import { roomMessages } from "@/constants/messages";
 
 const menuItems = [
-  ["ループ音声", "/(tabs)/loop-audio"],
   ["週間報告", "/(tabs)/report"],
   ["調教日記", "/(tabs)/records"],
   ["ファイル格納", "/(tabs)/files"],
+  ["ループ音声", "/(tabs)/loop-audio"],
   ["コレクション", "/(tabs)/collection"],
   ["ご褒美", "/(tabs)/rewards"],
   ["マイページ", "/(tabs)/mypage"],
@@ -43,7 +43,7 @@ export default function MenuScreen() {
                 : title === "ご褒美"
                   ? "defeat"
                 : title === "マイページ"
-                  ? "reward"
+                  ? "record"
                 : title === "ファイル格納"
                   ? "preparation"
                 : title === "ループ音声"

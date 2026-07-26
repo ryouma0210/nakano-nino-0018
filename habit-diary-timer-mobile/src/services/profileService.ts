@@ -17,6 +17,7 @@ export type ProfileSettings = {
   tissueCount: string;
   weaknesses: string[];
   ninoOutfit: string;
+  ninoVoiceStyle: string;
 };
 
 export const defaultProfile: ProfileSettings = {
@@ -32,6 +33,7 @@ export const defaultProfile: ProfileSettings = {
   tissueCount: "",
   weaknesses: [],
   ninoOutfit: "default",
+  ninoVoiceStyle: "queen",
 };
 
 export const profileService = {
