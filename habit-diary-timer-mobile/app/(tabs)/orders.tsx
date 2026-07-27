@@ -57,6 +57,11 @@ export default function OrdersScreen() {
         )}
       </Card>
       <PrimaryButton
+        title="廊下に戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/rooms")}
+      />
+      <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
