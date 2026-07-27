@@ -391,45 +391,6 @@ export default function TributeScreen() {
         )}
       </Card>
 
-      <Card style={styles.summary}>
-        <AppText variant="subtitle">{monthLabel(selectedMonth)}の内訳</AppText>
-        <View style={styles.summaryRow}>
-          <AppText>基本収入</AppText>
-          <AppText style={styles.summaryValue}>{formatYen(monthlyIncome)}</AppText>
-        </View>
-        <View style={styles.summaryRow}>
-          <AppText>追加収入</AppText>
-          <AppText style={styles.incomeSummaryValue}>+{formatYen(additionalIncome)}</AppText>
-        </View>
-        <View style={styles.summaryRow}>
-          <AppText>今月使える金額</AppText>
-          <AppText style={styles.summaryValue}>{formatYen(incomeTotal)}</AppText>
-        </View>
-        <View style={styles.summaryRow}>
-          <AppText>お貢ぎ集計</AppText>
-          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(tributeTotal)}</AppText>
-        </View>
-        <View style={styles.summaryRow}>
-          <AppText>雑費集計</AppText>
-          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(miscTotal)}</AppText>
-        </View>
-        <View style={styles.summaryRow}>
-          <AppText>支出合計</AppText>
-          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(total)}</AppText>
-        </View>
-        <View style={styles.summaryTotal}>
-          <AppText style={styles.remainingLabel}>残りお貢ぎ可能額</AppText>
-          <AppText
-            style={[
-              styles.remaining,
-              remaining < 0 && styles.remainingOver,
-            ]}
-          >
-            {remaining < 0 ? `-${formatYen(Math.abs(remaining))}` : formatYen(remaining)}
-          </AppText>
-        </View>
-      </Card>
-
       <PrimaryButton
         title="記録・管理メニューへ戻る"
         tone="secondary"
@@ -599,12 +560,6 @@ const styles = StyleSheet.create({
   summaryValue: { fontWeight: "900" },
   incomeSummaryValue: { color: "#7cb342", fontWeight: "900" },
   spendingSummaryValue: { color: lightTheme.danger, fontWeight: "900" },
-  summaryTotal: {
-    gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#f2c94c",
-    paddingTop: 14,
-  },
   remainingLabel: { color: "#f2c94c", fontWeight: "900" },
   remaining: {
     color: "#f2c94c",
