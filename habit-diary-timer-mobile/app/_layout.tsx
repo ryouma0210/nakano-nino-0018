@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type PropsWithChildren, useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -36,6 +37,11 @@ function RootContent() {
   }, []);
 
   useEffect(() => {
+    if (Platform.OS !== "web") {
+      initialize();
+      return undefined;
+    }
+
     const previousConsoleWarn = console.warn;
     const previousConsoleError = console.error;
     console.warn = (...args) => {
