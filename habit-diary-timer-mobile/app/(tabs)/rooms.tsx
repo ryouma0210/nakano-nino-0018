@@ -44,6 +44,7 @@ export default function RoomsScreen() {
       </View>
       <RoomConversation
         characterSource={require("../../assets/backgrounds/rooms-corridor.png")}
+        characterFit="cover"
         roomName="廊下"
         lines={roomMessages.rooms.lines}
         contractLines={roomMessages.rooms.contractLines}

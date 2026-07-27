@@ -25,6 +25,7 @@ type Props = {
   contractLines?: ConversationLine[];
   characterSource?: ImageSourcePropType;
   characterVideoSource?: number;
+  characterFit?: "contain" | "cover";
 };
 
 const defaultLines: ConversationLine[] = [
@@ -39,6 +40,7 @@ export function RoomConversation({
   contractLines = [],
   characterSource,
   characterVideoSource,
+  characterFit = "contain",
 }: Props) {
   const { playEffect, settings } = useAppAudio();
   const [index, setIndex] = useState(0);
@@ -99,12 +101,12 @@ export function RoomConversation({
 
       <View style={styles.stage}>
         {characterVideoSource ? (
-          <RoomConversationVideo source={characterVideoSource} />
+          <RoomConversationVideo source={characterVideoSource} contentFit={characterFit} />
         ) : characterSource ? (
           <Image
             source={characterSource}
             style={styles.characterImage}
-            resizeMode="contain"
+            resizeMode={characterFit}
           />
         ) : (
           <>
@@ -145,7 +147,13 @@ export function RoomConversation({
   );
 }
 
-function RoomConversationVideo({ source }: { source: number }) {
+function RoomConversationVideo({
+  source,
+  contentFit,
+}: {
+  source: number;
+  contentFit: "contain" | "cover";
+}) {
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = true;
     instance.muted = true;
@@ -158,7 +166,7 @@ function RoomConversationVideo({ source }: { source: number }) {
       player={player}
       style={styles.characterImage}
       nativeControls={false}
-      contentFit="contain"
+      contentFit={contentFit}
     />
   );
 }

@@ -157,10 +157,10 @@ export const rewardRepository = {
     const reward = rewardCatalog[key];
     const choices = this.remaining(key);
     if (choices.length === 0) return null;
+    if (this.balance().available < reward.cost) return null;
     const content = choices[Math.floor(Math.random() * choices.length)];
     let redeemed = false;
     transaction(() => {
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES(?, ?, ?, ?, ?)",
         [reward.key, reward.name, reward.cost, content, toDateTimeKey()],
@@ -172,6 +172,7 @@ export const rewardRepository = {
 
   redeemVideo(name: string) {
     const reward = rewardCatalog.video;
+    if (this.balance().available < reward.cost) return false;
     let redeemed = false;
     transaction(() => {
       const existing = queryOne<{ count: number }>(
@@ -179,7 +180,6 @@ export const rewardRepository = {
         [name],
       )?.count ?? 0;
       if (existing > 0) return;
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('video', ?, ?, ?, ?)",
         [reward.name, reward.cost, name, toDateTimeKey()],
@@ -198,10 +198,10 @@ export const rewardRepository = {
 
   redeemVoice() {
     const reward = rewardCatalog.voice;
+    if (this.balance().available < reward.cost) return false;
     let redeemed = false;
     transaction(() => {
       if (this.hasRedeemed(reward.key)) return;
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES(?, ?, ?, ?, ?)",
         [reward.key, reward.name, reward.cost, reward.content, toDateTimeKey()],
@@ -213,9 +213,9 @@ export const rewardRepository = {
 
   redeemSecret() {
     const reward = rewardCatalog.secret;
+    if (this.balance().available < reward.cost) return null;
     let redeemed = false;
     transaction(() => {
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('secret', ?, ?, ?, ?)",
         [reward.name, reward.cost, reward.contents[0], toDateTimeKey()],
@@ -234,10 +234,10 @@ export const rewardRepository = {
 
   redeemOutfit(key: string, name: string) {
     const reward = rewardCatalog.outfit;
+    if (this.balance().available < reward.cost) return false;
     let redeemed = false;
     transaction(() => {
       if (this.hasRedeemedOutfit(key)) return;
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, file_uri, redeemed_at) VALUES('outfit', ?, ?, ?, ?, ?)",
         [reward.name, reward.cost, name, key, toDateTimeKey()],

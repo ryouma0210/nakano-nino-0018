@@ -395,7 +395,7 @@ export default function MyPageScreen() {
         </View>
         <View style={styles.profileSummary}>
           <Metric label="おちんぽ判定" value={penisLengthLabel(profile.erectionLengthCm)} />
-          <Metric label="頻度" value={numericValue(profile.masturbationPerWeek) === null ? "未設定" : `${numericValue(profile.masturbationPerWeek)}/1週間`} />
+          <Metric label="頻度" value={numericValue(profile.masturbationPerWeek) === null ? "未設定" : `${numericValue(profile.masturbationPerWeek)}回/1週間`} />
           <Metric label="時間判定" value={masturbationTimeLabel(profile.masturbationMinutes)} />
           <Metric label="ティッシュ" value={numericValue(profile.tissueCount) === null ? "未設定" : `${numericValue(profile.tissueCount)}枚`} />
         </View>
