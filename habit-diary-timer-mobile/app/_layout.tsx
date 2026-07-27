@@ -67,11 +67,16 @@ function RootContent() {
     }
 
     const errorUtils = (globalThis as typeof globalThis & { ErrorUtils?: ErrorUtilsApi }).ErrorUtils;
-    const previousHandler = errorUtils?.getGlobalHandler?.();
-    errorUtils?.setGlobalHandler((error, isFatal) => {
-      console.error("Global error", { isFatal, error });
-      setErrorDetails(`${formatError(error)}\nFATAL: ${Boolean(isFatal)}`);
-    });
+    const canUseGlobalErrorHandler = typeof errorUtils?.setGlobalHandler === "function";
+    const previousHandler = typeof errorUtils?.getGlobalHandler === "function"
+      ? errorUtils.getGlobalHandler()
+      : undefined;
+    if (canUseGlobalErrorHandler) {
+      errorUtils.setGlobalHandler((error, isFatal) => {
+        console.error("Global error", { isFatal, error });
+        setErrorDetails(`${formatError(error)}\nFATAL: ${Boolean(isFatal)}`);
+      });
+    }
     initialize();
     return () => {
       console.warn = previousConsoleWarn;
@@ -80,7 +85,7 @@ function RootContent() {
         window.removeEventListener("error", handleError);
         window.removeEventListener("unhandledrejection", handleRejection);
       }
-      if (previousHandler) errorUtils?.setGlobalHandler(previousHandler);
+      if (canUseGlobalErrorHandler && previousHandler) errorUtils.setGlobalHandler(previousHandler);
     };
   }, [initialize]);
 
