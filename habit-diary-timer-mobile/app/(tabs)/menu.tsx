@@ -67,7 +67,7 @@ export default function MenuScreen() {
                   : title === "ファイル格納"
                     ? "preparation"
                   : title === "お貢ぎ履歴"
-                    ? "reward"
+                    ? "tribute"
                   : title === "ループ音声"
                     ? "collection"
                   : title === "週間報告" || title === "調教日記"

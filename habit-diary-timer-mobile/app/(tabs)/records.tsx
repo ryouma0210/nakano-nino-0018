@@ -73,12 +73,13 @@ export default function RecordsScreen() {
       .sort((left, right) => {
         const priority = (journal: Journal) => {
           if (journal.tags?.includes("敗北部屋")) return 0;
-          if (journal.tags?.includes("準備部屋")) return 1;
-          if (journal.tags?.includes("本日の命令")) return 2;
-          if (journal.tags?.includes("射精管理")) return 3;
-          if (journal.tags?.includes("調教") || journal.tags?.includes("射精記録")) return 4;
-          if (journal.tags?.includes("お仕置き")) return 5;
-          return 6;
+          if (journal.tags?.includes("洗脳部屋")) return 1;
+          if (journal.tags?.includes("準備部屋")) return 2;
+          if (journal.tags?.includes("本日の命令")) return 3;
+          if (journal.tags?.includes("射精管理")) return 4;
+          if (journal.tags?.includes("調教") || journal.tags?.includes("射精記録")) return 5;
+          if (journal.tags?.includes("お仕置き")) return 6;
+          return 7;
         };
         return priority(left) - priority(right)
           || left.record_time.localeCompare(right.record_time)
@@ -172,6 +173,7 @@ export default function RecordsScreen() {
   function journalCardStyle(journal: Journal) {
     const tags = journal.tags ?? "";
     if (tags.includes("敗北部屋")) return styles.defeatRecordCard;
+    if (tags.includes("洗脳部屋")) return styles.brainwashRecordCard;
     if (tags.includes("準備部屋")) return styles.preparationRecordCard;
     if (tags.includes("本日の命令")) return styles.orderRecordCard;
     if (tags.includes("射精管理")) return styles.managementRecordCard;
@@ -637,6 +639,7 @@ const styles = StyleSheet.create({
   checklistChoiceMark: { width: 30, fontSize: 20, lineHeight: 28 },
   dateGroup: { gap: 8 },
   defeatRecordCard: { borderWidth: 2, borderColor: "#ff69b4" },
+  brainwashRecordCard: { borderWidth: 2, borderColor: "#ff69b4" },
   preparationRecordCard: { borderWidth: 2, borderColor: "#7cb342" },
   orderRecordCard: { borderWidth: 2, borderColor: "#29b6f6" },
   managementRecordCard: { borderWidth: 2, borderColor: "#ff9800" },

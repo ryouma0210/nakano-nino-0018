@@ -103,46 +103,56 @@ export default function NinoRoomScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: Math.max(10, insets.top), paddingBottom: Math.max(10, insets.bottom) }]}>
-      <View style={styles.skyGlow} />
-      <View style={styles.roomGlow} />
-      <View style={styles.topBar}>
-        <View style={styles.pointPill}>
-          <AppText style={styles.pointIcon}>♥</AppText>
-          <AppText style={styles.pointText}>DRESS</AppText>
-        </View>
-        <View style={styles.infoPill}>
-          <AppText style={styles.infoText}>{selectedOutfit.name}</AppText>
-        </View>
-      </View>
-
-      <View style={styles.stage}>
+    <View style={styles.root}>
+      <View style={styles.mediaLayer}>
         {displayMode === "video" && selectedOutfit.video ? (
           <NinoOutfitVideo source={selectedOutfit.video} />
         ) : (
           <Image
             source={selectedOutfit.source}
-            resizeMode="contain"
-            style={styles.nino}
+            resizeMode="cover"
+            style={styles.backgroundMedia}
           />
         )}
+      </View>
+
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.overlay,
+          {
+            paddingTop: Math.max(10, insets.top),
+            paddingBottom: Math.max(10, insets.bottom),
+          },
+        ]}
+      >
+        <View style={styles.topBar}>
+          <View style={styles.pointPill}>
+            <AppText style={styles.pointIcon}>♥</AppText>
+            <AppText style={styles.pointText}>DRESS</AppText>
+          </View>
+          <View style={styles.infoPill}>
+            <AppText style={styles.infoText}>{selectedOutfit.name}</AppText>
+          </View>
+        </View>
+
         <View style={styles.sideButtons}>
           <CircleButton title={displayMode === "video" ? "画像" : "動画"} active={displayMode === "video"} onPress={toggleMediaMode} />
           <CircleButton title="衣装" active={panel === "outfits"} onPress={() => setPanel("outfits")} />
           <CircleButton title="戻る" onPress={() => router.replace("/(tabs)")} />
         </View>
-      </View>
 
-      <Pressable
-        style={styles.dialogue}
-        onPress={() => setLineIndex((current) => current + 1)}
-      >
-        <View style={styles.nameTag}>
-          <AppText style={styles.nameText}>二ノ</AppText>
-        </View>
-        <AppText style={styles.dialogueText}>{currentLine.text}</AppText>
-        <AppText style={styles.nextText}>タップして次へ ▶</AppText>
-      </Pressable>
+        <Pressable
+          style={styles.dialogue}
+          onPress={() => setLineIndex((current) => current + 1)}
+        >
+          <View style={styles.nameTag}>
+            <AppText style={styles.nameText}>二ノ</AppText>
+          </View>
+          <AppText style={styles.dialogueText}>{currentLine.text}</AppText>
+          <AppText style={styles.nextText}>タップして次へ ▶</AppText>
+        </Pressable>
+      </View>
 
       <Modal
         visible={panel === "outfits"}
@@ -205,8 +215,8 @@ function NinoOutfitVideo({ source }: { source: number }) {
     <VideoView
       player={player}
       nativeControls={false}
-      contentFit="contain"
-      style={styles.nino}
+      contentFit="cover"
+      style={styles.backgroundMedia}
     />
   );
 }
@@ -231,27 +241,24 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     overflow: "hidden",
-    paddingHorizontal: 14,
-    backgroundColor: "#07121a",
+    backgroundColor: "#000",
   },
-  skyGlow: {
+  mediaLayer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: "55%",
-    backgroundColor: "#244464",
+    bottom: 0,
   },
-  roomGlow: {
+  backgroundMedia: {
     position: "absolute",
-    left: -60,
-    right: -60,
-    bottom: -40,
-    height: "54%",
-    borderTopLeftRadius: 240,
-    borderTopRightRadius: 240,
-    backgroundColor: "#f2a13b",
-    opacity: 0.5,
+    width: "100%",
+    height: "100%",
+  },
+  overlay: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
   },
   topBar: {
     zIndex: 3,
@@ -278,20 +285,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.88)",
   },
   infoText: { color: "#333", fontWeight: "900", fontSize: 12 },
-  stage: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    marginTop: 8,
-  },
-  nino: {
-    width: "108%",
-    height: "100%",
-  },
   sideButtons: {
     position: "absolute",
-    right: 2,
-    top: 54,
+    right: 14,
+    top: 78,
     gap: 10,
     zIndex: 4,
   },
@@ -317,6 +314,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
     minHeight: 112,
     gap: 5,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.9)",
     borderRadius: 12,

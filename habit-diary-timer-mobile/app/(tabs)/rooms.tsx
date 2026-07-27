@@ -58,7 +58,7 @@ export default function RoomsScreen() {
               href === "/(tabs)/defeat"
                 ? "defeat"
                 : href === "/(tabs)/brainwash"
-                  ? "training"
+                  ? "defeat"
                 : href === "/(tabs)/timer"
                   ? "punishment"
                 : href === "/(tabs)/contract"

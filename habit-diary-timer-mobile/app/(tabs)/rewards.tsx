@@ -32,6 +32,11 @@ const rewardVideos = [
     fileName: "nino-preparation.mp4",
     module: require("../../assets/videos/preparation_1.mp4"),
   },
+  {
+    name: "洗脳動画",
+    fileName: "nino-brainwash.mp4",
+    module: require("../../assets/videos/brainwash_01.mp4"),
+  },
   { name: "調教動画 1", fileName: "nino-training-01.mp4", module: require("../../assets/videos/habits_1.mp4") },
   { name: "調教動画 2", fileName: "nino-training-02.mp4", module: require("../../assets/videos/habits_2.mp4") },
   { name: "調教動画 3", fileName: "nino-training-03.mp4", module: require("../../assets/videos/habits_3.mp4") },
