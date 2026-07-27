@@ -54,20 +54,21 @@ export default function LoopAudioScreen() {
                   <AppText variant="muted">{selected ? "再生中" : audio.description}</AppText>
                 </View>
                 <PrimaryButton
-                  title={selected ? "再生中" : "再生"}
-                  disabled={!settings?.soundEnabled || selected}
-                  onPress={() => playLoopAudio(audio.key)}
+                  title={selected ? "停止" : "再生"}
+                  tone={selected ? "danger" : "primary"}
+                  disabled={!settings?.soundEnabled}
+                  onPress={() => {
+                    if (selected) {
+                      stopLoopAudio();
+                      return;
+                    }
+                    playLoopAudio(audio.key);
+                  }}
                 />
               </View>
             );
           })}
         </View>
-        <PrimaryButton
-          title="停止"
-          tone="danger"
-          disabled={!loopAudioName}
-          onPress={stopLoopAudio}
-        />
       </Card>
       <PrimaryButton
         title="記録・管理メニューへ戻る"

@@ -404,9 +404,6 @@ export default function MyPageScreen() {
 
       <Card style={styles.weaknessCard}>
         <AppText variant="subtitle">弱点</AppText>
-        <AppText variant="muted">
-          チェック数：{weakCount}個 / 判定：{weakRank}
-        </AppText>
         <View style={styles.weaknessGrid}>
           {weaknessOptions.map((item) => {
             const active = profile.weaknesses.includes(item);
@@ -414,15 +411,19 @@ export default function MyPageScreen() {
               <Pressable
                 key={item}
                 onPress={() => toggleWeakness(item)}
-                style={[styles.weaknessChip, active && styles.weaknessChipActive]}
+                style={styles.weaknessChip}
               >
-                <AppText style={styles.weaknessText}>
+                <AppText style={[styles.weaknessText, active && styles.weaknessTextActive]}>
                   {active ? "✅ " : "☐ "}
                   {item}
                 </AppText>
               </Pressable>
             );
           })}
+        </View>
+        <View style={styles.weaknessSummary}>
+          <Metric label="チェック数" value={`${weakCount}個`} />
+          <Metric label="変態度" value={weakRank} />
         </View>
         <PrimaryButton title="弱点を保存" onPress={saveProfile} />
       </Card>
@@ -562,13 +563,26 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    maxWidth: "100%",
     backgroundColor: "#050505",
   },
-  weaknessChipActive: {
-    borderColor: "#fff",
-    backgroundColor: "#8a1457",
+  weaknessText: {
+    color: "#fff",
+    flexShrink: 1,
+    flexWrap: "wrap",
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 17,
   },
-  weaknessText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+  weaknessTextActive: { color: "#ff69b4" },
+  weaknessSummary: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#444",
+    paddingTop: 10,
+  },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metric: {
     minWidth: "46%",
