@@ -192,7 +192,7 @@ export default function SettingsScreen() {
         />
       </Card>
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="管理・設定メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -353,3 +353,4 @@ const styles = StyleSheet.create({
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
 });
+

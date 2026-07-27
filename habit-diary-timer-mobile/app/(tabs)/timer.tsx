@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 50,
     color: "#fff",
-    fontSize: 7,
+    fontSize: 11,
     lineHeight: 50,
     fontWeight: "900",
     textAlign: "center",

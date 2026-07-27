@@ -120,7 +120,7 @@ export const roomMessages: Record<string, RoomMessages> = {
       plainMessage("洗脳が終わったら、完了ボタンを押すだけよ♡"),
     ],
     contractLines: [
-      plainMessage("契約済みの奴隷なら、もっと深く私に染まりなさい♡"),
+      plainMessage("もっと深く私に染まりなさい♡"),
     ],
   },
   // 調教部屋：app/(tabs)/habits.tsx
@@ -350,6 +350,7 @@ export const preparationChecklistMessages = [
 
 // 敗北部屋の強制チェック項目：app/(tabs)/defeat.tsx
 export const defeatChecklistMessages = [
+  "洗脳部屋で洗脳を完了すること。",
   "準備部屋で全てのチェック項目を完了すること。",
   "調教を5回受けること♡",
   "お仕置き部屋で60分以上受けること♡",

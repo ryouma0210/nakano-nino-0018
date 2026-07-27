@@ -15,7 +15,10 @@ import { useAppModal } from "@/components/AppModalProvider";
 import { roomMessages } from "@/constants/messages";
 import { ninoOutfits as outfits } from "@/constants/outfits";
 import { rewardRepository } from "@/repositories/rewardRepository";
-import { profileService, type ProfileSettings } from "@/services/profileService";
+import {
+  profileService,
+  type ProfileSettings,
+} from "@/services/profileService";
 
 type Panel = "outfits" | null;
 type MediaMode = "image" | "video";
@@ -24,7 +27,9 @@ export default function NinoRoomScreen() {
   const insets = useSafeAreaInsets();
   const { showNotice } = useAppModal();
   const [profile, setProfile] = useState<ProfileSettings | null>(null);
-  const [redeemedOutfits, setRedeemedOutfits] = useState<Set<string>>(new Set());
+  const [redeemedOutfits, setRedeemedOutfits] = useState<Set<string>>(
+    new Set(),
+  );
   const [panel, setPanel] = useState<Panel>(null);
   const [mediaMode, setMediaMode] = useState<MediaMode>("image");
   const [lineIndex, setLineIndex] = useState(0);
@@ -58,10 +63,7 @@ export default function NinoRoomScreen() {
   const selectedOutfit =
     outfits.find((item) => item.key === profile?.ninoOutfit) ?? outfits[0];
   const lines = useMemo(
-    () => [
-      ...baseLines,
-      ...selectedOutfit.lines.map((text) => ({ text })),
-    ],
+    () => [...baseLines, ...selectedOutfit.lines.map((text) => ({ text }))],
     [baseLines, selectedOutfit],
   );
   const currentLine = lines[lineIndex % lines.length];
@@ -78,24 +80,37 @@ export default function NinoRoomScreen() {
     if (!unlocked) {
       const redeemed = rewardRepository.redeemOutfit(key, outfit.name);
       if (!redeemed) {
-        showNotice("ポイントが足りません", `${outfit.name}は${outfit.cost}ptで交換できます。`);
+        showNotice(
+          "ポイントが足りません",
+          `${outfit.name}は${outfit.cost}ptで交換できます。`,
+        );
         return;
       }
       setRedeemedOutfits((current) => new Set([...current, key]));
-      showNotice("交換しました", `${outfit.name}を${outfit.cost}ptで交換しました。`);
+      showNotice(
+        "交換しました",
+        `${outfit.name}を${outfit.cost}ptで交換しました。`,
+      );
     }
-    const next = { ...(profile ?? await profileService.load()), ninoOutfit: key };
+    const next = {
+      ...(profile ?? (await profileService.load())),
+      ninoOutfit: key,
+    };
     setProfile(next);
     await profileService.save(next);
     setPanel(null);
     setMediaMode("image");
     setLineIndex(0);
-    if (unlocked) showNotice("保存しました", `${outfit.name}に着せ替えました。`);
+    if (unlocked)
+      showNotice("保存しました", `${outfit.name}に着せ替えました。`);
   }
 
   function toggleMediaMode() {
     if (!hasVideo) {
-      showNotice("動画は未設定です", "この衣装には動画がないため、画像で表示します。");
+      showNotice(
+        "動画は未設定です",
+        "この衣装には動画がないため、画像で表示します。",
+      );
       setMediaMode("image");
       return;
     }
@@ -137,9 +152,20 @@ export default function NinoRoomScreen() {
         </View>
 
         <View style={styles.sideButtons}>
-          <CircleButton title={displayMode === "video" ? "画像" : "動画"} active={displayMode === "video"} onPress={toggleMediaMode} />
-          <CircleButton title="衣装" active={panel === "outfits"} onPress={() => setPanel("outfits")} />
-          <CircleButton title="戻る" onPress={() => router.replace("/(tabs)")} />
+          <CircleButton
+            title={displayMode === "video" ? "画像" : "動画"}
+            active={displayMode === "video"}
+            onPress={toggleMediaMode}
+          />
+          <CircleButton
+            title="衣装"
+            active={panel === "outfits"}
+            onPress={() => setPanel("outfits")}
+          />
+          <CircleButton
+            title="戻る"
+            onPress={() => router.replace("/(tabs)")}
+          />
         </View>
 
         <Pressable
@@ -164,16 +190,23 @@ export default function NinoRoomScreen() {
           <View style={styles.modalPanel}>
             <View style={styles.panelHeader}>
               <AppText style={styles.panelTitle}>着せ替え</AppText>
-              <Pressable onPress={() => setPanel(null)} style={styles.closeButton}>
+              <Pressable
+                onPress={() => setPanel(null)}
+                style={styles.closeButton}
+              >
                 <AppText style={styles.closeText}>×</AppText>
               </Pressable>
             </View>
             <AppText style={styles.modalHelp}>
               衣装を選ぶと控え室の二ノ様に反映されます。未交換の衣装は300ptで交換できます。
             </AppText>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.outfitList}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.outfitList}
+            >
               {outfits.map((outfit) => {
-                const unlocked = outfit.key === "default" || redeemedOutfits.has(outfit.key);
+                const unlocked =
+                  outfit.key === "default" || redeemedOutfits.has(outfit.key);
                 const active = selectedOutfit.key === outfit.key;
                 return (
                   <Pressable
@@ -185,11 +218,19 @@ export default function NinoRoomScreen() {
                       !unlocked && styles.optionLocked,
                     ]}
                   >
-                    <Image source={outfit.source} resizeMode="cover" style={styles.outfitThumb} />
+                    <Image
+                      source={outfit.source}
+                      resizeMode="cover"
+                      style={styles.outfitThumb}
+                    />
                     <View style={styles.outfitInfo}>
                       <AppText style={styles.optionName}>{outfit.name}</AppText>
                       <AppText style={styles.optionMeta}>
-                        {active ? "選択中" : unlocked ? outfit.unlock : `未交換 ${outfit.cost}pt`}
+                        {active
+                          ? "選択中"
+                          : unlocked
+                            ? outfit.unlock
+                            : `未交換 ${outfit.cost}pt`}
                       </AppText>
                     </View>
                   </Pressable>
@@ -231,7 +272,10 @@ function CircleButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.circleButton, active && styles.circleButtonActive]}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.circleButton, active && styles.circleButtonActive]}
+    >
       <AppText style={styles.circleButtonText}>{title}</AppText>
     </Pressable>
   );
@@ -293,13 +337,14 @@ const styles = StyleSheet.create({
     zIndex: 4,
   },
   circleButton: {
-    width: 54,
-    height: 54,
+    minWidth: 72,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: "#fff",
     borderRadius: 999,
+    paddingHorizontal: 10,
     backgroundColor: "rgba(255,255,255,0.82)",
   },
   circleButtonActive: {
@@ -307,8 +352,10 @@ const styles = StyleSheet.create({
   },
   circleButtonText: {
     color: "#246",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "900",
+    lineHeight: 18,
+    textAlign: "center",
   },
   dialogue: {
     zIndex: 5,

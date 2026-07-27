@@ -389,7 +389,7 @@ export default function RecordsScreen() {
       ))}
 
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="記録・交換メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -659,3 +659,4 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+
