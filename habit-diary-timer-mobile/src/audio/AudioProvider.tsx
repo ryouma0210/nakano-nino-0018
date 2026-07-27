@@ -34,7 +34,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
   const [loopAudioName, setLoopAudioName] = useState<LoopAudioName | null>(null);
-  const bgm = useAudioPlayer(null);
+  const bgm = useAudioPlayer(bgmSource);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.mp4"));
@@ -48,18 +48,19 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
 
   useEffect(() => {
-    setAudioModeAsync({
-      interruptionMode: "mixWithOthers",
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-    }).catch(console.error);
+    if (typeof setAudioModeAsync === "function") {
+      setAudioModeAsync({
+        interruptionMode: "mixWithOthers",
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+      }).catch(console.error);
+    }
     settingsService.load().then(setSettings);
   }, []);
 
   useEffect(() => {
     if (!settings) return;
     bgm.pause();
-    bgm.replace(bgmSource);
     bgm.loop = true;
     bgm.volume = settings.musicVolume;
     if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) bgm.play();

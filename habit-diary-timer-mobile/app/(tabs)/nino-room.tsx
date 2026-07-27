@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Easing,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -167,20 +167,20 @@ export default function NinoRoomScreen() {
       Animated.sequence([
         Animated.timing(float, {
           toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
+          duration: 1600,
           useNativeDriver: true,
         }),
         Animated.timing(float, {
           toValue: 0,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
+          duration: 1600,
           useNativeDriver: true,
         }),
       ]),
     );
     loop.start();
-    return () => loop.stop();
+    return () => {
+      loop.stop();
+    };
   }, [float]);
 
   const selectedOutfit =
@@ -188,7 +188,6 @@ export default function NinoRoomScreen() {
   const selectedVoice =
     voiceStyles.find((item) => item.key === profile?.ninoVoiceStyle) ?? voiceStyles[0];
   const currentLine = lines[lineIndex % lines.length];
-
   const translateY = float.interpolate({
     inputRange: [0, 1],
     outputRange: [4, -10],
@@ -306,7 +305,7 @@ export default function NinoRoomScreen() {
                       !unlocked && styles.optionLocked,
                     ]}
                   >
-                    <Animated.Image source={outfit.source} resizeMode="cover" style={styles.outfitThumb} />
+                    <Image source={outfit.source} resizeMode="cover" style={styles.outfitThumb} />
                     <AppText style={styles.optionName}>{outfit.name}</AppText>
                     <AppText style={styles.optionMeta}>{unlocked ? outfit.unlock : "未交換 50pt"}</AppText>
                   </Pressable>
