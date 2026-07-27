@@ -11,6 +11,7 @@ import { contractService } from "@/services/gameRoomService";
 
 const roomItems = [
   ["敗北部屋", "/(tabs)/defeat"],
+  ["洗脳部屋", "/(tabs)/brainwash"],
   ["準備部屋", "/(tabs)/preparation"],
   ["本日の命令部屋", "/(tabs)/orders"],
   ["調教部屋", "/(tabs)/habits"],
@@ -42,8 +43,8 @@ export default function RoomsScreen() {
         <View style={styles.rule} />
       </View>
       <RoomConversation
-        characterSource={require("../../assets/characters/home-nino.png")}
-        roomName="部屋"
+        characterSource={require("../../assets/backgrounds/rooms-corridor.png")}
+        roomName="廊下"
         lines={roomMessages.rooms.lines}
         contractLines={roomMessages.rooms.contractLines}
       />
@@ -56,6 +57,8 @@ export default function RoomsScreen() {
             tone={
               href === "/(tabs)/defeat"
                 ? "defeat"
+                : href === "/(tabs)/brainwash"
+                  ? "training"
                 : href === "/(tabs)/timer"
                   ? "punishment"
                 : href === "/(tabs)/contract"

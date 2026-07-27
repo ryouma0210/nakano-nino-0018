@@ -8,7 +8,7 @@ import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
 
 const rooms = [
-  ["部屋に移動", "/(tabs)/rooms"],
+  ["部屋に移動（廊下）", "/(tabs)/rooms"],
   ["二ノ様の控室", "/(tabs)/nino-room"],
   ["記録・管理メニュー", "/(tabs)/menu"],
 ] as const;

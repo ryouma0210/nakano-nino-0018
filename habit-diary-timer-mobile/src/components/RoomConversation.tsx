@@ -7,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -23,6 +24,7 @@ type Props = {
   lines?: ConversationLine[];
   contractLines?: ConversationLine[];
   characterSource?: ImageSourcePropType;
+  characterVideoSource?: number;
 };
 
 const defaultLines: ConversationLine[] = [
@@ -36,6 +38,7 @@ export function RoomConversation({
   lines,
   contractLines = [],
   characterSource,
+  characterVideoSource,
 }: Props) {
   const { playEffect, settings } = useAppAudio();
   const [index, setIndex] = useState(0);
@@ -95,7 +98,9 @@ export function RoomConversation({
       </View>
 
       <View style={styles.stage}>
-        {characterSource ? (
+        {characterVideoSource ? (
+          <RoomConversationVideo source={characterVideoSource} />
+        ) : characterSource ? (
           <Image
             source={characterSource}
             style={styles.characterImage}
@@ -137,6 +142,24 @@ export function RoomConversation({
         </AppText>
       </View>
     </Pressable>
+  );
+}
+
+function RoomConversationVideo({ source }: { source: number }) {
+  const player = useVideoPlayer(source, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+    instance.volume = 0;
+    instance.play();
+  });
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.characterImage}
+      nativeControls={false}
+      contentFit="contain"
+    />
   );
 }
 

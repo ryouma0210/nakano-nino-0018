@@ -112,6 +112,17 @@ export const roomMessages: Record<string, RoomMessages> = {
       namedMessage("私に見下ろされるために来たの？本当に従順なマゾ犬ね♡"),
     ],
   },
+  // 洗脳部屋：app/(tabs)/brainwash.tsx
+  brainwash: {
+    lines: [
+      plainMessage("耳舐め音声を聞きながら、画面だけ見ていなさい♡"),
+      namedMessage("何も考えなくていいわ。私の声と映像だけ追いかけなさい。"),
+      plainMessage("洗脳が終わったら、完了ボタンを押すだけよ♡"),
+    ],
+    contractLines: [
+      plainMessage("契約済みの奴隷なら、もっと深く私に染まりなさい♡"),
+    ],
+  },
   // 調教部屋：app/(tabs)/habits.tsx
   training: {
     lines: [
@@ -175,6 +186,16 @@ export const roomMessages: Record<string, RoomMessages> = {
     ],
     contractLines: [
       plainMessage("奴隷として何をされたか、恥ずかしいことまで全部正直に残しなさい♡")
+    ],
+  },
+  // お貢ぎ履歴：app/(tabs)/tribute.tsx
+  tribute: {
+    lines: [
+      plainMessage("今月のお貢ぎ履歴をここで管理するわ。"),
+      namedMessage("日付、金額、コメントを入力して、残りを確認しなさい。"),
+    ],
+    contractLines: [
+      plainMessage("契約済みの奴隷なら、自分がいくら差し出せるかくらい把握しなさい♡"),
     ],
   },
   // ファイル格納部屋：app/(tabs)/files.tsx

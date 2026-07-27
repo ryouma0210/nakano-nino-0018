@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useState } from "react";
-import { Modal, StyleSheet, View } from "react-native";
+import { Image, Modal, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -21,6 +21,7 @@ import {
   formatConfiguredMessage,
   roomMessages,
 } from "@/constants/messages";
+import { ninoOutfits, type NinoOutfit } from "@/constants/outfits";
 import { achievementRepository } from "@/repositories/achievementRepository";
 import {
   rewardRepository,
@@ -49,6 +50,14 @@ const rewardVideos = [
   { name: "お仕置き動画 2", fileName: "nino-punishment-02.mp4", module: require("../../assets/videos/timer_2.mp4") },
   { name: "契約成立動画", fileName: "nino-contract.mp4", module: require("../../assets/videos/contract_1.mp4") },
 ] as const;
+
+function outfitImageFileName(outfit: NinoOutfit) {
+  return `nino-outfit-${outfit.key}.png`;
+}
+
+function outfitVideoFileName(outfit: NinoOutfit) {
+  return `nino-outfit-${outfit.key}.mp4`;
+}
 
 function contractDays(signedAt?: string) {
   if (!signedAt) return 0;
@@ -192,6 +201,8 @@ export default function CollectionScreen() {
             <CollectionVideo key={item.id} item={item} />
           ) : item.reward_key === "voice" ? (
             <CollectionVoice key={item.id} item={item} />
+          ) : item.reward_key === "outfit" ? (
+            <CollectionOutfit key={item.id} item={item} />
           ) : (
             <RewardText key={item.id} item={item} playerName={playerName} />
           ),
@@ -217,6 +228,86 @@ function RewardText({ item, playerName }: { item: RewardRedemption; playerName: 
     <View style={styles.collectionRow}>
       <AppText>{formatRewardText(item, playerName)}</AppText>
       <RewardMetadata item={item} />
+    </View>
+  );
+}
+
+function CollectionOutfit({ item }: { item: RewardRedemption }) {
+  const { showNotice } = useAppModal();
+  const outfit = ninoOutfits.find((entry) => entry.key === item.file_uri);
+
+  async function saveAsset(module: number, fileName: string, mediaType: "photo" | "video") {
+    try {
+      const permission = await MediaLibrary.requestPermissionsAsync(true, [mediaType]);
+      if (!permission.granted) {
+        showNotice(
+          "保存権限が必要です",
+          mediaType === "photo"
+            ? "衣装画像を保存するには、写真への保存を許可してください。"
+            : "衣装動画を保存するには、動画への保存を許可してください。",
+        );
+        return;
+      }
+      const asset = Asset.fromModule(module);
+      await asset.downloadAsync();
+      const namedUri = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.deleteAsync(namedUri, { idempotent: true });
+      await FileSystem.copyAsync({
+        from: asset.localUri ?? asset.uri,
+        to: namedUri,
+      });
+      await MediaLibrary.saveToLibraryAsync(namedUri);
+      showNotice(
+        "保存完了",
+        mediaType === "photo"
+          ? "衣装画像を端末のギャラリーへ保存しました。"
+          : "衣装動画を端末のギャラリーへ保存しました。",
+      );
+    } catch (error) {
+      showNotice(
+        mediaType === "photo" ? "画像を保存できません" : "動画を保存できません",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  if (!outfit) {
+    return (
+      <View style={styles.collectionRow}>
+        <AppText style={styles.videoName}>{item.reward_content ?? "衣装"}</AppText>
+        <AppText variant="muted">衣装データが見つかりません。</AppText>
+        <RewardMetadata item={item} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.collectionRow}>
+      <View style={styles.outfitCollectionHeader}>
+        <Image source={outfit.source} resizeMode="cover" style={styles.outfitCollectionThumb} />
+        <View style={styles.grow}>
+          <AppText style={styles.videoName}>{outfit.name}</AppText>
+          <AppText variant="muted">
+            画像{outfit.video ? "・動画" : ""}を保存できます。
+          </AppText>
+          <RewardMetadata item={item} />
+        </View>
+      </View>
+      <View style={styles.videoActions}>
+        <PrimaryButton
+          title="画像保存"
+          tone="secondary"
+          onPress={() => saveAsset(outfit.source, outfitImageFileName(outfit), "photo")}
+        />
+        <PrimaryButton
+          title="動画保存"
+          tone="secondary"
+          disabled={!outfit.video}
+          onPress={() => {
+            if (outfit.video) saveAsset(outfit.video, outfitVideoFileName(outfit), "video");
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -419,6 +510,20 @@ const styles = StyleSheet.create({
   titleText: { color: "#f2c94c", fontWeight: "900" },
   videoName: { fontWeight: "900" },
   rewardMetadata: { color: "#999", fontSize: 10, lineHeight: 14 },
+  grow: { flex: 1 },
+  outfitCollectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  outfitCollectionThumb: {
+    width: 64,
+    height: 86,
+    borderWidth: 1,
+    borderColor: "#666",
+    borderRadius: 6,
+    backgroundColor: "#111",
+  },
   videoActions: { flexDirection: "row", gap: 8 },
   ruleDivider: { height: 1, backgroundColor: "#555" },
   videoModal: {

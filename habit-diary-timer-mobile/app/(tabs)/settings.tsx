@@ -60,6 +60,8 @@ export default function SettingsScreen() {
     execute("DELETE FROM management_cycles");
     execute("DELETE FROM preparation_records");
     execute("DELETE FROM reward_redemptions");
+    execute("DELETE FROM tribute_records");
+    execute("DELETE FROM tribute_income_records");
     execute("DELETE FROM point_transactions");
     execute("DELETE FROM journal_tags");
     execute("DELETE FROM tags");
@@ -89,6 +91,8 @@ export default function SettingsScreen() {
     const selected = new Set(partialSelection);
     if (selected.has("records")) {
       execute("DELETE FROM preparation_records");
+      execute("DELETE FROM tribute_records");
+      execute("DELETE FROM tribute_income_records");
       execute("DELETE FROM timer_histories");
       execute("DELETE FROM habit_records");
       execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%'");

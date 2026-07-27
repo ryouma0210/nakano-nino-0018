@@ -23,6 +23,8 @@ const ID_COLUMNS = new Set([
   "management_daily_tasks",
   "reward_redemptions",
   "point_transactions",
+  "tribute_records",
+  "tribute_income_records",
 ]);
 const UNIQUE_COLUMNS: Record<string, string[]> = {
   schema_migrations: ["id"],

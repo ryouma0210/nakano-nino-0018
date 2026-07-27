@@ -39,7 +39,7 @@ export const rewardCatalog = {
     cost: 10000,
     contents: rewardSecretMessages.map((message) => message.text),
   },
-  outfit: { key: "outfit", name: "二ノ様の衣装交換♡", cost: 50 },
+  outfit: { key: "outfit", name: "二ノ様の衣装交換♡", cost: 300 },
 } as const;
 
 export type RandomRewardKey = "insult" | "praise" | "brutal";

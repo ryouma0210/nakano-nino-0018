@@ -1,5 +1,6 @@
+import { useCallback } from "react";
 import { StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -8,6 +9,7 @@ import { Screen } from "@/components/Screen";
 import { roomMessages } from "@/constants/messages";
 import { useAppAudio, type LoopAudioName } from "@/audio/AudioProvider";
 import { lightTheme } from "@/constants/theme";
+import { contractService } from "@/services/gameRoomService";
 
 const loopAudios: { key: LoopAudioName; title: string; description: string }[] = [
   {
@@ -24,6 +26,18 @@ const loopAudios: { key: LoopAudioName; title: string; description: string }[] =
 
 export default function LoopAudioScreen() {
   const { loopAudioName, playLoopAudio, stopLoopAudio, settings } = useAppAudio();
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      contractService.load().then((contract) => {
+        if (active && !contract.signedAt) router.replace("/(tabs)/menu");
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   return (
     <Screen>

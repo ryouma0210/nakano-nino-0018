@@ -29,7 +29,7 @@ export default function NinoRoomScreen() {
   const [mediaMode, setMediaMode] = useState<MediaMode>("image");
   const [lineIndex, setLineIndex] = useState(0);
 
-  const lines = useMemo(
+  const baseLines = useMemo(
     () => [
       ...(roomMessages.ninoRoom.lines ?? []),
       ...(roomMessages.ninoRoom.contractLines ?? []),
@@ -57,6 +57,13 @@ export default function NinoRoomScreen() {
 
   const selectedOutfit =
     outfits.find((item) => item.key === profile?.ninoOutfit) ?? outfits[0];
+  const lines = useMemo(
+    () => [
+      ...baseLines,
+      ...selectedOutfit.lines.map((text) => ({ text })),
+    ],
+    [baseLines, selectedOutfit],
+  );
   const currentLine = lines[lineIndex % lines.length];
   const hasVideo = Boolean(selectedOutfit.video);
   const displayMode = hasVideo ? mediaMode : "image";
@@ -71,17 +78,18 @@ export default function NinoRoomScreen() {
     if (!unlocked) {
       const redeemed = rewardRepository.redeemOutfit(key, outfit.name);
       if (!redeemed) {
-        showNotice("ポイントが足りません", `${outfit.name}は50ptで交換できます。`);
+        showNotice("ポイントが足りません", `${outfit.name}は${outfit.cost}ptで交換できます。`);
         return;
       }
       setRedeemedOutfits((current) => new Set([...current, key]));
-      showNotice("交換しました", `${outfit.name}を50ptで交換しました。`);
+      showNotice("交換しました", `${outfit.name}を${outfit.cost}ptで交換しました。`);
     }
     const next = { ...(profile ?? await profileService.load()), ninoOutfit: key };
     setProfile(next);
     await profileService.save(next);
     setPanel(null);
     setMediaMode("image");
+    setLineIndex(0);
     if (unlocked) showNotice("保存しました", `${outfit.name}に着せ替えました。`);
   }
 
@@ -151,7 +159,7 @@ export default function NinoRoomScreen() {
               </Pressable>
             </View>
             <AppText style={styles.modalHelp}>
-              衣装を選ぶと控え室の二ノ様に反映されます。未交換の衣装は50ptで交換できます。
+              衣装を選ぶと控え室の二ノ様に反映されます。未交換の衣装は300ptで交換できます。
             </AppText>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.outfitList}>
               {outfits.map((outfit) => {
@@ -171,7 +179,7 @@ export default function NinoRoomScreen() {
                     <View style={styles.outfitInfo}>
                       <AppText style={styles.optionName}>{outfit.name}</AppText>
                       <AppText style={styles.optionMeta}>
-                        {active ? "選択中" : unlocked ? outfit.unlock : "未交換 50pt"}
+                        {active ? "選択中" : unlocked ? outfit.unlock : `未交換 ${outfit.cost}pt`}
                       </AppText>
                     </View>
                   </Pressable>
