@@ -204,10 +204,26 @@ export default function RewardsScreen() {
       title: "控え室の衣装を交換しますか？",
       message: `${outfit.name}\n\n${reward.cost}ptを消費します。交換後は二ノ様の控え室で着せ替えできます。`,
       onConfirm: () => {
-        if (!rewardRepository.redeemOutfit(outfit.key, outfit.name)) {
+        let redeemed = false;
+        try {
+          redeemed = rewardRepository.redeemOutfit(outfit.key, outfit.name);
+        } catch {
+          showNotice(
+            "交換できません",
+            "衣装交換データの保存に失敗しました。アプリを再起動してからもう一度試してください。",
+          );
+          return;
+        }
+        if (!redeemed) {
+          let alreadyRedeemed = false;
+          try {
+            alreadyRedeemed = rewardRepository.hasRedeemedOutfit(outfit.key);
+          } catch {
+            alreadyRedeemed = false;
+          }
           return showNotice(
             "交換できません",
-            rewardRepository.hasRedeemedOutfit(outfit.key)
+            alreadyRedeemed
               ? "この衣装は交換済みです。"
               : "所持ポイントが足りません。",
           );

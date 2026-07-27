@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
-  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -19,15 +19,6 @@ import { contractService } from "@/services/gameRoomService";
 import { defeatRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
-const heartLayers = [
-  { scale: 1, borderColor: "#b000ff" },
-  { scale: 0.82, borderColor: "#fff" },
-  { scale: 0.66, borderColor: "#c52cff" },
-  { scale: 0.5, borderColor: "#fff" },
-  { scale: 0.34, borderColor: "#df5cff" },
-  { scale: 0.2, borderColor: "#fff" },
-] as const;
-
 export default function DefeatScreen() {
   const insets = useSafeAreaInsets();
   const { showNotice } = useAppModal();
@@ -35,8 +26,6 @@ export default function DefeatScreen() {
     useAppAudio();
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [completed, setCompleted] = useState(false);
-  const heartOpacity = useRef(new Animated.Value(0)).current;
-  const heartScale = useRef(new Animated.Value(0.55)).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -64,36 +53,6 @@ export default function DefeatScreen() {
     }, [playEffect, setSessionAudioActive, settings?.soundEnabled, stopEffect]),
   );
 
-  useEffect(() => {
-    function showHeart() {
-      heartOpacity.setValue(0);
-      heartScale.setValue(0.55);
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(heartOpacity, {
-            toValue: 0.5,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-          Animated.delay(900),
-          Animated.timing(heartOpacity, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.timing(heartScale, {
-          toValue: 1.25,
-          duration: 1650,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-    showHeart();
-    const timer = setInterval(showHeart, 5000);
-    return () => clearInterval(timer);
-  }, [heartOpacity, heartScale]);
-
   function forceCheck(text: string) {
     if (completed) return;
     setChecked((current) => {
@@ -116,7 +75,12 @@ export default function DefeatScreen() {
 
   return (
     <View style={styles.root}>
+      <DefeatLoopVideo
+        source={require("../../assets/videos/sennou.mp4")}
+        style={styles.sennouVideo}
+      />
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           {
@@ -129,7 +93,7 @@ export default function DefeatScreen() {
           敗北部屋
         </AppText>
         <RoomConversation
-          characterSource={require("../../assets/characters/defeat-nino.png")}
+          characterVideoSource={require("../../assets/videos/defeat_01.mp4")}
           roomName="敗北部屋"
           lines={roomMessages.defeat.lines}
           contractLines={roomMessages.defeat.contractLines}
@@ -180,38 +144,42 @@ export default function DefeatScreen() {
           onPress={() => router.replace("/(tabs)")}
         />
       </ScrollView>
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.heartMotion,
-          {
-            opacity: heartOpacity,
-            transform: [{ scale: heartScale }],
-          },
-        ]}
-      >
-        {heartLayers.map((layer) => (
-          <View
-            key={layer.scale}
-            style={[
-              styles.heartShape,
-              {
-                borderColor: layer.borderColor,
-                transform: [{ rotate: "-45deg" }, { scale: layer.scale }],
-              },
-            ]}
-          >
-            <View style={[styles.heartCircle, styles.heartCircleTop, { borderColor: layer.borderColor }]} />
-            <View style={[styles.heartCircle, styles.heartCircleRight, { borderColor: layer.borderColor }]} />
-          </View>
-        ))}
-      </Animated.View>
+      <DefeatLoopVideo
+        source={require("../../assets/videos/hartmaku.mp4")}
+        style={styles.heartVideo}
+      />
     </View>
+  );
+}
+
+function DefeatLoopVideo({
+  source,
+  style,
+}: {
+  source: number;
+  style: object;
+}) {
+  const player = useVideoPlayer(source, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+    instance.volume = 0;
+    instance.play();
+  });
+
+  return (
+    <VideoView
+      pointerEvents="none"
+      player={player}
+      nativeControls={false}
+      contentFit="cover"
+      style={style}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#ff8fbd", overflow: "hidden" },
+  scroll: { zIndex: 2 },
   content: { gap: 14, paddingHorizontal: 16 },
   whiteText: { color: "#fff" },
   dateText: { color: "#fff", fontWeight: "900" },
@@ -227,38 +195,22 @@ const styles = StyleSheet.create({
   check: { width: 30, color: "#fff", fontSize: 20, lineHeight: 30 },
   checkText: { flex: 1, color: "#fff", fontWeight: "800" },
   checkedText: { color: "#fff", textDecorationLine: "underline" },
-  heartMotion: {
+  sennouVideo: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
+    zIndex: 0,
+    opacity: 0.18,
   },
-  heartShape: {
+  heartVideo: {
     position: "absolute",
-    width: 300,
-    height: 300,
-    borderLeftWidth: 26,
-    borderBottomWidth: 26,
-    borderBottomLeftRadius: 24,
-    opacity: 0.95,
-  },
-  heartCircle: {
-    position: "absolute",
-    width: 300,
-    height: 300,
-    borderWidth: 26,
-    borderRadius: 150,
-  },
-  heartCircleTop: {
-    top: -150,
-    left: 0,
-  },
-  heartCircleRight: {
     top: 0,
-    right: -150,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 5,
+    opacity: 0.5,
   },
 });
