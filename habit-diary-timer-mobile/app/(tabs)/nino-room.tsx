@@ -156,7 +156,11 @@ export default function NinoRoomScreen() {
       ),
     );
   }, []);
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -164,13 +168,13 @@ export default function NinoRoomScreen() {
         Animated.timing(float, {
           toValue: 1,
           duration: 1500,
-          easing: Easing.inOut(Easing.sin),
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(float, {
           toValue: 0,
           duration: 1500,
-          easing: Easing.inOut(Easing.sin),
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
       ]),
