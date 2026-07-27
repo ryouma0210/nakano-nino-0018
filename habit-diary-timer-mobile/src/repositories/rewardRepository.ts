@@ -24,7 +24,7 @@ export const rewardCatalog = {
   brutal: {
     key: "brutal",
     name: "鬼畜の調教命令交換♡",
-    cost: 1000,
+    cost: 100,
     contents: rewardBrutalOrderMessages.map((message) => message.text),
   },
   voice: {

@@ -85,7 +85,7 @@ export default function LoopAudioScreen() {
         </View>
       </Card>
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="管理・設定メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -110,3 +110,4 @@ const styles = StyleSheet.create({
   optionTitle: { color: "#fff", fontWeight: "900" },
   warning: { color: lightTheme.danger, fontWeight: "900" },
 });
+

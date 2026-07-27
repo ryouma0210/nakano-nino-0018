@@ -413,8 +413,8 @@ export default function MyPageScreen() {
                 onPress={() => toggleWeakness(item)}
                 style={styles.weaknessChip}
               >
+                <AppText style={styles.weaknessCheck}>{active ? "✅" : "☐"}</AppText>
                 <AppText style={[styles.weaknessText, active && styles.weaknessTextActive]}>
-                  {active ? "✅ " : "☐ "}
                   {item}
                 </AppText>
               </Pressable>
@@ -443,7 +443,7 @@ export default function MyPageScreen() {
       </Card>
 
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="管理・設定メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -558,21 +558,29 @@ const styles = StyleSheet.create({
   profileSummary: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   weaknessGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   weaknessChip: {
+    minWidth: 96,
+    maxWidth: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     borderWidth: 1,
     borderColor: "#555",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    maxWidth: "100%",
     backgroundColor: "#050505",
+  },
+  weaknessCheck: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 20,
   },
   weaknessText: {
     color: "#fff",
-    flexShrink: 1,
-    flexWrap: "wrap",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "900",
-    lineHeight: 17,
+    lineHeight: 20,
   },
   weaknessTextActive: { color: "#ff69b4" },
   weaknessSummary: {
@@ -600,3 +608,4 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+

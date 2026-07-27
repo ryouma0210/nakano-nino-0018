@@ -206,7 +206,7 @@ export default function FilesScreen() {
       ))}
       </View>
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="管理・設定メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -412,3 +412,4 @@ const styles = StyleSheet.create({
   viewerMedia: { flex: 1, alignItems: "center", justifyContent: "center" },
   fullMedia: { width: "100%", height: "100%", backgroundColor: "#000" },
 });
+

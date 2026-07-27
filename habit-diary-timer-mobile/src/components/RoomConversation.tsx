@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import {
   Image,
@@ -158,8 +158,11 @@ function RoomConversationVideo({
     instance.loop = true;
     instance.muted = true;
     instance.volume = 0;
-    instance.play();
   });
+
+  useEffect(() => {
+    player.play();
+  }, [player]);
 
   return (
     <VideoView

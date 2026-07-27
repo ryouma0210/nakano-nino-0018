@@ -392,7 +392,7 @@ export default function TributeScreen() {
       </Card>
 
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="記録・交換メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -594,3 +594,4 @@ const styles = StyleSheet.create({
   dayText: { color: lightTheme.text, fontWeight: "900" },
   dayTextActive: { color: "#111" },
 });
+

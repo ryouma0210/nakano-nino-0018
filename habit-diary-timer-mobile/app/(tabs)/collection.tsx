@@ -41,6 +41,7 @@ import { secondsToClock } from "@/utils/date";
 const rewardVideos = [
   { name: "準備動画", fileName: "nino-preparation.mp4", module: require("../../assets/videos/preparation_1.mp4") },
   { name: "洗脳動画", fileName: "nino-brainwash.mp4", module: require("../../assets/videos/brainwash_01.mp4") },
+  { name: "敗北動画", fileName: "nino-defeat.mp4", module: require("../../assets/videos/defeat_01.mp4") },
   { name: "調教動画 1", fileName: "nino-training-01.mp4", module: require("../../assets/videos/habits_1.mp4") },
   { name: "調教動画 2", fileName: "nino-training-02.mp4", module: require("../../assets/videos/habits_2.mp4") },
   { name: "調教動画 3", fileName: "nino-training-03.mp4", module: require("../../assets/videos/habits_3.mp4") },
@@ -211,7 +212,7 @@ export default function CollectionScreen() {
       </Card>
 
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="記録・交換メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu")}
       />
@@ -535,3 +536,4 @@ const styles = StyleSheet.create({
   },
   video: { flex: 1, width: "100%", backgroundColor: "#000" },
 });
+
