@@ -18,7 +18,8 @@ type Props = {
     | "management"
     | "record"
     | "collection"
-    | "reward";
+    | "reward"
+    | "tribute";
   disabled?: boolean;
 };
 
@@ -67,6 +68,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "record" && styles.recordText,
         tone === "collection" && styles.collectionText,
         tone === "reward" && styles.rewardText,
+        tone === "tribute" && styles.tributeText,
         darkNavigation && styles.darkNavigationText,
         activeSubmit && styles.activeSubmitText,
       ]}>{title}</AppText>
@@ -135,6 +137,10 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#f2c94c",
   },
+  tribute: {
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
   darkNavigation: {
     borderColor: "#fff",
     backgroundColor: "#000",
@@ -174,6 +180,7 @@ const styles = StyleSheet.create({
   recordText: { color: "#fff" },
   collectionText: { color: "#fff" },
   rewardText: { color: "#111" },
+  tributeText: { color: "#ff3b45" },
   darkNavigationText: { color: "#fff" },
   activeSubmitText: { color: "#fff" },
 });

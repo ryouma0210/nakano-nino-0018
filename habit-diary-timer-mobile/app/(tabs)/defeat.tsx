@@ -167,13 +167,15 @@ function DefeatLoopVideo({
   });
 
   return (
-    <VideoView
-      pointerEvents="none"
-      player={player}
-      nativeControls={false}
-      contentFit="cover"
-      style={style}
-    />
+    <View pointerEvents="none" style={style}>
+      <VideoView
+        pointerEvents="none"
+        player={player}
+        nativeControls={false}
+        contentFit="cover"
+        style={styles.loopVideo}
+      />
+    </View>
   );
 }
 
@@ -213,4 +215,5 @@ const styles = StyleSheet.create({
     zIndex: 5,
     opacity: 0.5,
   },
+  loopVideo: { width: "100%", height: "100%" },
 });

@@ -43,6 +43,11 @@ function shiftMonth(month: string, diff: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function daysInMonth(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber, 0).getDate();
+}
+
 const tributeComments = [
   "ニ乃様にお貢ぎ♡",
   "他の女にお貢ぎ♡",
@@ -75,6 +80,14 @@ export default function TributeScreen() {
     () => incomeRecords.reduce((sum, record) => sum + record.amount, 0),
     [incomeRecords],
   );
+  const miscTotal = useMemo(
+    () =>
+      records
+        .filter((record) => record.comment === "その他（雑費）♡")
+        .reduce((sum, record) => sum + record.amount, 0),
+    [records],
+  );
+  const tributeTotal = total - miscTotal;
   const incomeTotal = monthlyIncome + additionalIncome;
   const remaining = incomeTotal - total;
 
@@ -180,6 +193,12 @@ export default function TributeScreen() {
         <AppText variant="title">お貢ぎ履歴</AppText>
         <View style={styles.rule} />
       </View>
+      <RoomConversation
+        characterSource={require("../../assets/characters/settings-nino.png")}
+        roomName="お貢ぎ履歴"
+        lines={roomMessages.tribute.lines}
+        contractLines={roomMessages.tribute.contractLines}
+      />
       <Card style={styles.summary}>
         <View style={styles.monthHeader}>
           <PrimaryButton title="前月" tone="secondary" onPress={() => changeMonth(-1)} />
@@ -190,7 +209,8 @@ export default function TributeScreen() {
           <PrimaryButton title="翌月" tone="secondary" onPress={() => changeMonth(1)} />
         </View>
         <View style={styles.summaryTotalTop}>
-          <AppText style={styles.remainingLabel}>集計金額（残りお貢ぎ可能額）</AppText>
+          <AppText style={styles.remainingLabel}>集計金額</AppText>
+          <AppText variant="muted">残りお貢ぎ可能額</AppText>
           <AppText
             style={[
               styles.remaining,
@@ -209,18 +229,20 @@ export default function TributeScreen() {
           <AppText style={styles.incomeSummaryValue}>+{formatYen(additionalIncome)}</AppText>
         </View>
         <View style={styles.summaryRow}>
-          <AppText>お貢ぎ済み</AppText>
+          <AppText>お貢ぎ集計</AppText>
+          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(tributeTotal)}</AppText>
+        </View>
+        <View style={styles.summaryRow}>
+          <AppText>雑費集計</AppText>
+          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(miscTotal)}</AppText>
+        </View>
+        <View style={styles.summaryRow}>
+          <AppText>支出合計</AppText>
           <AppText style={styles.spendingSummaryValue}>{formatMinusYen(total)}</AppText>
         </View>
       </Card>
-      <RoomConversation
-        characterSource={require("../../assets/characters/settings-nino.png")}
-        roomName="お貢ぎ履歴"
-        lines={roomMessages.tribute.lines}
-        contractLines={roomMessages.tribute.contractLines}
-      />
 
-      <Card>
+      <Card style={styles.incomeCard}>
         <AppText variant="subtitle">{monthLabel(selectedMonth)}の収入入力・変更</AppText>
         <TextField
           label="今月の基本収入"
@@ -229,17 +251,17 @@ export default function TributeScreen() {
           keyboardType="number-pad"
           placeholder="例：250000"
         />
-        <PrimaryButton title="収入を保存" onPress={saveIncome} />
+        <PrimaryButton title="収入を変更" tone="record" onPress={saveIncome} />
       </Card>
 
-      <Card>
+      <Card style={styles.incomeCard}>
         <AppText variant="subtitle">追加収入を登録</AppText>
         <AppText variant="muted">借金や臨時収入など、今月使える金額を追加できます。</AppText>
-        <TextField
+        <DateSelector
           label="日付"
+          month={selectedMonth}
           value={incomeDate}
-          onChangeText={setIncomeDate}
-          placeholder="YYYY-MM-DD"
+          onChange={setIncomeDate}
         />
         <TextField
           label="追加収入"
@@ -254,16 +276,16 @@ export default function TributeScreen() {
           onChangeText={setIncomeComment}
           placeholder="例：借金♡"
         />
-        <PrimaryButton title="追加収入を登録" onPress={addIncome} />
+        <PrimaryButton title="追加収入を追加" tone="record" onPress={addIncome} />
       </Card>
 
-      <Card>
+      <Card style={styles.spendingCard}>
         <AppText variant="subtitle">お貢ぎを登録</AppText>
-        <TextField
+        <DateSelector
           label="日付"
+          month={selectedMonth}
           value={recordDate}
-          onChangeText={setRecordDate}
-          placeholder="YYYY-MM-DD"
+          onChange={setRecordDate}
         />
         <TextField
           label="金額"
@@ -308,7 +330,7 @@ export default function TributeScreen() {
             </View>
           ) : null}
         </View>
-        <PrimaryButton title="お貢ぎを登録" onPress={addRecord} />
+        <PrimaryButton title="お貢ぎを登録" tone="danger" onPress={addRecord} />
       </Card>
 
       <Card>
@@ -384,7 +406,15 @@ export default function TributeScreen() {
           <AppText style={styles.summaryValue}>{formatYen(incomeTotal)}</AppText>
         </View>
         <View style={styles.summaryRow}>
-          <AppText>お貢ぎ済み</AppText>
+          <AppText>お貢ぎ集計</AppText>
+          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(tributeTotal)}</AppText>
+        </View>
+        <View style={styles.summaryRow}>
+          <AppText>雑費集計</AppText>
+          <AppText style={styles.spendingSummaryValue}>{formatMinusYen(miscTotal)}</AppText>
+        </View>
+        <View style={styles.summaryRow}>
+          <AppText>支出合計</AppText>
           <AppText style={styles.spendingSummaryValue}>{formatMinusYen(total)}</AppText>
         </View>
         <View style={styles.summaryTotal}>
@@ -437,6 +467,43 @@ export default function TributeScreen() {
         onConfirm={removeIncomeRecord}
       />
     </Screen>
+  );
+}
+
+function DateSelector({
+  label,
+  month,
+  value,
+  onChange,
+}: {
+  label: string;
+  month: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const days = Array.from({ length: daysInMonth(month) }, (_, index) => index + 1);
+  return (
+    <View style={styles.dateSelector}>
+      <AppText variant="label">{label}</AppText>
+      <AppText variant="muted">選択中：{formatDateJa(value)}</AppText>
+      <View style={styles.dayGrid}>
+        {days.map((day) => {
+          const dateKey = `${month}-${String(day).padStart(2, "0")}`;
+          const selected = dateKey === value;
+          return (
+            <Pressable
+              key={dateKey}
+              style={[styles.dayButton, selected && styles.dayButtonActive]}
+              onPress={() => onChange(dateKey)}
+            >
+              <AppText style={[styles.dayText, selected && styles.dayTextActive]}>
+                {day}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -541,8 +608,34 @@ const styles = StyleSheet.create({
   remainingLabel: { color: "#f2c94c", fontWeight: "900" },
   remaining: {
     color: "#f2c94c",
-    fontSize: 34,
+    flexShrink: 1,
+    fontSize: 30,
     fontWeight: "900",
+    lineHeight: 38,
   },
   remainingOver: { color: lightTheme.danger },
+  incomeCard: { borderColor: "#1f5fae" },
+  spendingCard: { borderColor: lightTheme.danger },
+  dateSelector: { gap: 8 },
+  dayGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  dayButton: {
+    width: 36,
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#555",
+    borderRadius: 4,
+    backgroundColor: "#080808",
+  },
+  dayButtonActive: {
+    borderColor: "#fff",
+    backgroundColor: "#f2c94c",
+  },
+  dayText: { color: lightTheme.text, fontWeight: "900" },
+  dayTextActive: { color: "#111" },
 });
