@@ -194,7 +194,7 @@ export default function SettingsScreen() {
       <PrimaryButton
         title="管理・設定メニューへ戻る"
         tone="secondary"
-        onPress={() => router.replace("/(tabs)/menu")}
+        onPress={() => router.replace("/(tabs)/menu?section=management")}
       />
       <PrimaryButton
         title="ホームへ戻る"
