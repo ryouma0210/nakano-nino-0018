@@ -31,7 +31,8 @@ export default function LoopAudioScreen() {
     useCallback(() => {
       let active = true;
       contractService.load().then((contract) => {
-        if (active && !contract.signedAt) router.replace("/(tabs)/menu");
+        if (active && !contract.signedAt)
+          router.replace("/(tabs)/menu?section=management");
       });
       return () => {
         active = false;
@@ -87,7 +88,7 @@ export default function LoopAudioScreen() {
       <PrimaryButton
         title="管理・設定メニューへ戻る"
         tone="secondary"
-        onPress={() => router.replace("/(tabs)/menu")}
+        onPress={() => router.replace("/(tabs)/menu?section=management")}
       />
       <PrimaryButton
         title="ホームへ戻る"

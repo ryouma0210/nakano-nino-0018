@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,12 +25,23 @@ export default function DefeatScreen() {
   const { showNotice } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } =
     useAppAudio();
+  const defeatPlayer = useVideoPlayer(
+    require("../../assets/videos/defeat_01.mp4"),
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+      player.volume = 0;
+      player.play();
+    },
+  );
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [completed, setCompleted] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      defeatPlayer.play();
       contractService.load().then((contract) => {
         if (!active) return;
         if (!contract.signedAt) {
@@ -50,7 +62,13 @@ export default function DefeatScreen() {
         stopEffect("defeatLoop");
         setSessionAudioActive(false);
       };
-    }, [playEffect, setSessionAudioActive, settings?.soundEnabled, stopEffect]),
+    }, [
+      defeatPlayer,
+      playEffect,
+      setSessionAudioActive,
+      settings?.soundEnabled,
+      stopEffect,
+    ]),
   );
 
   function forceCheck(text: string) {
@@ -75,10 +93,6 @@ export default function DefeatScreen() {
 
   return (
     <View style={styles.root}>
-      <DefeatLoopVideo
-        source={require("../../assets/videos/sennou.mp4")}
-        style={styles.sennouVideo}
-      />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -93,11 +107,42 @@ export default function DefeatScreen() {
           敗北部屋
         </AppText>
         <RoomConversation
-          characterVideoSource={require("../../assets/videos/defeat_01.mp4")}
+          characterSource={require("../../assets/characters/defeat-nino.png")}
           roomName="敗北部屋"
           lines={roomMessages.defeat.lines}
           contractLines={roomMessages.defeat.contractLines}
         />
+        <Card style={styles.videoCard}>
+          <AppText variant="subtitle" style={styles.whiteText}>
+            敗北動画
+          </AppText>
+          {!fullscreen ? (
+            <View style={styles.videoPreview}>
+              <VideoView
+                player={defeatPlayer}
+                style={styles.video}
+                nativeControls={false}
+                contentFit="contain"
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="敗北動画を拡大表示"
+                onPress={() => {
+                  defeatPlayer.play();
+                  setFullscreen(true);
+                }}
+                style={styles.videoTapArea}
+              />
+            </View>
+          ) : (
+            <View style={styles.videoPlaceholder}>
+              <AppText style={styles.whiteText}>動画を拡大表示中</AppText>
+            </View>
+          )}
+          <AppText style={styles.videoHelp}>
+            タップで拡大表示できるわ♡
+          </AppText>
+        </Card>
         <Card style={styles.pinkCard}>
           <AppText variant="subtitle" style={styles.whiteText}>
             完全敗北の誓約
@@ -148,6 +193,34 @@ export default function DefeatScreen() {
         source={require("../../assets/videos/hartmaku.mp4")}
         style={styles.heartVideo}
       />
+      <Modal
+        visible={fullscreen}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setFullscreen(false)}
+      >
+        <View
+          style={[
+            styles.fullscreen,
+            {
+              paddingTop: Math.max(12, insets.top),
+              paddingBottom: Math.max(12, insets.bottom),
+            },
+          ]}
+        >
+          <VideoView
+            player={defeatPlayer}
+            style={styles.fullscreenVideo}
+            nativeControls={false}
+            contentFit="contain"
+          />
+          <PrimaryButton
+            title="閉じる"
+            tone="secondary"
+            onPress={() => setFullscreen(false)}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -185,6 +258,32 @@ const styles = StyleSheet.create({
   content: { gap: 14, paddingHorizontal: 16 },
   whiteText: { color: "#fff" },
   dateText: { color: "#fff", fontWeight: "900" },
+  videoCard: { borderColor: "#fff", backgroundColor: "#e94f93" },
+  videoPreview: { position: "relative" },
+  video: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  videoTapArea: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
+  videoPlaceholder: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  videoHelp: {
+    color: "#fff",
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
   pinkCard: { borderColor: "#fff", backgroundColor: "#e94f93" },
   checkRow: {
     flexDirection: "row",
@@ -197,23 +296,21 @@ const styles = StyleSheet.create({
   check: { width: 30, color: "#fff", fontSize: 20, lineHeight: 30 },
   checkText: { flex: 1, color: "#fff", fontWeight: "800" },
   checkedText: { color: "#fff", textDecorationLine: "underline" },
-  sennouVideo: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 0,
-    opacity: 0.18,
-  },
   heartVideo: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex: 5,
-    opacity: 0.5,
+    zIndex: 1,
+    opacity: 0.28,
   },
   loopVideo: { width: "100%", height: "100%" },
+  fullscreen: {
+    flex: 1,
+    gap: 10,
+    paddingHorizontal: 10,
+    backgroundColor: "#000",
+  },
+  fullscreenVideo: { flex: 1, width: "100%", backgroundColor: "#000" },
 });

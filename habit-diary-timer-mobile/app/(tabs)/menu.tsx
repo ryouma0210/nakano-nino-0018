@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -40,7 +40,24 @@ function menuTone(title: MenuTitle) {
 }
 
 export default function MenuScreen() {
+  const params = useLocalSearchParams<{ section?: string }>();
   const [contractSigned, setContractSigned] = useState(false);
+  const section =
+    params.section === "record" || params.section === "management"
+      ? params.section
+      : "all";
+  const title =
+    section === "record"
+      ? "記録・交換メニュー"
+      : section === "management"
+        ? "管理・設定メニュー"
+        : "記録・管理メニュー";
+  const kicker =
+    section === "record"
+      ? "RECORD / EXCHANGE"
+      : section === "management"
+        ? "MANAGEMENT / SETTINGS"
+        : "RECORD / MANAGEMENT";
 
   useFocusEffect(
     useCallback(() => {
@@ -57,8 +74,8 @@ export default function MenuScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>RECORD / MANAGEMENT</AppText>
-        <AppText variant="title">記録・管理メニュー</AppText>
+        <AppText style={styles.kicker}>{kicker}</AppText>
+        <AppText variant="title">{title}</AppText>
         <View style={styles.rule} />
       </View>
       <RoomConversation
@@ -67,16 +84,20 @@ export default function MenuScreen() {
         lines={roomMessages.menu.lines}
         contractLines={roomMessages.menu.contractLines}
       />
-      <MenuSection
-        title="記録・交換メニュー"
-        items={recordExchangeItems}
-        contractSigned={contractSigned}
-      />
-      <MenuSection
-        title="管理・設定メニュー"
-        items={managementSettingItems}
-        contractSigned={contractSigned}
-      />
+      {section !== "management" ? (
+        <MenuSection
+          title="記録・交換メニュー"
+          items={recordExchangeItems}
+          contractSigned={contractSigned}
+        />
+      ) : null}
+      {section !== "record" ? (
+        <MenuSection
+          title="管理・設定メニュー"
+          items={managementSettingItems}
+          contractSigned={contractSigned}
+        />
+      ) : null}
       <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"

@@ -10,7 +10,8 @@ import { lightTheme } from "@/constants/theme";
 const rooms = [
   ["部屋に移動（廊下）", "/(tabs)/rooms"],
   ["二ノ様の控室", "/(tabs)/nino-room"],
-  ["記録・管理メニュー", "/(tabs)/menu"],
+  ["記録・交換メニュー", "/(tabs)/menu?section=record"],
+  ["管理・設定メニュー", "/(tabs)/menu?section=management"],
 ] as const;
 
 export default function HomeScreen() {
@@ -34,9 +35,11 @@ export default function HomeScreen() {
               <PrimaryButton
                 title={title}
                 tone={
-                  href === "/(tabs)/menu"
+                  href.includes("section=record")
                     ? "secondary"
-                    : href === "/(tabs)/nino-room"
+                    : href.includes("section=management")
+                      ? "secondary"
+                      : href === "/(tabs)/nino-room"
                       ? "defeat"
                       : "contract"
                 }

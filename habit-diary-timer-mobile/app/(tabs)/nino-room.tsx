@@ -276,7 +276,14 @@ function CircleButton({
       onPress={onPress}
       style={[styles.circleButton, active && styles.circleButtonActive]}
     >
-      <AppText style={styles.circleButtonText}>{title}</AppText>
+      <AppText
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+        style={styles.circleButtonText}
+      >
+        {title}
+      </AppText>
     </Pressable>
   );
 }
@@ -337,14 +344,14 @@ const styles = StyleSheet.create({
     zIndex: 4,
   },
   circleButton: {
-    minWidth: 72,
-    minHeight: 48,
+    width: 86,
+    minHeight: 46,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: "#fff",
-    borderRadius: 999,
-    paddingHorizontal: 10,
+    borderRadius: 18,
+    paddingHorizontal: 12,
     backgroundColor: "rgba(255,255,255,0.82)",
   },
   circleButtonActive: {
@@ -352,10 +359,11 @@ const styles = StyleSheet.create({
   },
   circleButtonText: {
     color: "#246",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
-    lineHeight: 18,
+    lineHeight: 20,
     textAlign: "center",
+    width: "100%",
   },
   dialogue: {
     zIndex: 5,
