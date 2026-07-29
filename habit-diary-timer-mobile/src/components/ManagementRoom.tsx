@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
@@ -22,6 +22,11 @@ import {
   formatConfiguredMessage,
   roomMessages,
 } from "@/constants/messages";
+import { formatError } from "@/utils/error";
+
+function managementModeLabel(mode: ManagementMode) {
+  return mode === "release" ? "貞操帯なし" : "貞操帯あり";
+}
 
 export function ManagementRoom({
   mode,
@@ -46,16 +51,34 @@ export function ManagementRoom({
   const [rolling, setRolling] = useState(false);
   const [rerollConfirmation, setRerollConfirmation] = useState(false);
   const [changeModeConfirmation, setChangeModeConfirmation] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const rollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+    },
+    [],
+  );
 
   function roll() {
+    if (rolling) return;
     setRolling(true);
-    setTimeout(() => {
-      const dice = Math.floor(Math.random() * 6) + 1;
-      const next = managementRepository.roll(mode, dice);
-      setCycle(next);
-      setTask(managementRepository.todayTask(next));
-      setTasks(managementRepository.tasks(next));
-      setRolling(false);
+    if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+    rollTimerRef.current = setTimeout(() => {
+      try {
+        const dice = Math.floor(Math.random() * 6) + 1;
+        const next = managementRepository.roll(mode, dice);
+        setCycle(next);
+        setTask(managementRepository.todayTask(next));
+        setTasks(managementRepository.tasks(next));
+      } catch (error) {
+        console.error("Failed to roll management dice", error);
+        setErrorMessage(formatError(error));
+      } finally {
+        rollTimerRef.current = null;
+        setRolling(false);
+      }
     }, 650);
   }
 
@@ -79,16 +102,24 @@ export function ManagementRoom({
   }
 
   function reroll() {
-    if (!cycle) return;
+    if (!cycle || rolling) return;
     const currentCycleId = cycle.id;
     setRolling(true);
-    setTimeout(() => {
-      const dice = Math.floor(Math.random() * 6) + 1;
-      const next = managementRepository.reroll(currentCycleId, mode, dice);
-      setCycle(next);
-      setTask(managementRepository.todayTask(next));
-      setTasks(managementRepository.tasks(next));
-      setRolling(false);
+    if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+    rollTimerRef.current = setTimeout(() => {
+      try {
+        const dice = Math.floor(Math.random() * 6) + 1;
+        const next = managementRepository.reroll(currentCycleId, mode, dice);
+        setCycle(next);
+        setTask(managementRepository.todayTask(next));
+        setTasks(managementRepository.tasks(next));
+      } catch (error) {
+        console.error("Failed to reroll management dice", error);
+        setErrorMessage(formatError(error));
+      } finally {
+        rollTimerRef.current = null;
+        setRolling(false);
+      }
     }, 650);
   }
 
@@ -123,7 +154,11 @@ export function ManagementRoom({
       <Card>
         <AppText variant="label">選択中</AppText>
         <AppText variant="subtitle">
-          {mode === "release" ? "貞操帯なし" : "貞操帯あり"}
+          {managementModeLabel(mode)}
+        </AppText>
+        <AppText style={styles.activeStatus}>
+          現在：{managementModeLabel(mode)}
+          {cycle ? "を実施中です。" : "で開始待ちです。"}
         </AppText>
         {onChangeMode ? (
           <PrimaryButton
@@ -221,6 +256,15 @@ export function ManagementRoom({
           reroll();
         }}
       />
+      <ConfirmModal
+        visible={Boolean(errorMessage)}
+        title="射精管理の保存に失敗しました"
+        message={`サイコロ処理中にエラーが発生しました。\n\n${errorMessage}`}
+        confirmLabel="閉じる"
+        showCancel={false}
+        onCancel={() => setErrorMessage("")}
+        onConfirm={() => setErrorMessage("")}
+      />
     </Screen>
   );
 }
@@ -297,6 +341,11 @@ function ManagementBoard({
 }
 
 const styles = StyleSheet.create({
+  activeStatus: {
+    color: "#ff9bc7",
+    fontWeight: "900",
+    lineHeight: 24,
+  },
   dice: {
     alignItems: "center",
     justifyContent: "center",

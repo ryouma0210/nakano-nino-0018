@@ -1,4 +1,4 @@
-export async function downloadUriOnWeb(uri: string, fileName: string) {
+export async function downloadUriOnWeb(uri: string, fileName: string, mimeType?: string) {
   if (typeof document === "undefined" || typeof URL === "undefined") {
     throw new Error("WEBダウンロードを利用できません。");
   }
@@ -7,7 +7,8 @@ export async function downloadUriOnWeb(uri: string, fileName: string) {
   if (!response.ok) {
     throw new Error(`ファイルを取得できませんでした。(${response.status})`);
   }
-  const blob = await response.blob();
+  const sourceBlob = await response.blob();
+  const blob = mimeType ? new Blob([sourceBlob], { type: mimeType }) : sourceBlob;
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = objectUrl;
