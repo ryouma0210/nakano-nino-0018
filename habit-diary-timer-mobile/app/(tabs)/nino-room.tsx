@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Image,
   Modal,
@@ -253,6 +253,17 @@ function NinoOutfitVideo({ source }: { source: number }) {
     instance.volume = 0;
     instance.play();
   });
+
+  useEffect(() => {
+    player.play();
+    setTimeout(() => {
+      try {
+        player.play();
+      } catch (error) {
+        console.warn("控え室動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+  }, [player]);
 
   return (
     <VideoView

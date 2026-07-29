@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Platform, StyleSheet, View } from "react-native";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
@@ -30,6 +30,7 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
     files.length > 0 ? Math.floor(Math.random() * files.length) : 0,
   );
   const defaultLoopCount = useRef(0);
+  const handledStoredVideoEndUri = useRef<string | null>(null);
   const currentFile = files[fileIndex % Math.max(1, files.length)];
   const showingStoredVideo = useStored && isVideo(currentFile);
   const player = useVideoPlayer(defaultVideos[defaultIndex], (instance) => {
@@ -41,15 +42,19 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
 
   const advance = useCallback(() => {
     if (useStored && files.length > 0) {
-      setFileIndex((index) => (index + 1) % files.length);
+      if (files.length <= 1) {
+        player.replay();
+        handledStoredVideoEndUri.current = null;
+      } else setFileIndex((index) => (index + 1) % files.length);
     } else {
       setDefaultIndex((index) => randomDefaultIndex(index));
     }
-  }, [files.length, useStored]);
+  }, [files.length, player, useStored]);
 
   useEventListener(player, "playToEnd", () => {
     if (!active) return;
     if (useStored) {
+      handledStoredVideoEndUri.current = currentFile?.uri ?? null;
       advance();
       return;
     }
@@ -67,17 +72,50 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
     const source = showingStoredVideo && currentFile
       ? { uri: currentFile.uri }
       : defaultVideos[defaultIndex];
+    handledStoredVideoEndUri.current = null;
     player.replaceAsync(source).then(() => {
+      player.loop = false;
       player.muted = true;
       player.volume = 0;
       player.playbackRate = 1;
-      if (active) player.play();
+      if (active) {
+        player.play();
+        if (Platform.OS === "web") {
+          setTimeout(() => {
+            try {
+              player.loop = false;
+              player.muted = true;
+              player.volume = 0;
+              player.play();
+            } catch (error) {
+              console.warn("お仕置き動画の再生を再試行できませんでした。", error);
+            }
+          }, 180);
+        }
+      }
       else {
         player.currentTime = 0.1;
         player.pause();
       }
     }).catch(console.error);
   }, [active, currentFile, defaultIndex, player, showingStoredVideo]);
+
+  useEffect(() => {
+    if (!active || !useStored || !showingStoredVideo || !currentFile) return;
+    const timer = setInterval(() => {
+      const duration = player.duration || 0;
+      const currentTime = player.currentTime || 0;
+      if (
+        duration > 0 &&
+        currentTime >= duration - 0.25 &&
+        handledStoredVideoEndUri.current !== currentFile.uri
+      ) {
+        handledStoredVideoEndUri.current = currentFile.uri;
+        advance();
+      }
+    }, 300);
+    return () => clearInterval(timer);
+  }, [active, advance, currentFile, player, showingStoredVideo, useStored]);
 
   useEffect(() => {
     if (!active || !useStored || files.length === 0 || showingStoredVideo) return;

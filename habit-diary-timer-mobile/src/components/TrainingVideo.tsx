@@ -113,6 +113,7 @@ export function TrainingVideo({
   const previousGaugeProgress = useRef(0);
   const lastCommentSlot = useRef(-1);
   const videoLoopCount = useRef(0);
+  const handledStoredVideoEndUri = useRef<string | null>(null);
   const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
   const storedMode = slides.length > 0;
   const currentStoredFile = slides[slideIndex % Math.max(1, slides.length)];
@@ -125,6 +126,7 @@ export function TrainingVideo({
   });
 
   const playVideo = useCallback(() => {
+    player.loop = false;
     player.muted = true;
     player.volume = 0;
     player.playbackRate = 1;
@@ -132,6 +134,7 @@ export function TrainingVideo({
     if (Platform.OS === "web") {
       setTimeout(() => {
         try {
+          player.loop = false;
           player.muted = true;
           player.volume = 0;
           player.play();
@@ -176,8 +179,12 @@ export function TrainingVideo({
   useEventListener(player, "playToEnd", () => {
     if (!started) return;
     if (storedMode) {
+      handledStoredVideoEndUri.current = currentStoredFile?.uri ?? null;
       videoLoopCount.current = 0;
-      setSlideIndex((index) => (index + 1) % slides.length);
+      if (slides.length <= 1) {
+        player.replay();
+        handledStoredVideoEndUri.current = null;
+      } else setSlideIndex((index) => (index + 1) % slides.length);
       showRandomComment();
       return;
     }
@@ -194,7 +201,9 @@ export function TrainingVideo({
 
   useEffect(() => {
     if (!storedMode || !showingStoredVideo || !currentStoredFile) return;
+    handledStoredVideoEndUri.current = null;
     player.replaceAsync({ uri: currentStoredFile.uri }).then(() => {
+      player.loop = false;
       player.muted = true;
       player.volume = 0;
       player.playbackRate = 1;
@@ -209,6 +218,7 @@ export function TrainingVideo({
   useEffect(() => {
     if (storedMode) return;
     player.replaceAsync(defaultVideos[defaultVideoIndex]).then(() => {
+      player.loop = false;
       player.muted = true;
       player.volume = 0;
       player.playbackRate = 1;
@@ -219,6 +229,36 @@ export function TrainingVideo({
       }
     }).catch(console.error);
   }, [defaultVideoIndex, playVideo, player, started, storedMode]);
+
+  useEffect(() => {
+    if (!started || !storedMode || !showingStoredVideo || !currentStoredFile) return;
+    const timer = setInterval(() => {
+      const duration = player.duration || 0;
+      const currentTime = player.currentTime || 0;
+      if (
+        duration > 0 &&
+        currentTime >= duration - 0.25 &&
+        handledStoredVideoEndUri.current !== currentStoredFile.uri
+      ) {
+        handledStoredVideoEndUri.current = currentStoredFile.uri;
+        videoLoopCount.current = 0;
+        if (slides.length <= 1) {
+          player.replay();
+          handledStoredVideoEndUri.current = null;
+        } else setSlideIndex((index) => (index + 1) % slides.length);
+        showRandomComment();
+      }
+    }, 300);
+    return () => clearInterval(timer);
+  }, [
+    currentStoredFile,
+    player,
+    showingStoredVideo,
+    showRandomComment,
+    slides.length,
+    started,
+    storedMode,
+  ]);
 
   useEffect(() => {
     if (!started || !storedMode || showingStoredVideo || slides.length === 0) return;
@@ -368,7 +408,11 @@ export function TrainingVideo({
               key={index}
               style={[styles.rhythmMarker, { left, opacity }]}
             >
-              <AppText style={styles.rhythmMarkerHeart}>💗</AppText>
+              <View style={styles.rhythmMarkerHeart}>
+                <View style={styles.heartLeft} />
+                <View style={styles.heartRight} />
+                <View style={styles.heartBottom} />
+              </View>
               <AppText style={styles.rhythmMarkerText}>シコ</AppText>
             </View>
           );
@@ -625,12 +669,40 @@ const styles = StyleSheet.create({
   },
   rhythmMarkerHeart: {
     position: "absolute",
-    color: "#ff69b4",
-    fontSize: 38,
-    lineHeight: 50,
-    fontWeight: "900",
-    includeFontPadding: false,
-    textAlign: "center",
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heartLeft: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    width: 17,
+    height: 24,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    backgroundColor: "#ff2f78",
+    transform: [{ rotate: "-45deg" }],
+  },
+  heartRight: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 17,
+    height: 24,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    backgroundColor: "#ff2f78",
+    transform: [{ rotate: "45deg" }],
+  },
+  heartBottom: {
+    position: "absolute",
+    top: 11,
+    width: 24,
+    height: 24,
+    backgroundColor: "#ff2f78",
+    transform: [{ rotate: "45deg" }],
   },
   rhythmMarkerText: {
     position: "absolute",

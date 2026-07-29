@@ -194,12 +194,7 @@ const mobileShellStyle = `
           document.querySelectorAll("video").forEach((video) => {
             if (video.dataset?.ninoTuned === "1") return;
             video.dataset.ninoTuned = "1";
-            video.muted = true;
-            video.defaultMuted = true;
             video.playsInline = true;
-            video.loop = true;
-            video.autoplay = true;
-            video.removeAttribute("controls");
           });
         };
 

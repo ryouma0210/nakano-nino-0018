@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Platform, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -25,6 +25,7 @@ import {
   roomMessages,
 } from "@/constants/messages";
 import { exchangeableNinoOutfits, type NinoOutfit } from "@/constants/outfits";
+import { downloadUriOnWeb } from "@/utils/webDownload";
 
 const rewardVideos = [
   {
@@ -64,6 +65,10 @@ async function bundledVideoUri(module: number) {
 }
 
 async function saveVideoToLibrary(uri: string, fileName: string) {
+  if (Platform.OS === "web") {
+    await downloadUriOnWeb(uri, fileName);
+    return true;
+  }
   const permission = await MediaLibrary.requestPermissionsAsync(true, ["video"]);
   if (!permission.granted) return false;
   const namedUri = `${FileSystem.cacheDirectory}${fileName}`;

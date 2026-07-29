@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useState } from "react";
-import { Image, Modal, StyleSheet, View } from "react-native";
+import { Image, Modal, Platform, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -37,6 +37,7 @@ import {
   requiredContractRuleTexts,
 } from "@/utils/contract";
 import { secondsToClock } from "@/utils/date";
+import { downloadUriOnWeb } from "@/utils/webDownload";
 
 const rewardVideos = [
   { name: "準備動画", fileName: "nino-preparation.mp4", module: require("../../assets/videos/preparation_1.mp4") },
@@ -240,6 +241,19 @@ function CollectionOutfit({ item }: { item: RewardRedemption }) {
 
   async function saveAsset(module: number, fileName: string, mediaType: "photo" | "video") {
     try {
+      const asset = Asset.fromModule(module);
+      await asset.downloadAsync();
+      const sourceUri = asset.localUri ?? asset.uri;
+      if (Platform.OS === "web") {
+        await downloadUriOnWeb(sourceUri, fileName);
+        showNotice(
+          "保存完了",
+          mediaType === "photo"
+            ? "衣装画像をダウンロードしました。"
+            : "衣装動画をダウンロードしました。",
+        );
+        return;
+      }
       const permission = await MediaLibrary.requestPermissionsAsync(true, [mediaType]);
       if (!permission.granted) {
         showNotice(
@@ -250,12 +264,10 @@ function CollectionOutfit({ item }: { item: RewardRedemption }) {
         );
         return;
       }
-      const asset = Asset.fromModule(module);
-      await asset.downloadAsync();
       const namedUri = `${FileSystem.cacheDirectory}${fileName}`;
       await FileSystem.deleteAsync(namedUri, { idempotent: true });
       await FileSystem.copyAsync({
-        from: asset.localUri ?? asset.uri,
+        from: sourceUri,
         to: namedUri,
       });
       await MediaLibrary.saveToLibraryAsync(namedUri);
@@ -342,6 +354,14 @@ function CollectionVoice({ item }: { item: RewardRedemption }) {
 
   async function save() {
     try {
+      const asset = Asset.fromModule(voiceModule);
+      await asset.downloadAsync();
+      const sourceUri = asset.localUri ?? asset.uri;
+      if (Platform.OS === "web") {
+        await downloadUriOnWeb(sourceUri, "nino-love-voice.m4a");
+        showNotice("保存完了", "好きボイス3秒を音声ファイル（M4A）としてダウンロードしました。");
+        return;
+      }
       const permission = await MediaLibrary.requestPermissionsAsync(true, ["audio"]);
       if (!permission.granted) {
         showNotice(
@@ -350,12 +370,10 @@ function CollectionVoice({ item }: { item: RewardRedemption }) {
         );
         return;
       }
-      const asset = Asset.fromModule(voiceModule);
-      await asset.downloadAsync();
       const namedUri = `${FileSystem.cacheDirectory}nino-love-voice.m4a`;
       await FileSystem.deleteAsync(namedUri, { idempotent: true });
       await FileSystem.copyAsync({
-        from: asset.localUri ?? asset.uri,
+        from: sourceUri,
         to: namedUri,
       });
       await MediaLibrary.saveToLibraryAsync(namedUri);
@@ -396,6 +414,14 @@ function CollectionVideo({ item }: { item: RewardRedemption }) {
   async function save() {
     try {
       if (!bundled) throw new Error("同梱動画が見つかりません。");
+      const asset = Asset.fromModule(bundled.module);
+      await asset.downloadAsync();
+      const sourceUri = asset.localUri ?? asset.uri;
+      if (Platform.OS === "web") {
+        await downloadUriOnWeb(sourceUri, bundled.fileName);
+        showNotice("保存完了", "動画をダウンロードしました。");
+        return;
+      }
       const permission = await MediaLibrary.requestPermissionsAsync(true, ["video"]);
       if (!permission.granted) {
         showNotice(
@@ -404,12 +430,10 @@ function CollectionVideo({ item }: { item: RewardRedemption }) {
         );
         return;
       }
-      const asset = Asset.fromModule(bundled.module);
-      await asset.downloadAsync();
       const namedUri = `${FileSystem.cacheDirectory}${bundled.fileName}`;
       await FileSystem.deleteAsync(namedUri, { idempotent: true });
       await FileSystem.copyAsync({
-        from: asset.localUri ?? asset.uri,
+        from: sourceUri,
         to: namedUri,
       });
       await MediaLibrary.saveToLibraryAsync(namedUri);

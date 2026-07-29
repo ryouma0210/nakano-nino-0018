@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image as NativeImage, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -181,6 +182,7 @@ export default function FilesScreen() {
               </View>
             ) : /\.mp4$/i.test(file.name) ? (
               <VideoThumbnail
+                uri={file.uri}
                 thumbnail={videoThumbnails[file.uri]}
                 label={`格納ファイル ${index + 1}/${visibleFiles.length}`}
               />
@@ -246,18 +248,18 @@ function FileLabel({ label }: { label: string }) {
 }
 
 function VideoThumbnail({
+  uri,
   thumbnail,
   label,
 }: {
+  uri: string;
   thumbnail?: GeneratedVideoThumbnail;
   label: string;
 }) {
   return (
     <View style={styles.thumbnailWrap} pointerEvents="none">
       {Platform.OS === "web" ? (
-        <View style={[styles.thumbnail, styles.thumbnailLoading]}>
-          <AppText style={styles.thumbnailLoadingText}>VIDEO</AppText>
-        </View>
+        <VideoThumbnailPreview uri={uri} />
       ) : thumbnail ? (
         <ExpoImage
           source={thumbnail}
@@ -271,6 +273,51 @@ function VideoThumbnail({
       )}
       <FileLabel label={label} />
     </View>
+  );
+}
+
+function VideoThumbnailPreview({ uri }: { uri: string }) {
+  const player = useVideoPlayer({ uri }, (instance) => {
+    instance.loop = false;
+    instance.muted = true;
+    instance.volume = 0;
+    instance.currentTime = 0.1;
+  });
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      player.muted = true;
+      player.volume = 0;
+      player.currentTime = 0.1;
+      player.play();
+      timer = setTimeout(() => {
+        try {
+          player.pause();
+        } catch {
+          // プレビュー停止に失敗しても一覧表示は継続する。
+        }
+      }, 450);
+    } catch {
+      // WEB環境によっては自動再生できないため、黒背景のままにする。
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+      try {
+        player.pause();
+      } catch {
+        // 画面離脱時に解放済みの場合は無視する。
+      }
+    };
+  }, [player, uri]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.thumbnail}
+      nativeControls={false}
+      contentFit="cover"
+    />
   );
 }
 
