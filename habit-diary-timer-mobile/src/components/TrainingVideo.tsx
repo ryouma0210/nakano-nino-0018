@@ -408,12 +408,11 @@ export function TrainingVideo({
               key={index}
               style={[styles.rhythmMarker, { left, opacity }]}
             >
-              <View style={styles.rhythmMarkerHeart}>
-                <View style={styles.heartLeft} />
-                <View style={styles.heartRight} />
-                <View style={styles.heartBottom} />
-              </View>
-              <AppText style={styles.rhythmMarkerText}>シコ</AppText>
+              <Image
+                source={require("../../assets/ui/rhythm-heart.png")}
+                style={styles.rhythmMarkerImage}
+                resizeMode="contain"
+              />
             </View>
           );
         })}
@@ -660,65 +659,14 @@ const styles = StyleSheet.create({
   },
   rhythmMarker: {
     position: "absolute",
-    width: 44,
-    height: 50,
-    marginLeft: -22,
+    width: 52,
+    height: 58,
+    marginLeft: -26,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
   },
-  rhythmMarkerHeart: {
-    position: "absolute",
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heartLeft: {
-    position: "absolute",
-    top: 4,
-    left: 4,
-    width: 17,
-    height: 24,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    backgroundColor: "#ff2f78",
-    transform: [{ rotate: "-45deg" }],
-  },
-  heartRight: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 17,
-    height: 24,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    backgroundColor: "#ff2f78",
-    transform: [{ rotate: "45deg" }],
-  },
-  heartBottom: {
-    position: "absolute",
-    top: 11,
-    width: 24,
-    height: 24,
-    backgroundColor: "#ff2f78",
-    transform: [{ rotate: "45deg" }],
-  },
-  rhythmMarkerText: {
-    position: "absolute",
-    width: 44,
-    height: 50,
-    color: "#fff",
-    fontSize: 7,
-    lineHeight: 50,
-    fontWeight: "900",
-    textAlign: "center",
-    textAlignVertical: "center",
-    includeFontPadding: false,
-    textShadowColor: "#a60050",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
+  rhythmMarkerImage: { width: "100%", height: "100%" },
   waitingTime: {
     alignItems: "flex-end",
     paddingHorizontal: 14,
