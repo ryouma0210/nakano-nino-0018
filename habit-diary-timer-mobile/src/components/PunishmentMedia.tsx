@@ -40,22 +40,29 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
     instance.playbackRate = 1;
   });
 
-  const advance = useCallback(() => {
-    if (useStored && files.length > 0) {
-      if (files.length <= 1) {
-        player.replay();
-        handledStoredVideoEndUri.current = null;
-      } else setFileIndex((index) => (index + 1) % files.length);
-    } else {
-      setDefaultIndex((index) => randomDefaultIndex(index));
+  const advanceDefaultVideo = useCallback(() => {
+    setDefaultIndex((index) => randomDefaultIndex(index));
+  }, []);
+
+  const advanceStoredFile = useCallback(() => {
+    if (files.length <= 1) {
+      player.replay();
+      handledStoredVideoEndUri.current = null;
+      return;
     }
-  }, [files.length, player, useStored]);
+    setFileIndex((index) => (index + 1) % files.length);
+  }, [files.length, player]);
+
+  const advanceStoredImage = useCallback(() => {
+    if (files.length <= 1) return;
+    setFileIndex((index) => (index + 1) % files.length);
+  }, [files.length]);
 
   useEventListener(player, "playToEnd", () => {
     if (!active) return;
     if (useStored) {
       handledStoredVideoEndUri.current = currentFile?.uri ?? null;
-      advance();
+      advanceStoredFile();
       return;
     }
     if (defaultLoopCount.current < 2) {
@@ -64,7 +71,7 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
       return;
     }
     defaultLoopCount.current = 0;
-    advance();
+    advanceDefaultVideo();
   });
 
   useEffect(() => {
@@ -111,17 +118,24 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
         handledStoredVideoEndUri.current !== currentFile.uri
       ) {
         handledStoredVideoEndUri.current = currentFile.uri;
-        advance();
+        advanceStoredFile();
       }
     }, 300);
     return () => clearInterval(timer);
-  }, [active, advance, currentFile, player, showingStoredVideo, useStored]);
+  }, [active, advanceStoredFile, currentFile, player, showingStoredVideo, useStored]);
 
   useEffect(() => {
     if (!active || !useStored || files.length === 0 || showingStoredVideo) return;
-    const timer = setInterval(advance, 10000);
-    return () => clearInterval(timer);
-  }, [active, advance, files.length, showingStoredVideo, useStored]);
+    const timer = setTimeout(advanceStoredImage, 10000);
+    return () => clearTimeout(timer);
+  }, [
+    active,
+    advanceStoredImage,
+    fileIndex,
+    files.length,
+    showingStoredVideo,
+    useStored,
+  ]);
 
   return (
     <View style={fullscreen ? styles.fullscreenFrame : styles.frame}>
