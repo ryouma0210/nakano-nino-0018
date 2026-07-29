@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import {
   Image,
+  Platform,
   type ImageSourcePropType,
   Pressable,
   StyleSheet,
@@ -162,6 +163,15 @@ function RoomConversationVideo({
 
   useEffect(() => {
     player.play();
+    if (Platform.OS === "web") {
+      setTimeout(() => {
+        try {
+          player.play();
+        } catch (error) {
+          console.warn("会話動画の再生を再試行できませんでした。", error);
+        }
+      }, 180);
+    }
   }, [player]);
 
   return (

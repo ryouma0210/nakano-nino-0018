@@ -11,6 +11,7 @@ type Props = {
     | "danger"
     | "punishment"
     | "defeat"
+    | "defeatRoom"
     | "contract"
     | "preparation"
     | "order"
@@ -60,6 +61,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "danger" && styles.dangerText,
         tone === "punishment" && styles.punishmentText,
         tone === "defeat" && styles.defeatText,
+        tone === "defeatRoom" && styles.defeatRoomText,
         tone === "contract" && styles.contractText,
         tone === "preparation" && styles.preparationText,
         tone === "order" && styles.orderText,
@@ -102,8 +104,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#7b2cbf",
   },
   defeat: {
-    borderColor: "#ff3b45",
+    borderColor: "#fff",
     backgroundColor: "#ff69b4",
+  },
+  defeatRoom: {
+    borderColor: "#ff3b45",
+    backgroundColor: "#ff3b45",
   },
   contract: {
     borderColor: "#fff",
@@ -166,7 +172,8 @@ const styles = StyleSheet.create({
   punishmentText: {
     color: "#ff3b45",
   },
-  defeatText: { color: "#ff3b45" },
+  defeatText: { color: "#fff" },
+  defeatRoomText: { color: "#fff" },
   secondaryText: {
     color: "#000",
   },

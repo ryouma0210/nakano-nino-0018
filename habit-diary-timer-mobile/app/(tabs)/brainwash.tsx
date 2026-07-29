@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -94,11 +94,18 @@ export default function BrainwashScreen() {
           ]}
         >
           <BrainwashFullscreenVideo />
-          <PrimaryButton
-            title="閉じる"
-            tone="secondary"
-            onPress={() => setFullscreen(false)}
-          />
+          <View
+            style={[
+              styles.fullscreenClose,
+              { bottom: Math.max(12, insets.bottom + 12) },
+            ]}
+          >
+            <PrimaryButton
+              title="閉じる"
+              tone="secondary"
+              onPress={() => setFullscreen(false)}
+            />
+          </View>
         </View>
       </Modal>
     </Screen>
@@ -118,6 +125,17 @@ function BrainwashVideo({
     instance.volume = 0;
     instance.play();
   });
+
+  useEffect(() => {
+    player.play();
+    setTimeout(() => {
+      try {
+        player.play();
+      } catch (error) {
+        console.warn("洗脳動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+  }, [player]);
 
   return (
     <View style={styles.videoPreview}>
@@ -153,6 +171,17 @@ function BrainwashFullscreenVideo() {
     instance.play();
   });
 
+  useEffect(() => {
+    player.play();
+    setTimeout(() => {
+      try {
+        player.play();
+      } catch (error) {
+        console.warn("洗脳拡大動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+  }, [player]);
+
   return (
     <VideoView
       player={player}
@@ -185,14 +214,22 @@ const styles = StyleSheet.create({
   },
   fullscreen: {
     flex: 1,
-    gap: 10,
     paddingHorizontal: 10,
     backgroundColor: "#000",
   },
   fullscreenVideo: {
-    flex: 1,
-    width: "100%",
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: "#000",
+  },
+  fullscreenClose: {
+    position: "absolute",
+    right: 10,
+    left: 10,
+    zIndex: 20,
   },
   warning: { color: "#ff4b55", fontWeight: "900" },
 });
