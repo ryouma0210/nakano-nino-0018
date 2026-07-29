@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, StyleSheet, View } from "react-native";
+import { Image, Modal, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -367,12 +367,12 @@ export default function TimerScreen() {
                 const left = 26 + (1 - phase) * Math.max(0, trackWidth - 56);
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
                 return (
-                  <View key={index} style={[styles.marker, { left, opacity }]}> 
-                    <View style={styles.spadeHead} />
-                    <View style={styles.spadeLeft} />
-                    <View style={styles.spadeRight} />
-                    <View style={styles.spadeStem} />
-                    <AppText style={styles.markerLetter}>Q</AppText>
+                  <View key={index} style={[styles.marker, { left, opacity }]}>
+                    <Image
+                      source={require("../../assets/ui/rhythm-spade-q.png")}
+                      style={styles.markerImage}
+                      resizeMode="contain"
+                    />
                   </View>
                 );
               })}
@@ -464,65 +464,12 @@ const styles = StyleSheet.create({
   },
   marker: {
     position: "absolute",
-    width: 44,
-    height: 50,
-    marginLeft: -22,
+    width: 52,
+    height: 58,
+    marginLeft: -26,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
   },
-  spadeHead: {
-    position: "absolute",
-    top: 4,
-    width: 28,
-    height: 28,
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4,
-    backgroundColor: "#050505",
-    transform: [{ rotate: "45deg" }],
-  },
-  spadeLeft: {
-    position: "absolute",
-    top: 18,
-    left: 10,
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: "#050505",
-  },
-  spadeRight: {
-    position: "absolute",
-    top: 18,
-    right: 10,
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: "#050505",
-  },
-  spadeStem: {
-    position: "absolute",
-    bottom: 5,
-    width: 18,
-    height: 12,
-    borderBottomWidth: 12,
-    borderRightWidth: 5,
-    borderLeftWidth: 5,
-    borderBottomColor: "#050505",
-    borderRightColor: "transparent",
-    borderLeftColor: "transparent",
-  },
-  markerLetter: {
-    position: "absolute",
-    width: 44,
-    height: 50,
-    color: "#fff",
-    fontSize: 11,
-    lineHeight: 50,
-    fontWeight: "900",
-    textAlign: "center",
-    textAlignVertical: "center",
-    includeFontPadding: false,
-  },
+  markerImage: { width: "100%", height: "100%" },
 });

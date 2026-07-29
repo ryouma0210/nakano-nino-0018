@@ -37,7 +37,6 @@ export default function DefeatScreen() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [completed, setCompleted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [heartVisible, setHeartVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,18 +57,8 @@ export default function DefeatScreen() {
       const audioEnabled = Boolean(settings?.soundEnabled);
       setSessionAudioActive(audioEnabled);
       if (audioEnabled) playEffect("defeatLoop");
-      const showHeart = () => {
-        if (!active) return;
-        setHeartVisible(true);
-        setTimeout(() => {
-          if (active) setHeartVisible(false);
-        }, 2000);
-      };
-      showHeart();
-      const heartTimer = setInterval(showHeart, 5000);
       return () => {
         active = false;
-        clearInterval(heartTimer);
         stopEffect("defeatLoop");
         setSessionAudioActive(false);
       };
@@ -200,10 +189,7 @@ export default function DefeatScreen() {
           onPress={() => router.replace("/(tabs)")}
         />
       </ScrollView>
-      <DefeatLoopVideo
-        source={require("../../assets/videos/hartmaku.mp4")}
-        style={[styles.heartVideo, heartVisible && styles.heartVideoVisible]}
-      />
+      <View pointerEvents="none" style={styles.pinkOverlay} />
       <Modal
         visible={fullscreen}
         animationType="fade"
@@ -243,36 +229,18 @@ export default function DefeatScreen() {
   );
 }
 
-function DefeatLoopVideo({
-  source,
-  style,
-}: {
-  source: number;
-  style: object;
-}) {
-  const player = useVideoPlayer(source, (instance) => {
-    instance.loop = true;
-    instance.muted = true;
-    instance.volume = 0;
-    instance.play();
-  });
-
-  return (
-    <View pointerEvents="none" style={style}>
-      <VideoView
-        pointerEvents="none"
-        player={player}
-        nativeControls={false}
-        contentFit="cover"
-        style={styles.loopVideo}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#ff8fbd", overflow: "hidden" },
   scroll: { zIndex: 2 },
+  pinkOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 9,
+    backgroundColor: "rgba(255,105,180,0.18)",
+  },
   content: { gap: 14, paddingHorizontal: 16 },
   whiteText: { color: "#fff" },
   dateText: { color: "#fff", fontWeight: "900" },
@@ -314,20 +282,6 @@ const styles = StyleSheet.create({
   check: { width: 30, color: "#fff", fontSize: 20, lineHeight: 30 },
   checkText: { flex: 1, color: "#fff", fontWeight: "800" },
   checkedText: { color: "#fff", textDecorationLine: "underline" },
-  heartVideo: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 1,
-    opacity: 0,
-  },
-  heartVideoVisible: {
-    zIndex: 10,
-    opacity: 0.5,
-  },
-  loopVideo: { width: "100%", height: "100%" },
   fullscreen: {
     flex: 1,
     paddingHorizontal: 10,
