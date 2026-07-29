@@ -1,38 +1,20 @@
-import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
-import { contractService } from "@/services/gameRoomService";
 
 const rooms = [
-  ["敗北部屋", "/(tabs)/defeat"],
-  ["準備部屋", "/(tabs)/preparation"],
-  ["本日の命令部屋", "/(tabs)/orders"],
-  ["調教部屋", "/(tabs)/habits"],
-  ["射精管理部屋", "/(tabs)/management"],
-  ["お仕置き部屋", "/(tabs)/timer"],
-  ["契約部屋", "/(tabs)/contract"],
-  ["記録・管理メニュー", "/(tabs)/menu"],
+  ["部屋に移動（廊下）", "/(tabs)/rooms"],
+  ["二ノ様の控室", "/(tabs)/nino-room"],
+  ["記録・交換メニュー", "/(tabs)/menu?section=record"],
+  ["管理・設定メニュー", "/(tabs)/menu?section=management"],
 ] as const;
 
 export default function HomeScreen() {
-  const [contractSigned, setContractSigned] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      contractService.load().then((contract) => {
-        if (active) setContractSigned(Boolean(contract.signedAt));
-      });
-      return () => { active = false; };
-    }, []),
-  );
-
   return (
     <Screen>
       <View style={styles.header}>
@@ -51,26 +33,15 @@ export default function HomeScreen() {
           <View key={href} style={styles.roomRow}>
             <View style={styles.button}>
               <PrimaryButton
-                title={href === "/(tabs)/defeat" && !contractSigned ? "敗北部屋　※未開放" : title}
-                disabled={href === "/(tabs)/defeat" && !contractSigned}
+                title={title}
                 tone={
-                  href === "/(tabs)/defeat"
-                    ? "defeat"
-                    : href === "/(tabs)/timer"
-                    ? "punishment"
-                    : href === "/(tabs)/contract"
-                      ? "contract"
-                      : href === "/(tabs)/menu"
-                        ? "secondary"
-                        : href === "/(tabs)/preparation"
-                          ? "preparation"
-                          : href === "/(tabs)/orders"
-                            ? "order"
-                            : href === "/(tabs)/habits"
-                              ? "training"
-                              : href === "/(tabs)/management"
-                                ? "management"
-                                : "primary"
+                  href.includes("section=record")
+                    ? "secondary"
+                    : href.includes("section=management")
+                      ? "secondary"
+                      : href === "/(tabs)/nino-room"
+                      ? "defeat"
+                      : "contract"
                 }
                 onPress={() => router.push(href)}
               />

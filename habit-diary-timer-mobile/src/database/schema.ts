@@ -205,6 +205,43 @@ function migrateToV4() {
   `);
 }
 
+function ensureRewardRedemptionColumns() {
+  for (const sql of [
+    "ALTER TABLE reward_redemptions ADD COLUMN reward_content TEXT",
+    "ALTER TABLE reward_redemptions ADD COLUMN file_uri TEXT",
+  ]) {
+    try {
+      db.execSync(sql);
+    } catch {
+      // 既に列がある環境では duplicate column になるため無視する。
+      // 旧データから更新した環境で列だけ不足している場合の補修用。
+    }
+  }
+}
+
+function ensureTributeTables() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS tribute_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_date TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      comment TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tribute_records_date ON tribute_records(record_date);
+    CREATE TABLE IF NOT EXISTS tribute_income_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_date TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      comment TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tribute_income_records_date ON tribute_income_records(record_date);
+  `);
+}
+
 function seedInitialData() {
   const now = toDateTimeKey();
   const today = toDateKey();
@@ -250,6 +287,8 @@ export function initializeDatabase() {
       migrateToV4();
       setVersion(DATABASE_VERSION);
     }
+    ensureRewardRedemptionColumns();
+    ensureTributeTables();
     seedInitialData();
   });
 }

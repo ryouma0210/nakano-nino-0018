@@ -1,0 +1,53 @@
+{
+  "name": "nino-room-windows",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "npm run build:web && node scripts/start-electron.cjs",
+    "build:web": "node scripts/build-mobile-web.cjs",
+    "build:windows": "npm run build:web && electron-builder --win nsis --publish never",
+    "typecheck": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check scripts/build-mobile-web.cjs && node --check scripts/start-electron.cjs",
+    "lint": "eslint ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "eslint": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest"
+  },
+  "build": {
+    "appId": "jp.local.ninoroom.windows",
+    "productName": "Nino Room",
+    "asar": true,
+    "files": [
+      "dist-web/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "説明書.txt",
+        "to": "説明書.txt"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "icon": "public/icon.ico",
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

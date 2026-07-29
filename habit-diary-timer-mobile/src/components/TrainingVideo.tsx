@@ -1,5 +1,6 @@
+/* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Image, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
@@ -123,6 +124,24 @@ export function TrainingVideo({
     instance.playbackRate = 1;
   });
 
+  const playVideo = useCallback(() => {
+    player.muted = true;
+    player.volume = 0;
+    player.playbackRate = 1;
+    player.play();
+    if (Platform.OS === "web") {
+      setTimeout(() => {
+        try {
+          player.muted = true;
+          player.volume = 0;
+          player.play();
+        } catch (error) {
+          console.warn("調教動画の再生を再試行できませんでした。", error);
+        }
+      }, 180);
+    }
+  }, [player]);
+
   useEffect(
     () => () => {
       stopEffect("trainingStart");
@@ -171,33 +190,35 @@ export function TrainingVideo({
     const nextIndex = selectRandomVideoIndex(defaultVideoIndex);
     setDefaultVideoIndex(nextIndex);
     showRandomComment();
-    player
-      .replaceAsync(defaultVideos[nextIndex])
-      .then(() => {
-        player.muted = true;
-        player.volume = 0;
-        player.playbackRate = 1;
-        player.play();
-      })
-      .catch(console.error);
   });
 
   useEffect(() => {
     if (!storedMode || !showingStoredVideo || !currentStoredFile) return;
-    player
-      .replaceAsync({ uri: currentStoredFile.uri })
-      .then(() => {
-        player.muted = true;
-        player.volume = 0;
-        player.playbackRate = 1;
-        if (started) player.play();
-        else {
-          player.currentTime = 0.1;
-          player.pause();
-        }
-      })
-      .catch(console.error);
-  }, [currentStoredFile, player, showingStoredVideo, started, storedMode]);
+    player.replaceAsync({ uri: currentStoredFile.uri }).then(() => {
+      player.muted = true;
+      player.volume = 0;
+      player.playbackRate = 1;
+      if (started) playVideo();
+      else {
+        player.currentTime = 0.1;
+        player.pause();
+      }
+    }).catch(console.error);
+  }, [currentStoredFile, playVideo, player, showingStoredVideo, started, storedMode]);
+
+  useEffect(() => {
+    if (storedMode) return;
+    player.replaceAsync(defaultVideos[defaultVideoIndex]).then(() => {
+      player.muted = true;
+      player.volume = 0;
+      player.playbackRate = 1;
+      if (started) playVideo();
+      else {
+        player.currentTime = 0.1;
+        player.pause();
+      }
+    }).catch(console.error);
+  }, [defaultVideoIndex, playVideo, player, started, storedMode]);
 
   useEffect(() => {
     if (!started || !storedMode || showingStoredVideo || slides.length === 0) return;
@@ -272,23 +293,11 @@ export function TrainingVideo({
     if (!storedMode) {
       const firstVideoIndex = selectRandomVideoIndex();
       setDefaultVideoIndex(firstVideoIndex);
-      player
-        .replaceAsync(defaultVideos[firstVideoIndex])
-        .then(() => {
-          player.muted = true;
-          player.volume = 0;
-          player.playbackRate = 1;
-          player.play();
-        })
-        .catch(console.error);
     } else if (showingStoredVideo && currentStoredFile) {
       player
         .replaceAsync({ uri: currentStoredFile.uri })
         .then(() => {
-          player.muted = true;
-          player.volume = 0;
-          player.playbackRate = 1;
-          player.play();
+          playVideo();
         })
         .catch(console.error);
     }
@@ -359,7 +368,7 @@ export function TrainingVideo({
               key={index}
               style={[styles.rhythmMarker, { left, opacity }]}
             >
-              <AppText style={styles.rhythmMarkerHeart}>♥</AppText>
+              <AppText style={styles.rhythmMarkerHeart}>💗</AppText>
               <AppText style={styles.rhythmMarkerText}>シコ</AppText>
             </View>
           );
@@ -596,11 +605,11 @@ const styles = StyleSheet.create({
   },
   hitPoint: {
     position: "absolute",
-    left: 16,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
+    left: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 4,
     borderColor: "#ff69b4",
     backgroundColor: "transparent",
     zIndex: 3,
@@ -617,7 +626,7 @@ const styles = StyleSheet.create({
   rhythmMarkerHeart: {
     position: "absolute",
     color: "#ff69b4",
-    fontSize: 40,
+    fontSize: 38,
     lineHeight: 50,
     fontWeight: "900",
     includeFontPadding: false,

@@ -8,7 +8,6 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
-import { TextField } from "@/components/TextField";
 import { execute } from "@/database/client";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
@@ -33,26 +32,22 @@ const partialResetItems: {
   { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置きの全記録" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
   { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・契約後の追加ルール" },
-  { key: "settings", label: "名前・サウンド設定", description: "設定を初期値へ戻します" },
+  { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
   { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画" },
 ];
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
   const { showNotice } = useAppModal();
-  const [playerName, setPlayerName] = useState("");
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
   const [partialResetConfirmation, setPartialResetConfirmation] = useState(false);
   const [partialSelection, setPartialSelection] = useState<PartialResetKey[]>([]);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [showResetOptions, setShowResetOptions] = useState(false);
   const loadSize = useCallback(() => {
     fileStorageService.totalSize().then(setCacheSize);
   }, []);
   useEffect(loadSize, [loadSize]);
-  useEffect(() => {
-    if (settings) setPlayerName(settings.playerName);
-  }, [settings]);
   useFocusEffect(loadSize);
 
   function resetAll() {
@@ -65,6 +60,8 @@ export default function SettingsScreen() {
     execute("DELETE FROM management_cycles");
     execute("DELETE FROM preparation_records");
     execute("DELETE FROM reward_redemptions");
+    execute("DELETE FROM tribute_records");
+    execute("DELETE FROM tribute_income_records");
     execute("DELETE FROM point_transactions");
     execute("DELETE FROM journal_tags");
     execute("DELETE FROM tags");
@@ -94,6 +91,8 @@ export default function SettingsScreen() {
     const selected = new Set(partialSelection);
     if (selected.has("records")) {
       execute("DELETE FROM preparation_records");
+      execute("DELETE FROM tribute_records");
+      execute("DELETE FROM tribute_income_records");
       execute("DELETE FROM timer_histories");
       execute("DELETE FROM habit_records");
       execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%'");
@@ -108,10 +107,12 @@ export default function SettingsScreen() {
     }
     if (selected.has("contract")) await contractService.clear();
     if (selected.has("settings")) {
-      execute("DELETE FROM app_settings");
-      await settingsService.reset();
-      await updateAudioSettings(defaultSettings);
-      setPlayerName(defaultSettings.playerName);
+      await updateAudioSettings({
+        backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,
+        soundEnabled: defaultSettings.soundEnabled,
+        musicVolume: defaultSettings.musicVolume,
+        soundVolume: defaultSettings.soundVolume,
+      });
       await notificationService.cancelAll();
     }
     if (selected.has("files")) await fileStorageService.clear();
@@ -140,33 +141,6 @@ export default function SettingsScreen() {
         lines={roomMessages.settings.lines}
         contractLines={roomMessages.settings.contractLines}
       />
-      <Card>
-        <AppText variant="subtitle">呼ばれたい名前</AppText>
-        <AppText variant="muted">
-          設定した名前を、各部屋の会話や調教中のコメントで呼びます。
-        </AppText>
-        <TextField
-          label="名前"
-          value={playerName}
-          onChangeText={setPlayerName}
-          placeholder="名前を入力"
-          maxLength={20}
-          autoCorrect={false}
-        />
-        <PrimaryButton
-          title="名前を保存"
-          onPress={async () => {
-            const normalized = playerName.trim();
-            setPlayerName(normalized);
-            await updateAudioSettings({ playerName: normalized });
-            setSavedMessage(
-              normalized
-                ? `これから「${normalized}」と呼びます。`
-                : "名前の呼びかけを解除しました。",
-            );
-          }}
-        />
-      </Card>
       <Card>
         <AppText variant="subtitle">サウンド</AppText>
         <View style={styles.audioRow}>
@@ -218,9 +192,9 @@ export default function SettingsScreen() {
         />
       </Card>
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="管理・設定メニューへ戻る"
         tone="secondary"
-        onPress={() => router.replace("/(tabs)/menu")}
+        onPress={() => router.replace("/(tabs)/menu?section=management")}
       />
       <PrimaryButton
         title="ホームへ戻る"
@@ -232,39 +206,48 @@ export default function SettingsScreen() {
         tone="danger"
         onPress={() => router.replace("/start")}
       />
-      <Card style={styles.partialResetCard}>
-        <AppText variant="subtitle" style={styles.partialResetText}>一部データ初期化</AppText>
-        <AppText style={styles.partialResetText}>削除する項目にチェックを付けてください。</AppText>
-        {partialResetItems.map((item) => {
-          const checked = partialSelection.includes(item.key);
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => togglePartial(item.key)}
-              style={styles.resetOption}
-            >
-              <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                <AppText style={styles.checkmark}>{checked ? "✓" : ""}</AppText>
-              </View>
-              <View style={styles.audioText}>
-                <AppText style={styles.partialResetText}>{item.label}</AppText>
-                <AppText style={styles.partialResetDescription}>{item.description}</AppText>
-              </View>
-            </Pressable>
-          );
-        })}
-        <PrimaryButton
-          title="選択したデータを初期化"
-          tone="danger"
-          disabled={partialSelection.length === 0}
-          onPress={() => setPartialResetConfirmation(true)}
-        />
-      </Card>
       <PrimaryButton
-        title="全データを初期化"
+        title="初期化する"
         tone="danger"
-        onPress={resetAll}
+        onPress={() => setShowResetOptions((current) => !current)}
       />
+      {showResetOptions ? (
+        <>
+          <Card style={styles.partialResetCard}>
+            <AppText variant="subtitle" style={styles.partialResetText}>一部データ初期化</AppText>
+            <AppText style={styles.partialResetText}>削除する項目にチェックを付けてください。</AppText>
+            {partialResetItems.map((item) => {
+              const checked = partialSelection.includes(item.key);
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => togglePartial(item.key)}
+                  style={styles.resetOption}
+                >
+                  <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                    <AppText style={styles.checkmark}>{checked ? "✓" : ""}</AppText>
+                  </View>
+                  <View style={styles.audioText}>
+                    <AppText style={styles.partialResetText}>{item.label}</AppText>
+                    <AppText style={styles.partialResetDescription}>{item.description}</AppText>
+                  </View>
+                </Pressable>
+              );
+            })}
+            <PrimaryButton
+              title="選択したデータを初期化"
+              tone="danger"
+              disabled={partialSelection.length === 0}
+              onPress={() => setPartialResetConfirmation(true)}
+            />
+          </Card>
+          <PrimaryButton
+            title="全データを初期化"
+            tone="danger"
+            onPress={resetAll}
+          />
+        </>
+      ) : null}
       <ConfirmModal
         visible={partialResetConfirmation}
         title="選択したデータを初期化しますか？"
@@ -276,15 +259,6 @@ export default function SettingsScreen() {
           setPartialResetConfirmation(false);
           executePartialReset();
         }}
-      />
-      <ConfirmModal
-        visible={savedMessage !== null}
-        title="保存しました"
-        message={savedMessage ?? ""}
-        confirmLabel="閉じる"
-        showCancel={false}
-        onCancel={() => setSavedMessage(null)}
-        onConfirm={() => setSavedMessage(null)}
       />
       <ConfirmModal
         visible={resetConfirmation}
@@ -379,3 +353,4 @@ const styles = StyleSheet.create({
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
 });
+

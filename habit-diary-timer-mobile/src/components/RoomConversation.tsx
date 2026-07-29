@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import {
   Image,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -23,6 +24,8 @@ type Props = {
   lines?: ConversationLine[];
   contractLines?: ConversationLine[];
   characterSource?: ImageSourcePropType;
+  characterVideoSource?: number;
+  characterFit?: "contain" | "cover";
 };
 
 const defaultLines: ConversationLine[] = [
@@ -36,6 +39,8 @@ export function RoomConversation({
   lines,
   contractLines = [],
   characterSource,
+  characterVideoSource,
+  characterFit = "contain",
 }: Props) {
   const { playEffect, settings } = useAppAudio();
   const [index, setIndex] = useState(0);
@@ -95,11 +100,13 @@ export function RoomConversation({
       </View>
 
       <View style={styles.stage}>
-        {characterSource ? (
+        {characterVideoSource ? (
+          <RoomConversationVideo source={characterVideoSource} contentFit={characterFit} />
+        ) : characterSource ? (
           <Image
             source={characterSource}
             style={styles.characterImage}
-            resizeMode="contain"
+            resizeMode={characterFit}
           />
         ) : (
           <>
@@ -137,6 +144,33 @@ export function RoomConversation({
         </AppText>
       </View>
     </Pressable>
+  );
+}
+
+function RoomConversationVideo({
+  source,
+  contentFit,
+}: {
+  source: number;
+  contentFit: "contain" | "cover";
+}) {
+  const player = useVideoPlayer(source, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+    instance.volume = 0;
+  });
+
+  useEffect(() => {
+    player.play();
+  }, [player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.characterImage}
+      nativeControls={false}
+      contentFit={contentFit}
+    />
   );
 }
 

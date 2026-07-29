@@ -24,7 +24,7 @@ export const rewardCatalog = {
   brutal: {
     key: "brutal",
     name: "鬼畜の調教命令交換♡",
-    cost: 1000,
+    cost: 100,
     contents: rewardBrutalOrderMessages.map((message) => message.text),
   },
   voice: {
@@ -39,6 +39,7 @@ export const rewardCatalog = {
     cost: 10000,
     contents: rewardSecretMessages.map((message) => message.text),
   },
+  outfit: { key: "outfit", name: "二ノ様の衣装交換♡", cost: 300 },
 } as const;
 
 export type RandomRewardKey = "insult" | "praise" | "brutal";
@@ -52,7 +53,10 @@ export type RewardRedemption = {
   redeemed_at: string;
 };
 
-const stgBonus = process.env.EXPO_PUBLIC_APP_ENV === "stg" ? 99999 : 0;
+const runtimeAppEnv =
+  process.env.EXPO_PUBLIC_APP_ENV ??
+  (globalThis as typeof globalThis & { __NINO_APP_ENV__?: string }).__NINO_APP_ENV__;
+const stgBonus = runtimeAppEnv === "stg" ? 99999 : 0;
 const pointChangeListeners = new Set<() => void>();
 
 export const pointRepository = {
@@ -153,10 +157,10 @@ export const rewardRepository = {
     const reward = rewardCatalog[key];
     const choices = this.remaining(key);
     if (choices.length === 0) return null;
+    if (this.balance().available < reward.cost) return null;
     const content = choices[Math.floor(Math.random() * choices.length)];
     let redeemed = false;
     transaction(() => {
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES(?, ?, ?, ?, ?)",
         [reward.key, reward.name, reward.cost, content, toDateTimeKey()],
@@ -168,6 +172,7 @@ export const rewardRepository = {
 
   redeemVideo(name: string) {
     const reward = rewardCatalog.video;
+    if (this.balance().available < reward.cost) return false;
     let redeemed = false;
     transaction(() => {
       const existing = queryOne<{ count: number }>(
@@ -175,7 +180,6 @@ export const rewardRepository = {
         [name],
       )?.count ?? 0;
       if (existing > 0) return;
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('video', ?, ?, ?, ?)",
         [reward.name, reward.cost, name, toDateTimeKey()],
@@ -194,10 +198,10 @@ export const rewardRepository = {
 
   redeemVoice() {
     const reward = rewardCatalog.voice;
+    if (this.balance().available < reward.cost) return false;
     let redeemed = false;
     transaction(() => {
       if (this.hasRedeemed(reward.key)) return;
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES(?, ?, ?, ?, ?)",
         [reward.key, reward.name, reward.cost, reward.content, toDateTimeKey()],
@@ -209,9 +213,9 @@ export const rewardRepository = {
 
   redeemSecret() {
     const reward = rewardCatalog.secret;
+    if (this.balance().available < reward.cost) return null;
     let redeemed = false;
     transaction(() => {
-      if (this.balance().available < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('secret', ?, ?, ?, ?)",
         [reward.name, reward.cost, reward.contents[0], toDateTimeKey()],
@@ -219,5 +223,27 @@ export const rewardRepository = {
       redeemed = true;
     });
     return redeemed ? reward.contents[0] : null;
+  },
+
+  hasRedeemedOutfit(key: string) {
+    return (queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM reward_redemptions WHERE reward_key='outfit' AND file_uri=?",
+      [key],
+    )?.count ?? 0) > 0;
+  },
+
+  redeemOutfit(key: string, name: string) {
+    const reward = rewardCatalog.outfit;
+    if (this.balance().available < reward.cost) return false;
+    let redeemed = false;
+    transaction(() => {
+      if (this.hasRedeemedOutfit(key)) return;
+      execute(
+        "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, file_uri, redeemed_at) VALUES('outfit', ?, ?, ?, ?, ?)",
+        [reward.name, reward.cost, name, key, toDateTimeKey()],
+      );
+      redeemed = true;
+    });
+    return redeemed;
   },
 };

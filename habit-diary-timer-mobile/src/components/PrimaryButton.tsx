@@ -18,13 +18,25 @@ type Props = {
     | "management"
     | "record"
     | "collection"
-    | "reward";
+    | "reward"
+    | "tribute";
   disabled?: boolean;
 };
 
 export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Props) {
   const { playEffect } = useAppAudio();
   const darkNavigation = title === "ホームへ戻る" || title === "スタート画面に移動";
+  const activeSubmit =
+    !disabled &&
+    !darkNavigation &&
+    tone !== "danger" &&
+    (
+      title.includes("保存") ||
+      title.includes("登録") ||
+      title.includes("命令完了") ||
+      title === "完了" ||
+      title.startsWith("準備完了")
+    );
   function press() {
     playEffect("button");
     onPress();
@@ -37,6 +49,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         styles.button,
         styles[tone],
         darkNavigation && styles.darkNavigation,
+        activeSubmit && styles.activeSubmit,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -55,7 +68,9 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
         tone === "record" && styles.recordText,
         tone === "collection" && styles.collectionText,
         tone === "reward" && styles.rewardText,
+        tone === "tribute" && styles.tributeText,
         darkNavigation && styles.darkNavigationText,
+        activeSubmit && styles.activeSubmitText,
       ]}>{title}</AppText>
     </Pressable>
   );
@@ -87,7 +102,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#7b2cbf",
   },
   defeat: {
-    borderColor: "#fff",
+    borderColor: "#ff3b45",
     backgroundColor: "#ff69b4",
   },
   contract: {
@@ -122,9 +137,17 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#f2c94c",
   },
+  tribute: {
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
   darkNavigation: {
     borderColor: "#fff",
     backgroundColor: "#000",
+  },
+  activeSubmit: {
+    borderColor: "#fff",
+    backgroundColor: "#7cb342",
   },
   disabled: {
     opacity: 0.45,
@@ -143,7 +166,7 @@ const styles = StyleSheet.create({
   punishmentText: {
     color: "#ff3b45",
   },
-  defeatText: { color: "#fff" },
+  defeatText: { color: "#ff3b45" },
   secondaryText: {
     color: "#000",
   },
@@ -157,5 +180,7 @@ const styles = StyleSheet.create({
   recordText: { color: "#fff" },
   collectionText: { color: "#fff" },
   rewardText: { color: "#111" },
+  tributeText: { color: "#ff3b45" },
   darkNavigationText: { color: "#fff" },
+  activeSubmitText: { color: "#fff" },
 });

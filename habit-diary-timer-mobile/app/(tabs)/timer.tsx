@@ -230,12 +230,17 @@ export default function TimerScreen() {
   }
 
   function stop() {
+    const elapsedSeconds = totalSeconds - remaining;
     if (!sessionRecorded.current)
-      achievementRepository.recordPunishment(totalSeconds - remaining);
+      achievementRepository.recordPunishment(elapsedSeconds);
     sessionRecorded.current = true;
     stopEffect("trainingStart");
     setSessionAudioActive(false);
     setRunning(false);
+    showNotice(
+      "記録しました",
+      `お仕置き記録を調教日記へ保存しました。\n実施時間：${elapsedSeconds}秒`,
+    );
   }
 
   return (
@@ -294,6 +299,11 @@ export default function TimerScreen() {
           onPress={start}
         />
       </Card>
+      <PrimaryButton
+        title="廊下に戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/rooms")}
+      />
       <PrimaryButton
         title="ホームへ戻る"
         tone="secondary"
@@ -354,7 +364,7 @@ export default function TimerScreen() {
                 const offset = markerOffsets[index];
                 if (gaugeElapsed < offset * 5) return null;
                 const phase = (gaugeElapsed / 5 - offset + 1) % 1;
-                const left = 26 + (1 - phase) * Math.max(0, trackWidth - 46);
+                const left = 26 + (1 - phase) * Math.max(0, trackWidth - 56);
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
                 return (
                   <View key={index} style={[styles.marker, { left, opacity }]}> 
@@ -451,32 +461,31 @@ const styles = StyleSheet.create({
   },
   marker: {
     position: "absolute",
-    top: 7,
-    width: 34,
-    height: 42,
-    marginLeft: -17,
+    width: 44,
+    height: 50,
+    marginLeft: -22,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
   },
   markerSpade: {
     position: "absolute",
-    width: 34,
-    height: 42,
+    width: 44,
+    height: 50,
     color: "#050505",
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 38,
+    lineHeight: 50,
     fontWeight: "900",
     textAlign: "center",
     includeFontPadding: false,
   },
   markerLetter: {
     position: "absolute",
-    width: 34,
-    height: 42,
+    width: 44,
+    height: 50,
     color: "#fff",
     fontSize: 11,
-    lineHeight: 36,
+    lineHeight: 50,
     fontWeight: "900",
     textAlign: "center",
     textAlignVertical: "center",

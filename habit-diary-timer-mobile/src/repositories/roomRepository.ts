@@ -37,6 +37,19 @@ function addDays(dateKey: string, days: number) {
   return toDateKey(date);
 }
 
+function daysBetween(startDateKey: string, endDateKey: string) {
+  const start = new Date(`${startDateKey}T12:00:00`);
+  const end = new Date(`${endDateKey}T12:00:00`);
+  return Math.max(
+    0,
+    Math.round((end.getTime() - start.getTime()) / 86400000),
+  );
+}
+
+function randomChoice(items: string[]) {
+  return items[Math.floor(Math.random() * items.length)] ?? items[0] ?? "";
+}
+
 function deleteManagementCycleData(cycleId: number) {
   const tasks = query<{ id: number }>(
     "SELECT id FROM management_daily_tasks WHERE cycle_id=?",
@@ -147,6 +160,30 @@ function saveManagementTaskJournal(task: ManagementDailyTask) {
   );
 }
 
+function createMissingManagementTasks(cycle: ManagementCycle) {
+  const totalDays = daysBetween(cycle.start_date, cycle.end_date) + 1;
+  const normalChoices = instructions[cycle.mode];
+  const finalChoices = finalDayInstructions[cycle.mode];
+  transaction(() => {
+    for (let index = 0; index < totalDays; index += 1) {
+      const recordDate = addDays(cycle.start_date, index);
+      const existing = queryOne<ManagementDailyTask>(
+        "SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?",
+        [cycle.id, recordDate],
+      );
+      if (existing) continue;
+      const instruction =
+        recordDate >= cycle.end_date
+          ? randomChoice(finalChoices)
+          : randomChoice(normalChoices);
+      execute(
+        "INSERT INTO management_daily_tasks(cycle_id, record_date, instruction) VALUES(?, ?, ?)",
+        [cycle.id, recordDate, instruction],
+      );
+    }
+  });
+}
+
 export const managementRepository = {
   syncCompletedJournals() {
     query<ManagementDailyTask>(
@@ -155,7 +192,9 @@ export const managementRepository = {
   },
 
   active(mode: ManagementMode) {
-    return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE mode=? AND is_active=1 ORDER BY id DESC LIMIT 1", [mode]);
+    const cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE mode=? AND is_active=1 ORDER BY id DESC LIMIT 1", [mode]);
+    if (cycle) createMissingManagementTasks(cycle);
+    return cycle;
   },
 
   roll(mode: ManagementMode, dice: number) {
@@ -171,7 +210,9 @@ export const managementRepository = {
       );
       id = Number(result.lastInsertRowId);
     });
-    return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+    const cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+    createMissingManagementTasks(cycle);
+    return cycle;
   },
 
   reroll(cycleId: number, mode: ManagementMode, dice: number) {
@@ -189,7 +230,9 @@ export const managementRepository = {
       );
       id = Number(result.lastInsertRowId);
     });
-    return queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+    const cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+    createMissingManagementTasks(cycle);
+    return cycle;
   },
 
   removeCycle(cycleId: number) {
@@ -198,33 +241,24 @@ export const managementRepository = {
 
   todayTask(cycle: ManagementCycle) {
     const today = toDateKey();
-    const isFinalDay = today >= cycle.end_date;
-    const seed = Number(today.replaceAll("-", "")) + cycle.id * 17;
-    const finalChoices = finalDayInstructions[cycle.mode];
+    createMissingManagementTasks(cycle);
     const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?", [cycle.id, today]);
     if (existing) {
-      if (isFinalDay && existing.instruction === "本日は射精日") {
-        const instruction = finalChoices[seed % finalChoices.length];
-        execute("UPDATE management_daily_tasks SET instruction=? WHERE id=?", [
-          instruction,
-          existing.id,
-        ]);
-        const updated = { ...existing, instruction };
-        if (updated.completed_at) saveManagementTaskJournal(updated);
-        return updated;
-      }
       if (existing.completed_at) saveManagementTaskJournal(existing);
       return existing;
     }
-    const choices = instructions[cycle.mode];
-    const instruction = isFinalDay
-      ? finalChoices[seed % finalChoices.length]
-      : choices[seed % choices.length];
-    const result = execute(
-      "INSERT INTO management_daily_tasks(cycle_id, record_date, instruction) VALUES(?, ?, ?)",
-      [cycle.id, today, instruction],
+    return queryOne<ManagementDailyTask>(
+      "SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?",
+      [cycle.id, today],
+    ) ?? null;
+  },
+
+  tasks(cycle: ManagementCycle) {
+    createMissingManagementTasks(cycle);
+    return query<ManagementDailyTask>(
+      "SELECT * FROM management_daily_tasks WHERE cycle_id=? ORDER BY record_date, id",
+      [cycle.id],
     );
-    return queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE id=?", [Number(result.lastInsertRowId)])!;
   },
 
   complete(taskId: number) {

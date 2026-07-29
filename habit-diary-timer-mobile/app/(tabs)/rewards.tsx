@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -24,12 +24,23 @@ import {
   formatConfiguredMessage,
   roomMessages,
 } from "@/constants/messages";
+import { exchangeableNinoOutfits, type NinoOutfit } from "@/constants/outfits";
 
 const rewardVideos = [
   {
     name: "準備動画",
     fileName: "nino-preparation.mp4",
     module: require("../../assets/videos/preparation_1.mp4"),
+  },
+  {
+    name: "洗脳動画",
+    fileName: "nino-brainwash.mp4",
+    module: require("../../assets/videos/brainwash_01.mp4"),
+  },
+  {
+    name: "敗北動画",
+    fileName: "nino-defeat.mp4",
+    module: require("../../assets/videos/defeat_01.mp4"),
   },
   { name: "調教動画 1", fileName: "nino-training-01.mp4", module: require("../../assets/videos/habits_1.mp4") },
   { name: "調教動画 2", fileName: "nino-training-02.mp4", module: require("../../assets/videos/habits_2.mp4") },
@@ -96,6 +107,15 @@ export default function RewardsScreen() {
     (video) => !acquiredVideoNames.has(video.name),
   );
   const voiceAcquired = acquired.some((item) => item.reward_key === "voice");
+  const acquiredOutfitKeys = new Set(
+    acquired
+      .filter((item) => item.reward_key === "outfit")
+      .map((item) => item.file_uri)
+      .filter((key): key is string => Boolean(key)),
+  );
+  const availableOutfits = exchangeableNinoOutfits.filter(
+    (outfit) => !acquiredOutfitKeys.has(outfit.key),
+  );
 
   function exchangeRandom(key: RandomRewardKey) {
     const reward = rewardCatalog[key];
@@ -188,6 +208,42 @@ export default function RewardsScreen() {
     });
   }
 
+  function exchangeOutfit(outfit: NinoOutfit) {
+    const reward = rewardCatalog.outfit;
+    setConfirmation({
+      title: "控え室の衣装を交換しますか？",
+      message: `${outfit.name}\n\n${reward.cost}ptを消費します。交換後は二ノ様の控え室で着せ替えできます。`,
+      onConfirm: () => {
+        let redeemed = false;
+        try {
+          redeemed = rewardRepository.redeemOutfit(outfit.key, outfit.name);
+        } catch {
+          showNotice(
+            "交換できません",
+            "衣装交換データの保存に失敗しました。アプリを再起動してからもう一度試してください。",
+          );
+          return;
+        }
+        if (!redeemed) {
+          let alreadyRedeemed = false;
+          try {
+            alreadyRedeemed = rewardRepository.hasRedeemedOutfit(outfit.key);
+          } catch {
+            alreadyRedeemed = false;
+          }
+          return showNotice(
+            "交換できません",
+            alreadyRedeemed
+              ? "この衣装は交換済みです。"
+              : "所持ポイントが足りません。",
+          );
+        }
+        reload();
+        showNotice("衣装を獲得しました♡", `${outfit.name}を控え室に追加しました。`);
+      },
+    });
+  }
+
   return (
     <Screen>
       <AppText variant="title">ご褒美</AppText>
@@ -234,6 +290,29 @@ export default function RewardsScreen() {
           </Card>
         );
       })}
+
+      {availableOutfits.length > 0 ? (
+        <Card>
+          <AppText variant="subtitle">{rewardCatalog.outfit.name}</AppText>
+          <AppText variant="muted">
+            消費：{rewardCatalog.outfit.cost}pt／交換後は二ノ様の控え室で着せ替えできます。
+          </AppText>
+          {availableOutfits.map((outfit) => (
+            <View key={outfit.key} style={styles.outfitRow}>
+              <Image source={outfit.source} resizeMode="cover" style={styles.outfitThumb} />
+              <View style={styles.grow}>
+                <AppText style={styles.outfitName}>{outfit.name}</AppText>
+                <AppText variant="muted">{outfit.unlock}</AppText>
+              </View>
+              <PrimaryButton
+                title="交換"
+                disabled={balance.available < rewardCatalog.outfit.cost}
+                onPress={() => exchangeOutfit(outfit)}
+              />
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       {availableRewardVideos.length > 0 ? (
         <Card>
@@ -308,9 +387,9 @@ export default function RewardsScreen() {
       </Card>
 
       <PrimaryButton
-        title="記録・管理メニューへ戻る"
+        title="記録・交換メニューへ戻る"
         tone="secondary"
-        onPress={() => router.replace("/(tabs)/menu")}
+        onPress={() => router.replace("/(tabs)/menu?section=record")}
       />
       <PrimaryButton
         title="ホームへ戻る"
@@ -340,6 +419,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   stg: { color: "#ff4b55", fontWeight: "900" },
+  outfitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#444",
+    paddingVertical: 10,
+  },
+  outfitThumb: {
+    width: 64,
+    height: 86,
+    borderWidth: 1,
+    borderColor: "#666",
+    borderRadius: 6,
+    backgroundColor: "#111",
+  },
+  outfitName: { color: "#fff", fontWeight: "900" },
   videoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -350,3 +446,4 @@ const styles = StyleSheet.create({
   },
   grow: { flex: 1 },
 });
+
