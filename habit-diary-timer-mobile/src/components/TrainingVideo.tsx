@@ -400,13 +400,19 @@ export function TrainingVideo({
           if (started && !gaugeStarted) return null;
           if (started && gaugeElapsed < offset * 5) return null;
           const phase = (gaugeProgress - offset + 1) % 1;
-          const travelWidth = Math.max(0, trackWidth - 56);
-          const left = 26 + (1 - phase) * travelWidth;
+          const markerWidth = started ? 74 : 52;
+          const markerCenter = markerWidth / 2;
+          const travelWidth = Math.max(0, trackWidth - markerWidth - 4);
+          const left = markerCenter + (1 - phase) * travelWidth;
           const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
           return (
             <View
               key={index}
-              style={[styles.rhythmMarker, { left, opacity }]}
+              style={[
+                styles.rhythmMarker,
+                started && styles.fullscreenRhythmMarker,
+                { left, opacity },
+              ]}
             >
               <Image
                 source={require("../../assets/ui/rhythm-heart.png")}
@@ -665,6 +671,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
+  },
+  fullscreenRhythmMarker: {
+    width: 74,
+    height: 82,
+    marginLeft: -37,
   },
   rhythmMarkerImage: { width: "100%", height: "100%" },
   waitingTime: {

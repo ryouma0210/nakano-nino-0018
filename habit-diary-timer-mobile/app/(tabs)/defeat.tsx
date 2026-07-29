@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -90,6 +90,19 @@ export default function DefeatScreen() {
   }
 
   const allChecked = defeatChecklistMessages.every((item) => checked.has(item));
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    defeatPlayer.play();
+    const timer = setTimeout(() => {
+      try {
+        defeatPlayer.play();
+      } catch (error) {
+        console.warn("敗北拡大動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [defeatPlayer, fullscreen]);
 
   return (
     <View style={styles.root}>
@@ -284,6 +297,8 @@ const styles = StyleSheet.create({
   checkedText: { color: "#fff", textDecorationLine: "underline" },
   fullscreen: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 10,
     backgroundColor: "#000",
   },
@@ -293,6 +308,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
+    width: "100%",
+    height: "100%",
+    alignSelf: "center",
     backgroundColor: "#000",
   },
   fullscreenClose: {
