@@ -214,6 +214,8 @@ const styles = StyleSheet.create({
   },
   fullscreen: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 10,
     backgroundColor: "#000",
   },
@@ -223,6 +225,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
+    width: "100%",
+    height: "100%",
+    alignSelf: "center",
     backgroundColor: "#000",
   },
   fullscreenClose: {

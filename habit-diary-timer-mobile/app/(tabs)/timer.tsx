@@ -364,10 +364,11 @@ export default function TimerScreen() {
                 const offset = markerOffsets[index];
                 if (gaugeElapsed < offset * 5) return null;
                 const phase = (gaugeElapsed / 5 - offset + 1) % 1;
-                const left = 26 + (1 - phase) * Math.max(0, trackWidth - 56);
+                const markerWidth = 74;
+                const left = markerWidth / 2 + (1 - phase) * Math.max(0, trackWidth - markerWidth - 4);
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
                 return (
-                  <View key={index} style={[styles.marker, { left, opacity }]}>
+                  <View key={index} style={[styles.marker, styles.fullscreenMarker, { left, opacity }]}>
                     <Image
                       source={require("../../assets/ui/rhythm-spade-q.png")}
                       style={styles.markerImage}
@@ -470,6 +471,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
+  },
+  fullscreenMarker: {
+    width: 74,
+    height: 82,
+    marginLeft: -37,
   },
   markerImage: { width: "100%", height: "100%" },
 });

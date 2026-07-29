@@ -358,7 +358,7 @@ function CollectionVoice({ item }: { item: RewardRedemption }) {
       await asset.downloadAsync();
       const sourceUri = asset.localUri ?? asset.uri;
       if (Platform.OS === "web") {
-        await downloadUriOnWeb(sourceUri, "nino-love-voice.m4a");
+        await downloadUriOnWeb(sourceUri, "nino-love-voice.m4a", "audio/mp4");
         showNotice("保存完了", "好きボイス3秒を音声ファイル（M4A）としてダウンロードしました。");
         return;
       }

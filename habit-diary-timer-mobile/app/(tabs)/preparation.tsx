@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useEventListener } from "expo";
@@ -77,6 +77,19 @@ export default function PreparationScreen() {
       return (current + offset) % preparationComments.length;
     });
   });
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    preparationPlayer.play();
+    const timer = setTimeout(() => {
+      try {
+        preparationPlayer.play();
+      } catch (error) {
+        console.warn("準備拡大動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [fullscreen, preparationPlayer]);
 
   function toggle(text: string) {
     if (completed) return;
@@ -269,6 +282,8 @@ const styles = StyleSheet.create({
   },
   fullscreen: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 10,
     backgroundColor: "#000",
   },
@@ -278,6 +293,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
+    width: "100%",
+    height: "100%",
+    alignSelf: "center",
     backgroundColor: "#000",
   },
   fullscreenBreath: {
