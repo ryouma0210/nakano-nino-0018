@@ -54,7 +54,8 @@ export const roomMessages: Record<string, RoomMessages> = {
   // 二ノ様の控室：app/(tabs)/nino-room.tsx
   ninoRoom: {
     lines: [
-      plainMessage("ここは私の控室よ。表情や衣装、演出を確認する場所ね。"),
+      namedMessage("来たのね。ここは私の控室よ。あまり汚さないでよね。"),
+      plainMessage("横のボタンで衣装を選べるわ。今日はどんな私がいいの？"), 
     ],
     contractLines: [
       plainMessage("私を見る目も少しは従順になったかしら♡"),
