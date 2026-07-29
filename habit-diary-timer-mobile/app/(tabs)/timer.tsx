@@ -368,7 +368,10 @@ export default function TimerScreen() {
                 const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
                 return (
                   <View key={index} style={[styles.marker, { left, opacity }]}> 
-                    <AppText style={styles.markerSpade}>♠</AppText>
+                    <View style={styles.spadeHead} />
+                    <View style={styles.spadeLeft} />
+                    <View style={styles.spadeRight} />
+                    <View style={styles.spadeStem} />
                     <AppText style={styles.markerLetter}>Q</AppText>
                   </View>
                 );
@@ -468,16 +471,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 2,
   },
-  markerSpade: {
+  spadeHead: {
     position: "absolute",
-    width: 44,
-    height: 50,
-    color: "#050505",
-    fontSize: 38,
-    lineHeight: 50,
-    fontWeight: "900",
-    textAlign: "center",
-    includeFontPadding: false,
+    top: 4,
+    width: 28,
+    height: 28,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+    backgroundColor: "#050505",
+    transform: [{ rotate: "45deg" }],
+  },
+  spadeLeft: {
+    position: "absolute",
+    top: 18,
+    left: 10,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: "#050505",
+  },
+  spadeRight: {
+    position: "absolute",
+    top: 18,
+    right: 10,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: "#050505",
+  },
+  spadeStem: {
+    position: "absolute",
+    bottom: 5,
+    width: 18,
+    height: 12,
+    borderBottomWidth: 12,
+    borderRightWidth: 5,
+    borderLeftWidth: 5,
+    borderBottomColor: "#050505",
+    borderRightColor: "transparent",
+    borderLeftColor: "transparent",
   },
   markerLetter: {
     position: "absolute",

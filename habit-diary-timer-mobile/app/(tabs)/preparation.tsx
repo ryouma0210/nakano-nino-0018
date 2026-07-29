@@ -197,14 +197,26 @@ export default function PreparationScreen() {
             nativeControls={false}
             contentFit="contain"
           />
-          <AppText style={styles.fullscreenBreath}>
+          <AppText
+            style={[
+              styles.fullscreenBreath,
+              { bottom: Math.max(78, insets.bottom + 78) },
+            ]}
+          >
             {formatConfiguredMessage(preparationComments[commentIndex], playerName)}
           </AppText>
-          <PrimaryButton
-            title="閉じる"
-            tone="secondary"
-            onPress={() => setFullscreen(false)}
-          />
+          <View
+            style={[
+              styles.fullscreenClose,
+              { bottom: Math.max(12, insets.bottom + 12) },
+            ]}
+          >
+            <PrimaryButton
+              title="閉じる"
+              tone="secondary"
+              onPress={() => setFullscreen(false)}
+            />
+          </View>
         </View>
       </Modal>
     </Screen>
@@ -257,17 +269,33 @@ const styles = StyleSheet.create({
   },
   fullscreen: {
     flex: 1,
-    gap: 10,
     paddingHorizontal: 10,
     backgroundColor: "#000",
   },
-  fullscreenVideo: { flex: 1, width: "100%", backgroundColor: "#000" },
+  fullscreenVideo: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "#000",
+  },
   fullscreenBreath: {
+    position: "absolute",
+    right: 10,
+    left: 10,
+    zIndex: 20,
     color: "#fff",
     fontSize: 28,
     lineHeight: 40,
     fontWeight: "900",
     textAlign: "center",
     letterSpacing: 2,
+  },
+  fullscreenClose: {
+    position: "absolute",
+    right: 10,
+    left: 10,
+    zIndex: 20,
   },
 });

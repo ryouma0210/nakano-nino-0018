@@ -225,11 +225,18 @@ export default function DefeatScreen() {
             nativeControls={false}
             contentFit="contain"
           />
-          <PrimaryButton
-            title="閉じる"
-            tone="secondary"
-            onPress={() => setFullscreen(false)}
-          />
+          <View
+            style={[
+              styles.fullscreenClose,
+              { bottom: Math.max(12, insets.bottom + 12) },
+            ]}
+          >
+            <PrimaryButton
+              title="閉じる"
+              tone="secondary"
+              onPress={() => setFullscreen(false)}
+            />
+          </View>
         </View>
       </Modal>
     </View>
@@ -323,9 +330,21 @@ const styles = StyleSheet.create({
   loopVideo: { width: "100%", height: "100%" },
   fullscreen: {
     flex: 1,
-    gap: 10,
     paddingHorizontal: 10,
     backgroundColor: "#000",
   },
-  fullscreenVideo: { flex: 1, width: "100%", backgroundColor: "#000" },
+  fullscreenVideo: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "#000",
+  },
+  fullscreenClose: {
+    position: "absolute",
+    right: 10,
+    left: 10,
+    zIndex: 20,
+  },
 });

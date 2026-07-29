@@ -57,7 +57,7 @@ export default function RoomsScreen() {
             disabled={href === "/(tabs)/defeat" && !contractSigned}
             tone={
               href === "/(tabs)/defeat"
-                ? "defeat"
+                ? "defeatRoom"
                 : href === "/(tabs)/brainwash"
                   ? "defeat"
                 : href === "/(tabs)/timer"
