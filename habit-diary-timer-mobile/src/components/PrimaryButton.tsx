@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#7b2cbf",
   },
   defeat: {
-    borderColor: "#fff",
+    borderColor: "#ff3b45",
     backgroundColor: "#ff69b4",
   },
   contract: {
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   punishmentText: {
     color: "#ff3b45",
   },
-  defeatText: { color: "#fff" },
+  defeatText: { color: "#ff3b45" },
   secondaryText: {
     color: "#000",
   },

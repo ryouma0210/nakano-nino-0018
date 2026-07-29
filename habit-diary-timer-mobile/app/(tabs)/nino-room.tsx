@@ -38,7 +38,6 @@ export default function NinoRoomScreen() {
     () => [
       ...(roomMessages.ninoRoom.lines ?? []),
       ...(roomMessages.ninoRoom.contractLines ?? []),
-      { text: "横のボタンで衣装を選べるわ。今日はどんな私がいいの？" },
     ],
     [],
   );
@@ -63,7 +62,10 @@ export default function NinoRoomScreen() {
   const selectedOutfit =
     outfits.find((item) => item.key === profile?.ninoOutfit) ?? outfits[0];
   const lines = useMemo(
-    () => [...baseLines, ...selectedOutfit.lines.map((text) => ({ text }))],
+    () =>
+      selectedOutfit.key === "default"
+        ? [...baseLines, ...selectedOutfit.lines.map((text) => ({ text }))]
+        : selectedOutfit.lines.map((text) => ({ text })),
     [baseLines, selectedOutfit],
   );
   const currentLine = lines[lineIndex % lines.length];

@@ -37,6 +37,7 @@ export default function DefeatScreen() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [completed, setCompleted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [heartVisible, setHeartVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,8 +58,18 @@ export default function DefeatScreen() {
       const audioEnabled = Boolean(settings?.soundEnabled);
       setSessionAudioActive(audioEnabled);
       if (audioEnabled) playEffect("defeatLoop");
+      const showHeart = () => {
+        if (!active) return;
+        setHeartVisible(true);
+        setTimeout(() => {
+          if (active) setHeartVisible(false);
+        }, 2000);
+      };
+      showHeart();
+      const heartTimer = setInterval(showHeart, 5000);
       return () => {
         active = false;
+        clearInterval(heartTimer);
         stopEffect("defeatLoop");
         setSessionAudioActive(false);
       };
@@ -140,7 +151,7 @@ export default function DefeatScreen() {
             </View>
           )}
           <AppText style={styles.videoHelp}>
-            タップで拡大表示できるわ♡
+            私をしっかり見なさい♡
           </AppText>
         </Card>
         <Card style={styles.pinkCard}>
@@ -191,7 +202,7 @@ export default function DefeatScreen() {
       </ScrollView>
       <DefeatLoopVideo
         source={require("../../assets/videos/hartmaku.mp4")}
-        style={styles.heartVideo}
+        style={[styles.heartVideo, heartVisible && styles.heartVideoVisible]}
       />
       <Modal
         visible={fullscreen}
@@ -262,7 +273,7 @@ const styles = StyleSheet.create({
   videoPreview: { position: "relative" },
   video: {
     width: "100%",
-    aspectRatio: 16 / 9,
+    aspectRatio: 9 / 16,
     borderWidth: 1,
     borderColor: "#fff",
     backgroundColor: "#000",
@@ -270,7 +281,7 @@ const styles = StyleSheet.create({
   videoTapArea: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   videoPlaceholder: {
     width: "100%",
-    aspectRatio: 16 / 9,
+    aspectRatio: 9 / 16,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -303,7 +314,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 1,
-    opacity: 0.28,
+    opacity: 0,
+  },
+  heartVideoVisible: {
+    zIndex: 10,
+    opacity: 0.5,
   },
   loopVideo: { width: "100%", height: "100%" },
   fullscreen: {
