@@ -127,6 +127,7 @@ function BrainwashVideo({
   });
 
   useEffect(() => {
+    if (fullscreen) return;
     player.play();
     setTimeout(() => {
       try {
@@ -135,7 +136,7 @@ function BrainwashVideo({
         console.warn("洗脳動画の再生を再試行できませんでした。", error);
       }
     }, 180);
-  }, [player]);
+  }, [fullscreen, player]);
 
   return (
     <View style={styles.videoPreview}>

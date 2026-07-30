@@ -92,13 +92,12 @@ export default function DefeatScreen() {
   const allChecked = defeatChecklistMessages.every((item) => checked.has(item));
 
   useEffect(() => {
-    if (!fullscreen) return;
     defeatPlayer.play();
     const timer = setTimeout(() => {
       try {
         defeatPlayer.play();
       } catch (error) {
-        console.warn("敗北拡大動画の再生を再試行できませんでした。", error);
+        console.warn("敗北動画の再生を再試行できませんでした。", error);
       }
     }, 180);
     return () => clearTimeout(timer);

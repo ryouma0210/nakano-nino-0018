@@ -184,6 +184,13 @@ function createMissingManagementTasks(cycle: ManagementCycle) {
   });
 }
 
+function findActiveManagementCycle(mode: ManagementMode) {
+  return queryOne<ManagementCycle>(
+    "SELECT * FROM management_cycles WHERE mode=? AND is_active=1 ORDER BY id DESC LIMIT 1",
+    [mode],
+  );
+}
+
 export const managementRepository = {
   syncCompletedJournals() {
     query<ManagementDailyTask>(
@@ -192,7 +199,7 @@ export const managementRepository = {
   },
 
   active(mode: ManagementMode) {
-    const cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE mode=? AND is_active=1 ORDER BY id DESC LIMIT 1", [mode]);
+    const cycle = findActiveManagementCycle(mode);
     if (cycle) createMissingManagementTasks(cycle);
     return cycle;
   },
@@ -210,7 +217,10 @@ export const managementRepository = {
       );
       id = Number(result.lastInsertRowId);
     });
-    const cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+    const cycle =
+      queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id]) ??
+      findActiveManagementCycle(mode);
+    if (!cycle) throw new Error("射精管理期間の作成結果を取得できませんでした。");
     createMissingManagementTasks(cycle);
     return cycle;
   },
@@ -230,7 +240,10 @@ export const managementRepository = {
       );
       id = Number(result.lastInsertRowId);
     });
-    const cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])!;
+    const cycle =
+      queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id]) ??
+      findActiveManagementCycle(mode);
+    if (!cycle) throw new Error("射精管理期間の振り直し結果を取得できませんでした。");
     createMissingManagementTasks(cycle);
     return cycle;
   },
