@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { ManagementRoom } from "@/components/ManagementRoom";
@@ -17,7 +17,6 @@ function managementModeLabel(mode: ManagementMode) {
 }
 
 export default function ManagementScreen() {
-  const [mode, setMode] = useState<ManagementMode | null>(null);
   const releaseCycle = managementRepository.active("release");
   const chastityCycle = managementRepository.active("chastity");
   const activeMode: ManagementMode | null = releaseCycle
@@ -25,6 +24,18 @@ export default function ManagementScreen() {
     : chastityCycle
       ? "chastity"
       : null;
+  const [mode, setMode] = useState<ManagementMode | null>(activeMode);
+
+  useFocusEffect(
+    useCallback(() => {
+      const currentActiveMode = managementRepository.active("release")
+        ? "release"
+        : managementRepository.active("chastity")
+          ? "chastity"
+          : null;
+      setMode((current) => current ?? currentActiveMode);
+    }, []),
+  );
 
   if (mode) {
     return (

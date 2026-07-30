@@ -18,6 +18,7 @@ import {
 import { pointRepository } from "@/repositories/rewardRepository";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { useAppModal } from "@/components/AppModalProvider";
 
 const trainingJudgements = [
   { limit: 10, comments: [
@@ -55,6 +56,7 @@ type TrainingCompletion = TrainingResult & { judgement: string };
 export default function HabitsScreen() {
   const insets = useSafeAreaInsets();
   const { settings } = useAppAudio();
+  const { showError } = useAppModal();
   const playerName = settings?.playerName.trim() ?? "";
   const [trainingResult, setTrainingResult] = useState<TrainingCompletion | null>(
     null,
@@ -75,18 +77,22 @@ export default function HabitsScreen() {
   );
 
   function completeTraining(result: TrainingResult) {
-    const recordDate = toDateKey();
-    const judgement = trainingJudgement(result.elapsedSeconds);
-    journalRepository.create({
-      recordDate,
-      title: "調教完了記録",
-      body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒\n判定: ${judgement}`,
-      recordType: "diary",
-      tags: `調教,完了,射精記録,${result.difficulty}`,
-      durationSeconds: result.elapsedSeconds,
-    });
-    pointRepository.award(`training:${recordDate}`, 5, "本日初回の調教を完了");
-    setTrainingResult({ ...result, judgement });
+    try {
+      const recordDate = toDateKey();
+      const judgement = trainingJudgement(result.elapsedSeconds);
+      journalRepository.create({
+        recordDate,
+        title: "調教完了記録",
+        body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒\n判定: ${judgement}`,
+        recordType: "diary",
+        tags: `調教,完了,射精記録,${result.difficulty}`,
+        durationSeconds: result.elapsedSeconds,
+      });
+      pointRepository.award(`training:${recordDate}`, 5, "本日初回の調教を完了");
+      setTrainingResult({ ...result, judgement });
+    } catch (error) {
+      showError("調教記録の保存に失敗しました", error);
+    }
   }
 
   const resultJudgement = trainingResult?.judgement ?? "";

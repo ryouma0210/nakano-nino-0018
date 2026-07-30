@@ -327,7 +327,9 @@ export const managementRepository = {
     );
     if (task) {
       saveManagementTaskJournal(task);
+      return task;
     }
+    throw new Error("射精管理の本日の命令を完了状態に更新できませんでした。");
   },
 
   finish(cycleId: number) {

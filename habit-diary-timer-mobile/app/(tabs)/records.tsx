@@ -27,8 +27,10 @@ import {
   managementRepository,
   preparationRepository,
 } from "@/repositories/roomRepository";
+import { useAppModal } from "@/components/AppModalProvider";
 
 export default function RecordsScreen() {
+  const { showError } = useAppModal();
   const [journals, setJournals] = useState<Journal[]>([]);
   const [keyword, setKeyword] = useState("");
   const [selectedDate, setSelectedDate] = useState(toDateKey());
@@ -131,27 +133,31 @@ export default function RecordsScreen() {
   }
 
   function save(values: JournalFormValues) {
-    if (editing) {
-      if (isProtectedChecklist(editing)) {
-        const existingChecks = checklistItemsInBody(editing.body);
-        const additions = additionalChecklistItem
-          .split("\n")
-          .map((item) => item.trim().replace(/^✅\s*/, ""))
-          .filter(Boolean);
-        const checks = Array.from(new Set([...existingChecks, ...additions]));
-        if (editing.tags?.includes("敗北部屋")) {
-          defeatRepository.save(checks, editing.record_date);
+    try {
+      if (editing) {
+        if (isProtectedChecklist(editing)) {
+          const existingChecks = checklistItemsInBody(editing.body);
+          const additions = additionalChecklistItem
+            .split("\n")
+            .map((item) => item.trim().replace(/^✅\s*/, ""))
+            .filter(Boolean);
+          const checks = Array.from(new Set([...existingChecks, ...additions]));
+          if (editing.tags?.includes("敗北部屋")) {
+            defeatRepository.save(checks, editing.record_date);
+          } else {
+            preparationRepository.save(checks, editing.record_date);
+          }
         } else {
-          preparationRepository.save(checks, editing.record_date);
+          journalRepository.update(editing.id, values);
         }
       } else {
-        journalRepository.update(editing.id, values);
+        journalRepository.create(values);
       }
-    } else {
-      journalRepository.create(values);
+      setFormVisible(false);
+      load();
+    } catch (error) {
+      showError("記録の保存に失敗しました", error);
     }
-    setFormVisible(false);
-    load();
   }
 
   function remove(journal: Journal) {
@@ -524,9 +530,13 @@ export default function RecordsScreen() {
         confirmTone="danger"
         onCancel={() => setPendingDateDelete(false)}
         onConfirm={async () => {
-          setPendingDateDelete(false);
-          journalRepository.removeDate(selectedDate);
-          load();
+          try {
+            setPendingDateDelete(false);
+            journalRepository.removeDate(selectedDate);
+            load();
+          } catch (error) {
+            showError("日付単位の削除に失敗しました", error);
+          }
         }}
       />
       <ConfirmModal
@@ -537,11 +547,15 @@ export default function RecordsScreen() {
         confirmTone="danger"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {
-          const journal = pendingDelete;
-          setPendingDelete(null);
-          if (!journal) return;
-          journalRepository.remove(journal.id);
-          load();
+          try {
+            const journal = pendingDelete;
+            setPendingDelete(null);
+            if (!journal) return;
+            journalRepository.remove(journal.id);
+            load();
+          } catch (error) {
+            showError("記録の削除に失敗しました", error);
+          }
         }}
       />
     </Screen>

@@ -89,7 +89,7 @@ export default function TimerScreen() {
   const lastGaugeTick = useRef(0);
   const nextSpeedChangeAt = useRef(0);
   const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
 
   useEffect(
     () => () => {
@@ -188,12 +188,16 @@ export default function TimerScreen() {
   useEffect(() => {
     if (!running || remaining !== 0 || sessionRecorded.current) return;
     sessionRecorded.current = true;
-    achievementRepository.recordPunishment(totalSeconds);
+    try {
+      achievementRepository.recordPunishment(totalSeconds);
+    } catch (error) {
+      showError("お仕置き記録の保存に失敗しました", error);
+    }
     stopEffect("trainingStart");
     setSessionAudioActive(false);
     playEffect("complete");
     setRunning(false);
-  }, [playEffect, remaining, running, setSessionAudioActive, stopEffect, totalSeconds]);
+  }, [playEffect, remaining, running, setSessionAudioActive, showError, stopEffect, totalSeconds]);
 
   function start() {
     const enteredMinutes = Number(minutes);
@@ -231,8 +235,13 @@ export default function TimerScreen() {
 
   function stop() {
     const elapsedSeconds = totalSeconds - remaining;
-    if (!sessionRecorded.current)
-      achievementRepository.recordPunishment(elapsedSeconds);
+    try {
+      if (!sessionRecorded.current)
+        achievementRepository.recordPunishment(elapsedSeconds);
+    } catch (error) {
+      showError("お仕置き記録の保存に失敗しました", error);
+      return;
+    }
     sessionRecorded.current = true;
     stopEffect("trainingStart");
     setSessionAudioActive(false);
