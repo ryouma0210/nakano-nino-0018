@@ -1,12 +1,15 @@
 import { PropsWithChildren } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { lightTheme } from "@/constants/theme";
 
-export function Screen({ children }: PropsWithChildren) {
+export function Screen({
+  children,
+  style,
+}: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.root, { paddingTop: Math.max(12, insets.top) }]}>
+    <View style={[styles.root, style, { paddingTop: Math.max(12, insets.top) }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
