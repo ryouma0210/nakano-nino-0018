@@ -55,7 +55,7 @@ const tributeComments = [
 ] as const;
 
 export default function TributeScreen() {
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const [selectedMonth, setSelectedMonth] = useState(toDateKey().slice(0, 7));
   const [monthlyIncome, setMonthlyIncome] = useState(0);
   const [incomeInput, setIncomeInput] = useState("");
@@ -114,9 +114,13 @@ export default function TributeScreen() {
       showNotice("入力エラー", "今月の収入を1円以上で入力してください。");
       return;
     }
-    tributeRepository.saveMonthlyIncome(amount, selectedMonth);
-    load();
-    showNotice("保存しました", `${monthLabel(selectedMonth)}の基本収入を保存しました。`);
+    try {
+      tributeRepository.saveMonthlyIncome(amount, selectedMonth);
+      load();
+      showNotice("保存しました", `${monthLabel(selectedMonth)}の基本収入を保存しました。`);
+    } catch (error) {
+      showError("基本収入の保存に失敗しました", error);
+    }
   }
 
   function addIncome() {
@@ -133,15 +137,19 @@ export default function TributeScreen() {
       showNotice("入力エラー", "追加収入を1円以上で入力してください。");
       return;
     }
-    tributeRepository.addIncome({
-      recordDate: incomeDate,
-      amount,
-      comment: incomeComment,
-    });
-    setIncomeAddInput("");
-    setIncomeComment("");
-    load();
-    showNotice("保存しました", "追加収入を保存しました。");
+    try {
+      tributeRepository.addIncome({
+        recordDate: incomeDate,
+        amount,
+        comment: incomeComment,
+      });
+      setIncomeAddInput("");
+      setIncomeComment("");
+      load();
+      showNotice("保存しました", "追加収入を保存しました。");
+    } catch (error) {
+      showError("追加収入の保存に失敗しました", error);
+    }
   }
 
   function addRecord() {
@@ -158,32 +166,44 @@ export default function TributeScreen() {
       showNotice("入力エラー", "お貢ぎ金額を1円以上で入力してください。");
       return;
     }
-    tributeRepository.add({
-      recordDate,
-      amount,
-      comment,
-    });
-    setAmountInput("");
-    setComment(tributeComments[0]);
-    setCommentOpen(false);
-    load();
-    showNotice("保存しました", "お貢ぎ履歴を保存しました。");
+    try {
+      tributeRepository.add({
+        recordDate,
+        amount,
+        comment,
+      });
+      setAmountInput("");
+      setComment(tributeComments[0]);
+      setCommentOpen(false);
+      load();
+      showNotice("保存しました", "お貢ぎ履歴を保存しました。");
+    } catch (error) {
+      showError("お貢ぎ履歴の保存に失敗しました", error);
+    }
   }
 
   function removeRecord() {
     if (!deleteTarget) return;
-    tributeRepository.remove(deleteTarget.id);
-    setDeleteTarget(null);
-    load();
-    showNotice("削除しました", "選択したお貢ぎ履歴を削除しました。");
+    try {
+      tributeRepository.remove(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+      showNotice("削除しました", "選択したお貢ぎ履歴を削除しました。");
+    } catch (error) {
+      showError("お貢ぎ履歴の削除に失敗しました", error);
+    }
   }
 
   function removeIncomeRecord() {
     if (!deleteIncomeTarget) return;
-    tributeRepository.removeIncome(deleteIncomeTarget.id);
-    setDeleteIncomeTarget(null);
-    load();
-    showNotice("削除しました", "選択した追加収入を削除しました。");
+    try {
+      tributeRepository.removeIncome(deleteIncomeTarget.id);
+      setDeleteIncomeTarget(null);
+      load();
+      showNotice("削除しました", "選択した追加収入を削除しました。");
+    } catch (error) {
+      showError("追加収入の削除に失敗しました", error);
+    }
   }
 
   return (

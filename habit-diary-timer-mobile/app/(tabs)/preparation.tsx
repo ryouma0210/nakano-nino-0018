@@ -19,6 +19,7 @@ import { formatDateJa, toDateKey } from "@/utils/date";
 import { lightTheme } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { useAppModal } from "@/components/AppModalProvider";
 
 const items = preparationChecklistMessages;
 
@@ -26,6 +27,7 @@ const preparationComments = preparationLoopMessages;
 
 export default function PreparationScreen() {
   const insets = useSafeAreaInsets();
+  const { showError } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } = useAppAudio();
   const playerName = settings?.playerName.trim() ?? "";
   const preparationPlayer = useVideoPlayer(
@@ -101,9 +103,13 @@ export default function PreparationScreen() {
   }
 
   function complete() {
-    preparationRepository.save(Array.from(checked));
-    setCompleted(true);
-    preparationPlayer.replay();
+    try {
+      preparationRepository.save(Array.from(checked));
+      setCompleted(true);
+      preparationPlayer.replay();
+    } catch (error) {
+      showError("準備部屋の保存に失敗しました", error);
+    }
   }
 
   return (

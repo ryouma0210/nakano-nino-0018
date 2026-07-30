@@ -234,7 +234,7 @@ function masturbationTimeLabel(value: string) {
 }
 
 export default function MyPageScreen() {
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const { settings, updateAudioSettings } = useAppAudio();
   const [profile, setProfile] = useState<ProfileSettings>(defaultProfile);
   const [stats, setStats] = useState(loadProfileStats);
@@ -282,8 +282,12 @@ export default function MyPageScreen() {
   }
 
   async function saveProfile() {
-    await profileService.save(profile);
-    showNotice("保存しました", "マイページのステータスを更新しました。");
+    try {
+      await profileService.save(profile);
+      showNotice("保存しました", "マイページのステータスを更新しました。");
+    } catch (error) {
+      showError("マイページの保存に失敗しました", error);
+    }
   }
 
   return (
@@ -321,10 +325,14 @@ export default function MyPageScreen() {
         <PrimaryButton
           title="名前を保存"
           onPress={async () => {
-            const nextName = playerName.trim() || "マゾ";
-            setPlayerName(nextName);
-            await updateAudioSettings({ playerName: nextName });
-            showNotice("保存しました", `これから「${nextName}」と呼びます。`);
+            try {
+              const nextName = playerName.trim() || "マゾ";
+              setPlayerName(nextName);
+              await updateAudioSettings({ playerName: nextName });
+              showNotice("保存しました", `これから「${nextName}」と呼びます。`);
+            } catch (error) {
+              showError("名前の保存に失敗しました", error);
+            }
           }}
         />
       </Card>

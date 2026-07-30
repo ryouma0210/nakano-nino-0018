@@ -38,7 +38,7 @@ const partialResetItems: {
 
 export default function SettingsScreen() {
   const { settings, updateAudioSettings } = useAppAudio();
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
   const [partialResetConfirmation, setPartialResetConfirmation] = useState(false);
@@ -55,28 +55,32 @@ export default function SettingsScreen() {
   }
 
   async function executeReset() {
-    execute("DELETE FROM timer_histories");
-    execute("DELETE FROM management_daily_tasks");
-    execute("DELETE FROM management_cycles");
-    execute("DELETE FROM preparation_records");
-    execute("DELETE FROM reward_redemptions");
-    execute("DELETE FROM tribute_records");
-    execute("DELETE FROM tribute_income_records");
-    execute("DELETE FROM point_transactions");
-    execute("DELETE FROM journal_tags");
-    execute("DELETE FROM tags");
-    execute("DELETE FROM journals");
-    execute("DELETE FROM habit_records");
-    execute("DELETE FROM habit_schedules");
-    execute("DELETE FROM habits");
-    execute("DELETE FROM timer_presets");
-    execute("DELETE FROM app_settings");
-    await settingsService.reset();
-    await dailyOrderService.clearAll();
-    await notificationService.cancelAll();
-    await fileStorageService.clear();
-    loadSize();
-    showNotice("初期化完了", "すべてのデータを初期化しました。");
+    try {
+      execute("DELETE FROM timer_histories");
+      execute("DELETE FROM management_daily_tasks");
+      execute("DELETE FROM management_cycles");
+      execute("DELETE FROM preparation_records");
+      execute("DELETE FROM reward_redemptions");
+      execute("DELETE FROM tribute_records");
+      execute("DELETE FROM tribute_income_records");
+      execute("DELETE FROM point_transactions");
+      execute("DELETE FROM journal_tags");
+      execute("DELETE FROM tags");
+      execute("DELETE FROM journals");
+      execute("DELETE FROM habit_records");
+      execute("DELETE FROM habit_schedules");
+      execute("DELETE FROM habits");
+      execute("DELETE FROM timer_presets");
+      execute("DELETE FROM app_settings");
+      await settingsService.reset();
+      await dailyOrderService.clearAll();
+      await notificationService.cancelAll();
+      await fileStorageService.clear();
+      loadSize();
+      showNotice("初期化完了", "すべてのデータを初期化しました。");
+    } catch (error) {
+      showError("全データ初期化に失敗しました", error);
+    }
   }
 
   function togglePartial(key: PartialResetKey) {
@@ -88,48 +92,52 @@ export default function SettingsScreen() {
   }
 
   async function executePartialReset() {
-    const selected = new Set(partialSelection);
-    if (selected.has("records")) {
-      execute("DELETE FROM preparation_records");
-      execute("DELETE FROM tribute_records");
-      execute("DELETE FROM tribute_income_records");
-      execute("DELETE FROM timer_histories");
-      execute("DELETE FROM habit_records");
-      execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%'");
-      execute("DELETE FROM journals");
-      await dailyOrderService.clearOrders();
-      execute("DELETE FROM management_daily_tasks");
-      execute("DELETE FROM management_cycles");
+    try {
+      const selected = new Set(partialSelection);
+      if (selected.has("records")) {
+        execute("DELETE FROM preparation_records");
+        execute("DELETE FROM tribute_records");
+        execute("DELETE FROM tribute_income_records");
+        execute("DELETE FROM timer_histories");
+        execute("DELETE FROM habit_records");
+        execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%'");
+        execute("DELETE FROM journals");
+        await dailyOrderService.clearOrders();
+        execute("DELETE FROM management_daily_tasks");
+        execute("DELETE FROM management_cycles");
+      }
+      if (selected.has("points")) {
+        execute("DELETE FROM reward_redemptions");
+        execute("DELETE FROM point_transactions");
+      }
+      if (selected.has("contract")) await contractService.clear();
+      if (selected.has("settings")) {
+        await updateAudioSettings({
+          backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,
+          soundEnabled: defaultSettings.soundEnabled,
+          musicVolume: defaultSettings.musicVolume,
+          soundVolume: defaultSettings.soundVolume,
+        });
+        await notificationService.cancelAll();
+      }
+      if (selected.has("files")) await fileStorageService.clear();
+      if (selected.has("points")) {
+        const resetAt = toDateTimeKey();
+        execute(
+          `INSERT INTO app_settings(setting_key, setting_value, updated_at)
+           VALUES('points_reset_at', ?, ?)
+           ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
+          [resetAt, resetAt],
+        );
+      }
+      execute("DELETE FROM journal_tags WHERE journal_id NOT IN (SELECT id FROM journals)");
+      execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM journal_tags)");
+      setPartialSelection([]);
+      loadSize();
+      showNotice("一部初期化完了", "選択したデータを削除しました。");
+    } catch (error) {
+      showError("一部データ初期化に失敗しました", error);
     }
-    if (selected.has("points")) {
-      execute("DELETE FROM reward_redemptions");
-      execute("DELETE FROM point_transactions");
-    }
-    if (selected.has("contract")) await contractService.clear();
-    if (selected.has("settings")) {
-      await updateAudioSettings({
-        backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,
-        soundEnabled: defaultSettings.soundEnabled,
-        musicVolume: defaultSettings.musicVolume,
-        soundVolume: defaultSettings.soundVolume,
-      });
-      await notificationService.cancelAll();
-    }
-    if (selected.has("files")) await fileStorageService.clear();
-    if (selected.has("points")) {
-      const resetAt = toDateTimeKey();
-      execute(
-        `INSERT INTO app_settings(setting_key, setting_value, updated_at)
-         VALUES('points_reset_at', ?, ?)
-         ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
-        [resetAt, resetAt],
-      );
-    }
-    execute("DELETE FROM journal_tags WHERE journal_id NOT IN (SELECT id FROM journals)");
-    execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM journal_tags)");
-    setPartialSelection([]);
-    loadSize();
-    showNotice("一部初期化完了", "選択したデータを削除しました。");
   }
 
   return (
