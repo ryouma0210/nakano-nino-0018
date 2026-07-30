@@ -13,9 +13,11 @@ import { Screen } from "@/components/Screen";
 import { dailyOrderService, type DailyOrder } from "@/services/gameRoomService";
 import { formatDateJa, toDateKey } from "@/utils/date";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { useAppModal } from "@/components/AppModalProvider";
 
 export default function OrdersScreen() {
   const { settings } = useAppAudio();
+  const { showError } = useAppModal();
   const playerName = settings?.playerName.trim() ?? "";
   const [order, setOrder] = useState<DailyOrder | null>(null);
   useEffect(() => {
@@ -46,13 +48,23 @@ export default function OrdersScreen() {
             <PrimaryButton
               title={order.completed ? "完了済み" : "命令完了"}
               disabled={order.completed}
-              onPress={() => dailyOrderService.complete(order).then(setOrder)}
+              onPress={() =>
+                dailyOrderService
+                  .complete(order)
+                  .then(setOrder)
+                  .catch((error) => showError("本日の命令の保存に失敗しました", error))
+              }
             />
           </>
         ) : (
           <PrimaryButton
             title="本日の命令を抽選"
-            onPress={() => dailyOrderService.draw().then(setOrder)}
+            onPress={() =>
+              dailyOrderService
+                .draw()
+                .then(setOrder)
+                .catch((error) => showError("本日の命令の抽選に失敗しました", error))
+            }
           />
         )}
       </Card>

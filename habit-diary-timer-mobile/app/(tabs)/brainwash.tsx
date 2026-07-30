@@ -16,7 +16,7 @@ import { toDateKey } from "@/utils/date";
 
 export default function BrainwashScreen() {
   const insets = useSafeAreaInsets();
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } = useAppAudio();
   const [fullscreen, setFullscreen] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -36,18 +36,22 @@ export default function BrainwashScreen() {
 
   function complete() {
     if (completed) return;
-    journalRepository.upsertSystemRecord(
-      {
-        recordDate: toDateKey(),
-        title: "洗脳部屋記録",
-        body: "洗脳完了しました。",
-        recordType: "diary",
-        tags: "洗脳部屋,調教記録",
-      },
-      `洗脳部屋${toDateKey()}`,
-    );
-    setCompleted(true);
-    showNotice("洗脳完了", "洗脳完了しました。");
+    try {
+      journalRepository.upsertSystemRecord(
+        {
+          recordDate: toDateKey(),
+          title: "洗脳部屋記録",
+          body: "洗脳完了しました。",
+          recordType: "diary",
+          tags: "洗脳部屋,調教記録",
+        },
+        `洗脳部屋${toDateKey()}`,
+      );
+      setCompleted(true);
+      showNotice("洗脳完了", "洗脳完了しました。");
+    } catch (error) {
+      showError("洗脳部屋の保存に失敗しました", error);
+    }
   }
 
   return (

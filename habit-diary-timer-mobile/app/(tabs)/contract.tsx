@@ -40,7 +40,7 @@ function formatContractDate(value?: string) {
 
 export default function ContractScreen() {
   const { settings } = useAppAudio();
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const playerName = settings?.playerName.trim() ?? "";
   const [contract, setContract] = useState<ContractSettings | null>(null);
   const [checked, setChecked] = useState(() => new Set<string>());
@@ -101,9 +101,13 @@ export default function ContractScreen() {
       signature: signature.trim(),
       signedAt: new Date().toISOString(),
     };
-    await contractService.save(next);
-    setContract(next);
-    player.replay();
+    try {
+      await contractService.save(next);
+      setContract(next);
+      player.replay();
+    } catch (error) {
+      showError("契約情報の保存に失敗しました", error);
+    }
   }
 
   async function updateSignature() {
@@ -111,12 +115,16 @@ export default function ContractScreen() {
     const current = contract;
     if (!nextSignature || !current?.signedAt) return;
     const next: ContractSettings = { ...current, signature: nextSignature };
-    await contractService.save(next);
-    setContract(next);
-    showNotice(
-      "変更完了",
-      "契約者サインを変更しました。契約内容と契約状態は変更されません。",
-    );
+    try {
+      await contractService.save(next);
+      setContract(next);
+      showNotice(
+        "変更完了",
+        "契約者サインを変更しました。契約内容と契約状態は変更されません。",
+      );
+    } catch (error) {
+      showError("契約者サインの保存に失敗しました", error);
+    }
   }
 
   return (

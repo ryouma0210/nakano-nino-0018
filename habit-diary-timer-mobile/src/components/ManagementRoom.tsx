@@ -69,9 +69,14 @@ export function ManagementRoom({
       try {
         const dice = Math.floor(Math.random() * 6) + 1;
         const next = managementRepository.roll(mode, dice);
+        const nextTask = managementRepository.todayTask(next);
+        const nextTasks = managementRepository.tasks(next);
         setCycle(next);
-        setTask(managementRepository.todayTask(next));
-        setTasks(managementRepository.tasks(next));
+        setTask(nextTask);
+        setTasks(nextTasks);
+        if (!nextTask || nextTasks.length === 0) {
+          throw new Error("射精管理の日別指示を取得できませんでした。");
+        }
       } catch (error) {
         console.error("Failed to roll management dice", error);
         setErrorMessage(formatError(error));
@@ -84,16 +89,21 @@ export function ManagementRoom({
 
   function complete() {
     if (!task || !cycle) return;
-    managementRepository.complete(task.id);
-    pointRepository.award(
-      `management-task:${task.id}`,
-      10,
-      "射精管理の本日の命令を完了",
-    );
-    setTask({ ...task, completed_at: new Date().toISOString() });
-    setTasks(managementRepository.tasks(cycle));
-    if (task.record_date >= cycle.end_date)
-      managementRepository.finish(cycle.id);
+    try {
+      const completedTask = managementRepository.complete(task.id);
+      pointRepository.award(
+        `management-task:${task.id}`,
+        10,
+        "射精管理の本日の命令を完了",
+      );
+      setTask(completedTask ?? { ...task, completed_at: new Date().toISOString() });
+      setTasks(managementRepository.tasks(cycle));
+      if (task.record_date >= cycle.end_date)
+        managementRepository.finish(cycle.id);
+    } catch (error) {
+      console.error("Failed to complete management task", error);
+      setErrorMessage(formatError(error));
+    }
   }
 
   function confirmReroll() {
@@ -110,9 +120,14 @@ export function ManagementRoom({
       try {
         const dice = Math.floor(Math.random() * 6) + 1;
         const next = managementRepository.reroll(currentCycleId, mode, dice);
+        const nextTask = managementRepository.todayTask(next);
+        const nextTasks = managementRepository.tasks(next);
         setCycle(next);
-        setTask(managementRepository.todayTask(next));
-        setTasks(managementRepository.tasks(next));
+        setTask(nextTask);
+        setTasks(nextTasks);
+        if (!nextTask || nextTasks.length === 0) {
+          throw new Error("射精管理の日別指示を取得できませんでした。");
+        }
       } catch (error) {
         console.error("Failed to reroll management dice", error);
         setErrorMessage(formatError(error));

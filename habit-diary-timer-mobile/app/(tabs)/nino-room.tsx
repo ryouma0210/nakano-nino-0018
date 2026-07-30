@@ -25,7 +25,7 @@ type MediaMode = "image" | "video";
 
 export default function NinoRoomScreen() {
   const insets = useSafeAreaInsets();
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const [profile, setProfile] = useState<ProfileSettings | null>(null);
   const [redeemedOutfits, setRedeemedOutfits] = useState<Set<string>>(
     new Set(),
@@ -73,38 +73,42 @@ export default function NinoRoomScreen() {
   const displayMode = hasVideo ? mediaMode : "image";
 
   async function selectOutfit(key: string) {
-    const outfit = outfits.find((item) => item.key === key);
-    if (!outfit) {
-      showNotice("選択できません", "この衣装は選択できません。");
-      return;
-    }
-    const unlocked = key === "default" || redeemedOutfits.has(key);
-    if (!unlocked) {
-      const redeemed = rewardRepository.redeemOutfit(key, outfit.name);
-      if (!redeemed) {
-        showNotice(
-          "ポイントが足りません",
-          `${outfit.name}は${outfit.cost}ptで交換できます。`,
-        );
+    try {
+      const outfit = outfits.find((item) => item.key === key);
+      if (!outfit) {
+        showNotice("選択できません", "この衣装は選択できません。");
         return;
       }
-      setRedeemedOutfits((current) => new Set([...current, key]));
-      showNotice(
-        "交換しました",
-        `${outfit.name}を${outfit.cost}ptで交換しました。`,
-      );
+      const unlocked = key === "default" || redeemedOutfits.has(key);
+      if (!unlocked) {
+        const redeemed = rewardRepository.redeemOutfit(key, outfit.name);
+        if (!redeemed) {
+          showNotice(
+            "ポイントが足りません",
+            `${outfit.name}は${outfit.cost}ptで交換できます。`,
+          );
+          return;
+        }
+        setRedeemedOutfits((current) => new Set([...current, key]));
+        showNotice(
+          "交換しました",
+          `${outfit.name}を${outfit.cost}ptで交換しました。`,
+        );
+      }
+      const next = {
+        ...(profile ?? (await profileService.load())),
+        ninoOutfit: key,
+      };
+      setProfile(next);
+      await profileService.save(next);
+      setPanel(null);
+      setMediaMode("image");
+      setLineIndex(0);
+      if (unlocked)
+        showNotice("保存しました", `${outfit.name}に着せ替えました。`);
+    } catch (error) {
+      showError("衣装データの保存に失敗しました", error);
     }
-    const next = {
-      ...(profile ?? (await profileService.load())),
-      ninoOutfit: key,
-    };
-    setProfile(next);
-    await profileService.save(next);
-    setPanel(null);
-    setMediaMode("image");
-    setLineIndex(0);
-    if (unlocked)
-      showNotice("保存しました", `${outfit.name}に着せ替えました。`);
   }
 
   function toggleMediaMode() {

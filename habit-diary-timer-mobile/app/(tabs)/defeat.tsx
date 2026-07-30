@@ -22,7 +22,7 @@ import { formatDateJa, toDateKey } from "@/utils/date";
 
 export default function DefeatScreen() {
   const insets = useSafeAreaInsets();
-  const { showNotice } = useAppModal();
+  const { showNotice, showError } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } =
     useAppAudio();
   const defeatPlayer = useVideoPlayer(
@@ -81,12 +81,16 @@ export default function DefeatScreen() {
   }
 
   function complete() {
-    defeatRepository.save(Array.from(checked));
-    setCompleted(true);
-    showNotice(
-      "敗北確定♡",
-      "全項目を受け入れたわね♡ 今日の完全敗北を調教日記へ記録したわ♡",
-    );
+    try {
+      defeatRepository.save(Array.from(checked));
+      setCompleted(true);
+      showNotice(
+        "敗北確定♡",
+        "全項目を受け入れたわね♡ 今日の完全敗北を調教日記へ記録したわ♡",
+      );
+    } catch (error) {
+      showError("敗北部屋の保存に失敗しました", error);
+    }
   }
 
   const allChecked = defeatChecklistMessages.every((item) => checked.has(item));
