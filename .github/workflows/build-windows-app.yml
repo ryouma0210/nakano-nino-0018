@@ -47,19 +47,23 @@ jobs:
         run: npm run typecheck
         working-directory: habit-diary-timer-mobile
 
-      - name: Build Windows application
-        run: npm run build:windows
-
       - name: Select deployment environment
         shell: pwsh
         run: |
           if ("${{ github.ref_name }}" -eq "production") {
             "DRIVE_FOLDER_ID=11PgZdY2yScfPDu7UWO3MBRzF8-mwRdLX" | Out-File -FilePath $env:GITHUB_ENV -Append
             "DEPLOY_ENV=prd" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "EXPO_PUBLIC_APP_ENV=prd" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "NINO_APP_ENV=prd" | Out-File -FilePath $env:GITHUB_ENV -Append
           } else {
             "DRIVE_FOLDER_ID=1it-Cj6d5LrjBNNM1FuGIakm23b5b5_4w" | Out-File -FilePath $env:GITHUB_ENV -Append
             "DEPLOY_ENV=stg" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "EXPO_PUBLIC_APP_ENV=stg" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "NINO_APP_ENV=stg" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
+
+      - name: Build Windows application
+        run: npm run build:windows
 
       - name: Upload Windows installer as workflow artifact
         uses: actions/upload-artifact@v4
