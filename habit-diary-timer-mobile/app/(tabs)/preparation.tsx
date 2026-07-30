@@ -79,13 +79,12 @@ export default function PreparationScreen() {
   });
 
   useEffect(() => {
-    if (!fullscreen) return;
     preparationPlayer.play();
     const timer = setTimeout(() => {
       try {
         preparationPlayer.play();
       } catch (error) {
-        console.warn("準備拡大動画の再生を再試行できませんでした。", error);
+        console.warn("準備動画の再生を再試行できませんでした。", error);
       }
     }, 180);
     return () => clearTimeout(timer);
