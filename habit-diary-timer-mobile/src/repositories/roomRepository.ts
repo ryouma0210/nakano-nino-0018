@@ -191,6 +191,32 @@ function findActiveManagementCycle(mode: ManagementMode) {
   );
 }
 
+function findCreatedManagementCycle({
+  mode,
+  dice,
+  startDate,
+  endDate,
+  createdAt,
+}: {
+  mode: ManagementMode;
+  dice: number;
+  startDate: string;
+  endDate: string;
+  createdAt: string;
+}) {
+  return query<ManagementCycle>("SELECT * FROM management_cycles")
+    .filter(
+      (cycle) =>
+        cycle.mode === mode &&
+        Number(cycle.dice) === dice &&
+        cycle.start_date === startDate &&
+        cycle.end_date === endDate &&
+        cycle.created_at === createdAt &&
+        Number(cycle.is_active) === 1,
+    )
+    .sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null;
+}
+
 export const managementRepository = {
   syncCompletedJournals() {
     query<ManagementDailyTask>(
@@ -218,7 +244,16 @@ export const managementRepository = {
       id = Number(result.lastInsertRowId);
     });
     const cycle =
-      queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id]) ??
+      (Number.isFinite(id) && id > 0
+        ? queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])
+        : null) ??
+      findCreatedManagementCycle({
+        mode,
+        dice,
+        startDate,
+        endDate,
+        createdAt: now,
+      }) ??
       findActiveManagementCycle(mode);
     if (!cycle) throw new Error("射精管理期間の作成結果を取得できませんでした。");
     createMissingManagementTasks(cycle);
@@ -241,7 +276,16 @@ export const managementRepository = {
       id = Number(result.lastInsertRowId);
     });
     const cycle =
-      queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id]) ??
+      (Number.isFinite(id) && id > 0
+        ? queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [id])
+        : null) ??
+      findCreatedManagementCycle({
+        mode,
+        dice,
+        startDate,
+        endDate,
+        createdAt: now,
+      }) ??
       findActiveManagementCycle(mode);
     if (!cycle) throw new Error("射精管理期間の振り直し結果を取得できませんでした。");
     createMissingManagementTasks(cycle);

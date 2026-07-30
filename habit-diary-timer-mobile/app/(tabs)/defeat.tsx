@@ -217,12 +217,7 @@ export default function DefeatScreen() {
             },
           ]}
         >
-          <VideoView
-            player={defeatPlayer}
-            style={styles.fullscreenVideo}
-            nativeControls={false}
-            contentFit="contain"
-          />
+          <DefeatFullscreenVideo />
           <View
             style={[
               styles.fullscreenClose,
@@ -238,6 +233,39 @@ export default function DefeatScreen() {
         </View>
       </Modal>
     </View>
+  );
+}
+
+function DefeatFullscreenVideo() {
+  const player = useVideoPlayer(
+    require("../../assets/videos/defeat_01.mp4"),
+    (instance) => {
+      instance.loop = true;
+      instance.muted = true;
+      instance.volume = 0;
+      instance.play();
+    },
+  );
+
+  useEffect(() => {
+    player.play();
+    const timer = setTimeout(() => {
+      try {
+        player.play();
+      } catch (error) {
+        console.warn("敗北拡大動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.fullscreenVideo}
+      nativeControls={false}
+      contentFit="contain"
+    />
   );
 }
 
