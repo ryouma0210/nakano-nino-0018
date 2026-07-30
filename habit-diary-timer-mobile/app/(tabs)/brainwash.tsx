@@ -47,6 +47,9 @@ export default function BrainwashScreen() {
         },
         `洗脳部屋${toDateKey()}`,
       );
+      if (!hasCompletedToday()) {
+        throw new Error("洗脳部屋の保存結果を取得できませんでした。");
+      }
       setCompleted(true);
       showNotice("洗脳完了", "洗脳完了しました。");
     } catch (error) {

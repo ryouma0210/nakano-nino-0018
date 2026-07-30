@@ -100,6 +100,17 @@ export const preparationRepository = {
         );
       }
     });
+    const savedRecord = queryOne<PreparationRecord>(
+      "SELECT * FROM preparation_records WHERE record_date = ?",
+      [date],
+    );
+    const savedJournal = queryOne<{ id: number }>(
+      "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%準備部屋%' LIMIT 1",
+      [date],
+    );
+    if (!savedRecord || !savedJournal) {
+      throw new Error("準備部屋の保存結果を取得できませんでした。");
+    }
   },
 };
 
@@ -134,6 +145,13 @@ export const defeatRepository = {
         );
       }
     });
+    const savedJournal = queryOne<{ id: number }>(
+      "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%敗北部屋%' LIMIT 1",
+      [date],
+    );
+    if (!savedJournal) {
+      throw new Error("敗北部屋の保存結果を取得できませんでした。");
+    }
   },
 };
 
@@ -182,6 +200,15 @@ function createMissingManagementTasks(cycle: ManagementCycle) {
       );
     }
   });
+  const savedTasks = query<ManagementDailyTask>(
+    "SELECT * FROM management_daily_tasks WHERE cycle_id=? ORDER BY record_date, id",
+    [cycle.id],
+  );
+  if (savedTasks.length < totalDays) {
+    throw new Error(
+      `射精管理の日別指示を作成できませんでした。（${savedTasks.length}/${totalDays}日分）`,
+    );
+  }
 }
 
 function findActiveManagementCycle(mode: ManagementMode) {

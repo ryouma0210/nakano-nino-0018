@@ -55,6 +55,7 @@ function saveStore() {
     storage().setItem(STORAGE_KEY, JSON.stringify(loadStore()));
   } catch (error) {
     console.error("WEB DB save failed", error);
+    throw error;
   }
 }
 
@@ -120,13 +121,41 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function valueOfColumn(row: Row, columnExpression: string) {
+  const coalesce = columnExpression.match(/^COALESCE\(\s*([a-zA-Z0-9_]+)\s*,\s*['"][^'"]*['"]\s*\)$/i);
+  if (coalesce) return row[coalesce[1]] ?? "";
+  return row[columnExpression];
+}
+
 function compareValue(row: Row, column: string, operator: string, expected: unknown) {
-  const actual = row[column];
+  const actual = valueOfColumn(row, column);
   if (operator === "=") return String(actual ?? "") === String(expected ?? "");
   if (operator === ">") return String(actual ?? "") > String(expected ?? "");
   if (operator === "<") return String(actual ?? "") < String(expected ?? "");
   if (operator.toUpperCase() === "LIKE") return like(actual, String(expected ?? ""));
+  if (operator.toUpperCase() === "NOT LIKE") return !like(actual, String(expected ?? ""));
   return true;
+}
+
+function matchWherePart(row: Row, part: string, params: BindParam[]) {
+  const isNotNull = part.match(/^([a-zA-Z0-9_]+)\s+IS\s+NOT\s+NULL$/i);
+  if (isNotNull) return row[isNotNull[1]] != null;
+
+  const notInSelect = part.match(
+    /^([a-zA-Z0-9_]+)\s+NOT\s+IN\s+\(SELECT(?:\s+DISTINCT)?\s+([a-zA-Z0-9_]+)\s+FROM\s+([a-zA-Z0-9_]+)\)$/i,
+  );
+  if (notInSelect) {
+    const [, column, selectColumn, selectTable] = notInSelect;
+    const selectedValues = new Set(table(selectTable).map((item) => String(item[selectColumn] ?? "")));
+    return !selectedValues.has(String(row[column] ?? ""));
+  }
+
+  const match = part.match(/^(.+?)\s*(=|>|<|LIKE|NOT\s+LIKE)\s*(.+)$/i);
+  if (!match) {
+    throw new Error(`WEB DBがWHERE条件に対応していません: ${part}`);
+  }
+  const [, column, operator, token] = match;
+  return compareValue(row, column.trim(), operator.replace(/\s+/g, " "), literal(token, params));
 }
 
 function matchWhere(row: Row, whereSql: string | undefined, params: BindParam[]) {
@@ -140,15 +169,12 @@ function matchWhere(row: Row, whereSql: string | undefined, params: BindParam[])
     .filter(Boolean);
 
   for (const part of parts) {
-    const isNotNull = part.match(/^([a-zA-Z0-9_]+)\s+IS\s+NOT\s+NULL$/i);
-    if (isNotNull) {
-      if (row[isNotNull[1]] == null) return false;
-      continue;
+    const orParts = part.split(/\s+OR\s+/i).map((item) => item.trim()).filter(Boolean);
+    let matched = false;
+    for (const orPart of orParts) {
+      if (matchWherePart(row, orPart, params)) matched = true;
     }
-    const match = part.match(/^([a-zA-Z0-9_]+)\s*(=|>|<|LIKE)\s*(.+)$/i);
-    if (!match) continue;
-    const [, column, operator, token] = match;
-    if (!compareValue(row, column, operator, literal(token, params))) return false;
+    if (!matched) return false;
   }
   return true;
 }
@@ -177,7 +203,7 @@ function selectRows(sql: string, params: BindParam[]) {
   );
   if (!match) return [];
   const [, columns, name, whereSql] = match;
-  let rows = table(name).filter((row) => matchWhere(row, whereSql, params));
+  let rows = table(name).filter((row) => matchWhere(row, whereSql, [...params]));
   rows = orderRows(rows, sql);
   const limit = sql.match(/\sLIMIT\s+(\d+)/i)?.[1];
   if (limit) rows = rows.slice(0, Number(limit));
@@ -203,7 +229,7 @@ function insert(sql: string, params: BindParam[]): ExecuteResult {
     return { changes: 0, lastInsertRowId };
   }
   const match = normalized.match(/^INSERT(?:\s+OR\s+IGNORE)?\s+INTO\s+([a-zA-Z0-9_]+)\s*\((.+?)\)\s+VALUES\s*\((.+?)\)/i);
-  if (!match) return { changes: 0, lastInsertRowId };
+  if (!match) throw new Error(`WEB DBがINSERT文に対応していません: ${normalized}`);
   const [, name, columnsSql, valuesSql] = match;
   const columns = splitComma(columnsSql);
   const values = splitComma(valuesSql);
@@ -235,7 +261,7 @@ function insert(sql: string, params: BindParam[]): ExecuteResult {
 function update(sql: string, params: BindParam[]): ExecuteResult {
   const normalized = normalizeSql(sql);
   const match = normalized.match(/^UPDATE\s+([a-zA-Z0-9_]+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
-  if (!match) return { changes: 0, lastInsertRowId };
+  if (!match) throw new Error(`WEB DBがUPDATE文に対応していません: ${normalized}`);
   const [, name, setSql, whereSql] = match;
   const setParts = splitComma(setSql);
   const setParamCount = setParts.reduce((count, part) => count + (part.includes("?") ? 1 : 0), 0);
@@ -257,7 +283,7 @@ function update(sql: string, params: BindParam[]): ExecuteResult {
 function remove(sql: string, params: BindParam[]): ExecuteResult {
   const normalized = normalizeSql(sql);
   const match = normalized.match(/^DELETE\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.+))?$/i);
-  if (!match) return { changes: 0, lastInsertRowId };
+  if (!match) throw new Error(`WEB DBがDELETE文に対応していません: ${normalized}`);
   const [, name, whereSql] = match;
   const rows = table(name);
   const before = rows.length;
