@@ -19,9 +19,11 @@ export default function BrainwashScreen() {
   const { showNotice } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } = useAppAudio();
   const [fullscreen, setFullscreen] = useState(false);
+  const [completed, setCompleted] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
+      setCompleted(hasCompletedToday());
       const audioEnabled = Boolean(settings?.soundEnabled);
       setSessionAudioActive(audioEnabled);
       if (audioEnabled) playEffect("trainingStart");
@@ -33,6 +35,7 @@ export default function BrainwashScreen() {
   );
 
   function complete() {
+    if (completed) return;
     journalRepository.upsertSystemRecord(
       {
         recordDate: toDateKey(),
@@ -43,11 +46,12 @@ export default function BrainwashScreen() {
       },
       `洗脳部屋${toDateKey()}`,
     );
+    setCompleted(true);
     showNotice("洗脳完了", "洗脳完了しました。");
   }
 
   return (
-    <Screen>
+    <Screen style={styles.screen}>
       <AppText variant="title" style={styles.title}>洗脳部屋</AppText>
       <RoomConversation
         characterVideoSource={require("../../assets/videos/sennou.mp4")}
@@ -66,7 +70,12 @@ export default function BrainwashScreen() {
             効果音がOFFです。設定で効果音をONにしてください。
           </AppText>
         ) : null}
-        <PrimaryButton title="洗脳完了しました。" onPress={complete} />
+        <PrimaryButton
+          title={completed ? "ご主人様の命令は絶対服従♡" : "洗脳完了しました。"}
+          tone="defeat"
+          disabled={completed}
+          onPress={complete}
+        />
       </Card>
       <PrimaryButton
         title="廊下に戻る"
@@ -109,6 +118,18 @@ export default function BrainwashScreen() {
         </View>
       </Modal>
     </Screen>
+  );
+}
+
+function hasCompletedToday() {
+  return Boolean(
+    journalRepository
+      .list("洗脳部屋")
+      .some(
+        (journal) =>
+          journal.record_date === toDateKey() &&
+          journal.tags?.includes(`洗脳部屋${toDateKey()}`),
+      ),
   );
 }
 
@@ -194,14 +215,15 @@ function BrainwashFullscreenVideo() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: "#c000ff" },
-  card: { borderColor: "#c000ff" },
+  screen: { backgroundColor: "#ff8fbd" },
+  title: { color: "#fff" },
+  card: { borderColor: "#fff", backgroundColor: "#e94f93" },
   videoPreview: {
     position: "relative",
     overflow: "hidden",
     height: 260,
     borderWidth: 1,
-    borderColor: "#c000ff",
+    borderColor: "#fff",
     borderRadius: 4,
     backgroundColor: "#000",
   },

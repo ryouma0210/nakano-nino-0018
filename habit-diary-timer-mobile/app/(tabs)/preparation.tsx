@@ -203,12 +203,7 @@ export default function PreparationScreen() {
             },
           ]}
         >
-          <VideoView
-            player={preparationPlayer}
-            style={styles.fullscreenVideo}
-            nativeControls={false}
-            contentFit="contain"
-          />
+          <PreparationFullscreenVideo />
           <AppText
             style={[
               styles.fullscreenBreath,
@@ -232,6 +227,39 @@ export default function PreparationScreen() {
         </View>
       </Modal>
     </Screen>
+  );
+}
+
+function PreparationFullscreenVideo() {
+  const player = useVideoPlayer(
+    require("../../assets/videos/preparation_1.mp4"),
+    (instance) => {
+      instance.loop = true;
+      instance.muted = true;
+      instance.volume = 0;
+      instance.play();
+    },
+  );
+
+  useEffect(() => {
+    player.play();
+    const timer = setTimeout(() => {
+      try {
+        player.play();
+      } catch (error) {
+        console.warn("準備拡大動画の再生を再試行できませんでした。", error);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.fullscreenVideo}
+      nativeControls={false}
+      contentFit="contain"
+    />
   );
 }
 
