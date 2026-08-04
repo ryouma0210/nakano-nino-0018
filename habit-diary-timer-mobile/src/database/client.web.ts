@@ -111,6 +111,45 @@ function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, " ").trim();
 }
 
+function isKeywordAt(value: string, index: number, keyword: string) {
+  return value.slice(index, index + keyword.length).toUpperCase() === keyword;
+}
+
+function splitWhereAnd(value: string) {
+  const result: string[] = [];
+  let current = "";
+  let quote: string | null = null;
+  let depth = 0;
+  let betweenPending = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if ((char === "'" || char === "\"") && !quote) quote = char;
+    else if (char === quote) quote = null;
+    else if (!quote && char === "(") depth += 1;
+    else if (!quote && char === ")") depth -= 1;
+
+    if (!quote && depth === 0 && isKeywordAt(value, index, " BETWEEN ")) {
+      betweenPending = true;
+    }
+
+    if (!quote && depth === 0 && isKeywordAt(value, index, " AND ")) {
+      if (betweenPending) {
+        current += " AND ";
+        index += 4;
+        betweenPending = false;
+        continue;
+      }
+      if (current.trim()) result.push(current.trim());
+      current = "";
+      index += 4;
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) result.push(current.trim());
+  return result;
+}
+
 function like(value: unknown, pattern: string) {
   const text = String(value ?? "");
   const regex = new RegExp(`^${pattern.split("%").map(escapeRegExp).join(".*")}$`);
@@ -124,6 +163,11 @@ function escapeRegExp(value: string) {
 function valueOfColumn(row: Row, columnExpression: string) {
   const coalesce = columnExpression.match(/^COALESCE\(\s*([a-zA-Z0-9_]+)\s*,\s*['"][^'"]*['"]\s*\)$/i);
   if (coalesce) return row[coalesce[1]] ?? "";
+  const substring = columnExpression.match(/^substr\(\s*([a-zA-Z0-9_]+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
+  if (substring) {
+    const [, column, start, length] = substring;
+    return String(row[column] ?? "").slice(Number(start) - 1, Number(start) - 1 + Number(length));
+  }
   return row[columnExpression];
 }
 
@@ -132,6 +176,9 @@ function compareValue(row: Row, column: string, operator: string, expected: unkn
   if (operator === "=") return String(actual ?? "") === String(expected ?? "");
   if (operator === ">") return String(actual ?? "") > String(expected ?? "");
   if (operator === "<") return String(actual ?? "") < String(expected ?? "");
+  if (operator === ">=") return String(actual ?? "") >= String(expected ?? "");
+  if (operator === "<=") return String(actual ?? "") <= String(expected ?? "");
+  if (operator === "!=" || operator === "<>") return String(actual ?? "") !== String(expected ?? "");
   if (operator.toUpperCase() === "LIKE") return like(actual, String(expected ?? ""));
   if (operator.toUpperCase() === "NOT LIKE") return !like(actual, String(expected ?? ""));
   return true;
@@ -150,7 +197,16 @@ function matchWherePart(row: Row, part: string, params: BindParam[]) {
     return !selectedValues.has(String(row[column] ?? ""));
   }
 
-  const match = part.match(/^(.+?)\s*(=|>|<|LIKE|NOT\s+LIKE)\s*(.+)$/i);
+  const between = part.match(/^(.+?)\s+BETWEEN\s+(.+?)\s+AND\s+(.+)$/i);
+  if (between) {
+    const [, column, fromToken, toToken] = between;
+    const actual = String(valueOfColumn(row, column.trim()) ?? "");
+    const from = String(literal(fromToken, params) ?? "");
+    const to = String(literal(toToken, params) ?? "");
+    return actual >= from && actual <= to;
+  }
+
+  const match = part.match(/^(.+?)\s*(=|>=|<=|!=|<>|>|<|LIKE|NOT\s+LIKE)\s*(.+)$/i);
   if (!match) {
     throw new Error(`WEB DBがWHERE条件に対応していません: ${part}`);
   }
@@ -160,11 +216,11 @@ function matchWherePart(row: Row, part: string, params: BindParam[]) {
 
 function matchWhere(row: Row, whereSql: string | undefined, params: BindParam[]) {
   if (!whereSql) return true;
-  const parts = whereSql
+  const normalizedWhere = whereSql
     .replace(/\s+LIMIT\s+\d+.*$/i, "")
     .replace(/\s+ORDER\s+BY\s+.+$/i, "")
-    .replace(/\s+GROUP\s+BY\s+.+$/i, "")
-    .split(/\s+AND\s+/i)
+    .replace(/\s+GROUP\s+BY\s+.+$/i, "");
+  const parts = splitWhereAnd(normalizedWhere)
     .map((part) => part.trim())
     .filter(Boolean);
 
@@ -208,6 +264,10 @@ function selectRows(sql: string, params: BindParam[]) {
   const limit = sql.match(/\sLIMIT\s+(\d+)/i)?.[1];
   if (limit) rows = rows.slice(0, Number(limit));
 
+  const countDistinct = columns.match(/COUNT\(DISTINCT\s+([a-zA-Z0-9_]+)\)/i)?.[1];
+  if (countDistinct) {
+    return [{ count: new Set(rows.map((row) => String(row[countDistinct] ?? ""))).size }];
+  }
   if (/COUNT\(\*\)/i.test(columns)) return [{ count: rows.length }];
   const sum = columns.match(/SUM\(([a-zA-Z0-9_]+)\)/i)?.[1];
   if (sum) return [{ total: rows.reduce((total, row) => total + Number(row[sum] ?? 0), 0) }];
