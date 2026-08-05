@@ -6,11 +6,14 @@ import type { AppSettings } from "@/types/models";
 
 type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
 export type LoopAudioName = "earLick" | "nippleScratch";
+export type BgmMode = "default" | "outsideTemptation" | "outsideBattle";
 type AudioContextValue = {
   settings: AppSettings | null;
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
   playEffect: (name: EffectName) => void;
   stopEffect: (name: EffectName) => void;
+  bgmMode: BgmMode;
+  setBgmMode: (mode: BgmMode) => void;
   loopAudioName: LoopAudioName | null;
   playLoopAudio: (name: LoopAudioName) => void;
   stopLoopAudio: () => void;
@@ -22,6 +25,8 @@ const AudioContext = createContext<AudioContextValue>({
   updateAudioSettings: async () => {},
   playEffect: () => {},
   stopEffect: () => {},
+  bgmMode: "default",
+  setBgmMode: () => {},
   loopAudioName: null,
   playLoopAudio: () => {},
   stopLoopAudio: () => {},
@@ -29,12 +34,17 @@ const AudioContext = createContext<AudioContextValue>({
 });
 
 const bgmSource = require("../../assets/audio/kyouhunomori.mp4");
+const outsideTemptationBgmSource = require("../../assets/audio/voice-samples/voice_whisper.wav");
+const outsideBattleBgmSource = require("../../assets/audio/kyouhunomori.mp4");
 
 export function AudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
   const [loopAudioName, setLoopAudioName] = useState<LoopAudioName | null>(null);
+  const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const bgm = useAudioPlayer(bgmSource);
+  const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
+  const outsideBattleBgm = useAudioPlayer(outsideBattleBgmSource);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.mp4"));
@@ -60,11 +70,20 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!settings) return;
-    bgm.pause();
-    bgm.loop = true;
-    bgm.volume = settings.musicVolume;
-    if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) bgm.play();
-  }, [bgm, loopAudioName, sessionAudioActive, settings]);
+    const bgms = {
+      default: bgm,
+      outsideTemptation: outsideTemptationBgm,
+      outsideBattle: outsideBattleBgm,
+    };
+    Object.values(bgms).forEach((player) => {
+      player.pause();
+      player.loop = true;
+      player.volume = settings.musicVolume;
+    });
+    if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
+      bgms[bgmMode].play();
+    }
+  }, [bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideTemptationBgm, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -122,12 +141,14 @@ export function AudioProvider({ children }: PropsWithChildren) {
       updateAudioSettings,
       playEffect,
       stopEffect,
+      bgmMode,
+      setBgmMode,
       loopAudioName,
       playLoopAudio,
       stopLoopAudio,
       setSessionAudioActive,
     }),
-    [loopAudioName, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioName, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
 }
