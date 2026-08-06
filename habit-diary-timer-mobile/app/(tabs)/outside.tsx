@@ -9,7 +9,6 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { execute, queryOne } from "@/database/client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 
-type LocationKey = "gate" | "forest" | "road";
 type Phase = "explore" | "talk" | "battle" | "result";
 type SuccubusStage = "beginner" | "middle" | "queen";
 type TemptationEvent = "overlook" | "whisper" | "chest" | "tail" | "back";
@@ -59,47 +58,15 @@ const succubusImages: Record<SuccubusStage, Record<OutsideEvent, number>> = {
     battle: require("../../assets/characters/outside-events/queen-battle.png"),
   },
 };
-
-const locations: Record<
-  LocationKey,
-  { name: string; description: string; color: string }
-> = {
-  gate: {
-    name: "館の門前",
-    description: "振り返ると、館の灯りがまだこちらを見ている。",
-    color: "#203b2d",
+const pixelSprites = {
+  player: require("../../assets/characters/outside-pixels/player-dot.png"),
+  door: require("../../assets/characters/outside-pixels/door-dot.png"),
+  tree: require("../../assets/characters/outside-pixels/tree-dot.png"),
+  succubus: {
+    beginner: require("../../assets/characters/outside-pixels/succubus-beginner-dot.png"),
+    middle: require("../../assets/characters/outside-pixels/succubus-middle-dot.png"),
+    queen: require("../../assets/characters/outside-pixels/succubus-queen-dot.png"),
   },
-  forest: {
-    name: "夜の森",
-    description: "木々の奥から、甘い笑い声が聞こえる。",
-    color: "#18283d",
-  },
-  road: {
-    name: "帰り道",
-    description: "家に帰る道。けれど足取りは妙に重い。",
-    color: "#3a2432",
-  },
-};
-
-const talks: Record<SuccubusStage, string[]> = {
-  beginner: [
-    "あ、あの……帰るんですか？でも、少しだけ私の相手をしてくれませんか♡",
-    "こ、怖くないですよ？私だって、ちゃんと誘惑できますから……たぶん♡",
-    "レベル10でも油断しないでくださいね。逆転、してみせますから♡",
-    "逃げないでください……お願いです。少しだけ、ここにいてください♡",
-  ],
-  middle: [
-    "ねぇ、ほんとに帰るの？ちょっと待ちなよ、まだ話したいんだけど♡",
-    "無理してない？顔、かなり揺れてるよ。ふふ、かわいいじゃん♡",
-    "同じレベルなら勝てると思った？そういう油断、嫌いじゃないよ♡",
-    "ほら、こっち見て。帰るか残るか、ちゃんと決めなよ♡",
-  ],
-  queen: [
-    "帰る？ふーん。私の前でそんなこと言えるんだ♡",
-    "抵抗してみなよ。折れるまで見ててあげる♡",
-    "ここは私の庭。逃げ道なんて、最初からないよ♡",
-    "レベル差、分かってる？そのまま跪いた方が楽だよ♡",
-  ],
 };
 
 const battleLines: Record<SuccubusStage, {
@@ -198,11 +165,6 @@ function clamp(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
-function randomTalk(stage: SuccubusStage) {
-  const candidates = talks[stage];
-  return candidates[Math.floor(Math.random() * candidates.length)] ?? candidates[0];
-}
-
 function randomTemptationEvent() {
   return temptationEvents[Math.floor(Math.random() * temptationEvents.length)] ?? "overlook";
 }
@@ -210,7 +172,6 @@ function randomTemptationEvent() {
 export default function OutsideScreen() {
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
   const [level, setLevel] = useState(initializeLevel);
-  const [location, setLocation] = useState<LocationKey>("gate");
   const [phase, setPhase] = useState<Phase>("explore");
   const [eventImage, setEventImage] = useState<OutsideEvent>("battle");
   const [charmTurns, setCharmTurns] = useState(0);
@@ -226,9 +187,15 @@ export default function OutsideScreen() {
   });
 
   const succubus = useMemo(() => succubusForLevel(level), [level]);
-  const currentLocation = locations[location];
 
   useEffect(() => {
+    if (charmTurns > 0) {
+      setBgmMode("outsideCharm");
+      return () => {
+        stopEffect("trainingStart");
+        setBgmMode("default");
+      };
+    }
     if (phase === "battle") {
       setBgmMode("outsideBattle");
       return () => {
@@ -249,35 +216,20 @@ export default function OutsideScreen() {
       stopEffect("trainingStart");
       setBgmMode("default");
     };
-  }, [phase, setBgmMode, stopEffect]);
+  }, [charmTurns, phase, setBgmMode, stopEffect]);
 
-  function move(next: LocationKey) {
-    setLocation(next);
-    const eventRoll = Math.random();
-    if (eventRoll < 0.45) {
-      const nextEvent = randomTemptationEvent();
-      setEventImage(nextEvent);
-      setPhase("talk");
-      if (nextEvent === "whisper") playEffect("trainingStart");
-      setMessage(randomTalk(succubus.stage));
-      return;
-    }
-    if (eventRoll < 0.82) {
-      setEventImage("battle");
-      setPhase("battle");
-      setBattle({
-        hp: 100,
-        mp: 50,
-        desire: 10,
-        obedience: 0,
-        enemyFocus: 100,
-      });
-      setMessage(battleLines[succubus.stage].appear);
-      return;
-    }
-    setPhase("explore");
+  function startEncounter() {
     setEventImage("battle");
-    setMessage(`${locations[next].description}\n今はまだ何も起きていない。`);
+    setPhase("battle");
+    setCharmTurns(0);
+    setBattle({
+      hp: 100,
+      mp: 50,
+      desire: 10,
+      obedience: 0,
+      enemyFocus: 100,
+    });
+    setMessage(`サキュバスがこちらに近づいてきた。\n${battleLines[succubus.stage].appear}`);
   }
 
   function resolveCommand(command: "resist" | "focus" | "run") {
@@ -391,33 +343,37 @@ export default function OutsideScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.pixelSky, { backgroundColor: currentLocation.color }]}>
-        <Image
-          source={succubusImages[succubus.stage][eventImage]}
-          style={styles.eventImage}
-          contentFit="cover"
-        />
-        <View style={styles.imageShade} />
-        <View style={styles.eventBadge}>
-          <AppText style={styles.eventBadgeText}>{outsideEventLabels[eventImage]}</AppText>
-        </View>
-        <View style={styles.moon} />
-        <View style={styles.pixelGround}>
-          <PixelTree left={18} />
-          <PixelTree left={292} />
-          <View style={styles.pixelRoad} />
-          <View style={styles.playerSprite}>
-            <AppText style={styles.spriteText}>主</AppText>
-          </View>
-          <View style={[styles.succubusSprite, { borderColor: succubus.color }]}>
-            <AppText style={styles.succubusText}>サ</AppText>
-          </View>
-        </View>
-      </View>
-
       <View style={styles.content}>
         <AppText style={styles.kicker}>OUTSIDE RPG</AppText>
         <AppText variant="title">館の外へ（家に帰る）</AppText>
+
+        <View style={styles.pixelMap}>
+          <View style={styles.tileOverlay} />
+          <View style={styles.mapRoad} />
+          <Pressable style={styles.topMoveZone} onPress={startEncounter}>
+            <AppText style={styles.topMoveText}>上へ進む</AppText>
+          </Pressable>
+          <Pressable style={styles.door} onPress={() => router.replace("/(tabs)/nino-room")}>
+            <Image source={pixelSprites.door} style={styles.doorSprite} contentFit="contain" />
+          </Pressable>
+          <View style={styles.mapTreeLeft}>
+            <PixelTree />
+          </View>
+          <View style={styles.mapTreeRight}>
+            <PixelTree />
+          </View>
+          <View style={[styles.mapSuccubus, phase === "battle" && styles.mapSuccubusNear, { borderColor: succubus.color }]}>
+            <Image
+              source={pixelSprites.succubus[succubus.stage]}
+              style={styles.mapSpriteImage}
+              contentFit="contain"
+            />
+          </View>
+          <View style={[styles.mapPlayer, phase !== "explore" && styles.mapPlayerStopped]}>
+            <Image source={pixelSprites.player} style={styles.mapSpriteImage} contentFit="contain" />
+          </View>
+        </View>
+
         <Card style={styles.statusCard}>
           <View style={styles.rowBetween}>
             <View>
@@ -437,7 +393,7 @@ export default function OutsideScreen() {
 
         <Card>
           <View style={styles.rowBetween}>
-            <AppText variant="subtitle">{currentLocation.name}</AppText>
+            <AppText variant="subtitle">館の外</AppText>
             <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
           </View>
           {charmTurns > 0 ? (
@@ -448,6 +404,16 @@ export default function OutsideScreen() {
 
         {phase === "battle" ? (
           <Card style={styles.battleCard}>
+            <View style={styles.portraitFrame}>
+              <Image
+                source={succubusImages[succubus.stage][eventImage]}
+                style={styles.portraitImage}
+                contentFit="contain"
+              />
+              <View style={styles.eventBadge}>
+                <AppText style={styles.eventBadgeText}>{outsideEventLabels[eventImage]}</AppText>
+              </View>
+            </View>
             <Gauge label="HP" value={battle.hp} color="#7cb342" />
             <Gauge label="MP" value={battle.mp} color="#29b6f6" />
             <Gauge label="欲望" value={battle.desire} color="#ff69b4" />
@@ -461,11 +427,14 @@ export default function OutsideScreen() {
           </Card>
         ) : (
           <Card>
-            <AppText variant="subtitle">移動先を選択</AppText>
+            <AppText variant="subtitle">マップ操作</AppText>
             <View style={styles.commands}>
-              <MapButton title="館の門前" active={location === "gate"} onPress={() => move("gate")} />
-              <MapButton title="夜の森" active={location === "forest"} onPress={() => move("forest")} />
-              <MapButton title="帰り道" active={location === "road"} onPress={() => move("road")} />
+              <PrimaryButton title="上へ進む（サキュバスに近づく）" onPress={startEncounter} />
+              <PrimaryButton
+                title="ドアへ戻る"
+                tone="secondary"
+                onPress={() => router.replace("/(tabs)/nino-room")}
+              />
             </View>
           </Card>
         )}
@@ -512,33 +481,96 @@ function Gauge({ label, value, color }: { label: string; value: number; color: s
   );
 }
 
-function MapButton({
-  title,
-  active,
-  onPress,
-}: {
-  title: string;
-  active: boolean;
-  onPress: () => void;
-}) {
+function PixelTree() {
   return (
-    <Pressable onPress={onPress} style={[styles.mapButton, active && styles.mapButtonActive]}>
-      <AppText style={styles.mapButtonText}>{title}</AppText>
-    </Pressable>
-  );
-}
-
-function PixelTree({ left }: { left: number }) {
-  return (
-    <View style={[styles.tree, { left }]}>
-      <View style={styles.treeLeaf} />
-      <View style={styles.treeTrunk} />
+    <View style={styles.tree}>
+      <Image source={pixelSprites.tree} style={styles.treeImage} contentFit="contain" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#050505" },
+  content: { flex: 1, gap: 12, padding: 14 },
+  pixelMap: {
+    height: 320,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "#10351c",
+  },
+  tileOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    opacity: 0.24,
+    backgroundColor: "#0b2514",
+  },
+  mapRoad: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: "38%",
+    width: "24%",
+    backgroundColor: "#7b6a58",
+  },
+  topMoveZone: {
+    position: "absolute",
+    top: 10,
+    left: "34%",
+    width: "32%",
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "#2b1333",
+  },
+  topMoveText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  door: {
+    position: "absolute",
+    bottom: 0,
+    left: "37%",
+    width: "26%",
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doorSprite: { width: 72, height: 72 },
+  mapTreeLeft: { position: "absolute", left: 34, bottom: 70 },
+  mapTreeRight: { position: "absolute", right: 34, bottom: 70 },
+  mapPlayer: {
+    position: "absolute",
+    left: "45%",
+    bottom: 100,
+    width: 42,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapPlayerStopped: { bottom: 150 },
+  mapSuccubus: {
+    position: "absolute",
+    left: "58%",
+    top: 84,
+    width: 46,
+    height: 58,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapSuccubusNear: { top: 132, left: "54%" },
+  mapSpriteImage: { width: "100%", height: "100%" },
+  portraitFrame: {
+    position: "relative",
+    height: 300,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+  },
+  portraitImage: { width: "100%", height: "100%" },
   pixelSky: {
     height: 300,
     overflow: "hidden",
@@ -625,12 +657,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: "#1b0713",
   },
-  spriteText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  succubusText: { color: "#ff9bd0", fontSize: 12, fontWeight: "900" },
-  tree: { position: "absolute", bottom: 26, alignItems: "center" },
-  treeLeaf: { width: 38, height: 38, backgroundColor: "#244b27" },
-  treeTrunk: { width: 12, height: 28, backgroundColor: "#5a3921" },
-  content: { flex: 1, gap: 12, padding: 14 },
+  tree: { width: 58, height: 58 },
+  treeImage: { width: "100%", height: "100%" },
   kicker: {
     color: "#ff69b4",
     fontSize: 12,
