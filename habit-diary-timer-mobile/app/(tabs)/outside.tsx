@@ -32,36 +32,10 @@ const outsideEventLabels: Record<OutsideEvent, string> = {
   back: "お尻を向けて挑発",
   battle: "サキュバス戦闘立ち絵",
 };
-const succubusImages: Record<SuccubusStage, Record<OutsideEvent, number>> = {
-  beginner: {
-    overlook: require("../../assets/characters/outside-events/beginner-overlook.png"),
-    whisper: require("../../assets/characters/outside-events/beginner-whisper.png"),
-    chest: require("../../assets/characters/outside-events/beginner-chest.png"),
-    tail: require("../../assets/characters/outside-events/beginner-tail.png"),
-    back: require("../../assets/characters/outside-events/beginner-back.png"),
-    battle: require("../../assets/characters/outside-events/beginner-battle.png"),
-  },
-  middle: {
-    overlook: require("../../assets/characters/outside-events/middle-overlook.png"),
-    whisper: require("../../assets/characters/outside-events/middle-whisper.png"),
-    chest: require("../../assets/characters/outside-events/middle-chest.png"),
-    tail: require("../../assets/characters/outside-events/middle-tail.png"),
-    back: require("../../assets/characters/outside-events/middle-back.png"),
-    battle: require("../../assets/characters/outside-events/middle-battle.png"),
-  },
-  queen: {
-    overlook: require("../../assets/characters/outside-events/queen-overlook.png"),
-    whisper: require("../../assets/characters/outside-events/queen-whisper.png"),
-    chest: require("../../assets/characters/outside-events/queen-chest.png"),
-    tail: require("../../assets/characters/outside-events/queen-tail.png"),
-    back: require("../../assets/characters/outside-events/queen-back.png"),
-    battle: require("../../assets/characters/outside-events/queen-battle.png"),
-  },
-};
 const pixelSprites = {
+  mapBg: require("../../assets/characters/outside-pixels/outside-map-bg.png"),
   player: require("../../assets/characters/outside-pixels/player-dot.png"),
   door: require("../../assets/characters/outside-pixels/door-dot.png"),
-  tree: require("../../assets/characters/outside-pixels/tree-dot.png"),
   succubus: {
     beginner: require("../../assets/characters/outside-pixels/succubus-beginner-dot.png"),
     middle: require("../../assets/characters/outside-pixels/succubus-middle-dot.png"),
@@ -173,7 +147,6 @@ export default function OutsideScreen() {
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
   const [level, setLevel] = useState(initializeLevel);
   const [phase, setPhase] = useState<Phase>("explore");
-  const [eventImage, setEventImage] = useState<OutsideEvent>("battle");
   const [charmTurns, setCharmTurns] = useState(0);
   const [message, setMessage] = useState(
     "館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。",
@@ -219,7 +192,6 @@ export default function OutsideScreen() {
   }, [charmTurns, phase, setBgmMode, stopEffect]);
 
   function startEncounter() {
-    setEventImage("battle");
     setPhase("battle");
     setCharmTurns(0);
     setBattle({
@@ -284,7 +256,6 @@ export default function OutsideScreen() {
 
   function resetBattle() {
     setPhase("explore");
-    setEventImage("battle");
     setCharmTurns(0);
     setMessage("もう一度、帰り道を探す。油断しないように進もう。");
     setBattle({
@@ -301,7 +272,6 @@ export default function OutsideScreen() {
     setLevel(nextLevel);
     saveSetting(levelKey, String(nextLevel));
     saveSetting(levelDateKey, toDateKey());
-    setEventImage("tail");
     setCharmTurns(3);
     playEffect("trainingStart");
     setMessage(`${reason}\n魅了状態になった。3ターンの間、逃亡は失敗する。\n尻尾に絡め取られて、レベルが${nextLevel}まで下がった。`);
@@ -311,7 +281,6 @@ export default function OutsideScreen() {
     if (phase !== "talk") return;
     const nextEvent = randomTemptationEvent();
     const success = Math.random() * 100 < 58 + level * 0.2;
-    setEventImage(nextEvent);
     if (nextEvent === "whisper") playEffect("trainingStart");
     if (success) {
       setMessage(`${outsideEventLabels[nextEvent]}を耐えた。\nでも、次の誘惑がすぐに来る。`);
@@ -336,7 +305,6 @@ export default function OutsideScreen() {
       return;
     }
     setPhase("explore");
-    setEventImage("battle");
     stopEffect("trainingStart");
     setMessage("逃亡した。息を整えて、別の道を選び直そう。");
   }
@@ -348,20 +316,13 @@ export default function OutsideScreen() {
         <AppText variant="title">館の外へ（家に帰る）</AppText>
 
         <View style={styles.pixelMap}>
-          <View style={styles.tileOverlay} />
-          <View style={styles.mapRoad} />
+          <Image source={pixelSprites.mapBg} style={styles.mapBackground} contentFit="cover" />
           <Pressable style={styles.topMoveZone} onPress={startEncounter}>
             <AppText style={styles.topMoveText}>上へ進む</AppText>
           </Pressable>
           <Pressable style={styles.door} onPress={() => router.replace("/(tabs)/nino-room")}>
             <Image source={pixelSprites.door} style={styles.doorSprite} contentFit="contain" />
           </Pressable>
-          <View style={styles.mapTreeLeft}>
-            <PixelTree />
-          </View>
-          <View style={styles.mapTreeRight}>
-            <PixelTree />
-          </View>
           <View style={[styles.mapSuccubus, phase === "battle" && styles.mapSuccubusNear, { borderColor: succubus.color }]}>
             <Image
               source={pixelSprites.succubus[succubus.stage]}
@@ -371,6 +332,32 @@ export default function OutsideScreen() {
           </View>
           <View style={[styles.mapPlayer, phase !== "explore" && styles.mapPlayerStopped]}>
             <Image source={pixelSprites.player} style={styles.mapSpriteImage} contentFit="contain" />
+          </View>
+          {phase === "battle" ? (
+            <View style={styles.mapCommandPanel}>
+              <AppText style={styles.commandTitle}>COMMAND</AppText>
+              <Pressable style={styles.commandLine} onPress={() => resolveCommand("resist")}>
+                <AppText style={styles.commandText}>Attack</AppText>
+              </Pressable>
+              <Pressable style={styles.commandLine} onPress={() => resolveCommand("focus")}>
+                <AppText style={styles.commandText}>Spells</AppText>
+              </Pressable>
+              <Pressable style={styles.commandLine} onPress={() => resolveCommand("run")}>
+                <AppText style={styles.commandText}>Defend</AppText>
+              </Pressable>
+            </View>
+          ) : null}
+          <View style={styles.mapStatusPanel}>
+            <View style={styles.mapStatusFace} />
+            <View style={styles.mapStatusTextBox}>
+              <AppText style={styles.mapStatusName}>YOU</AppText>
+              <AppText style={styles.mapStatusLine}>♥ {battle.hp}　MP {battle.mp}</AppText>
+            </View>
+            <View style={styles.mapStatusFace} />
+            <View style={styles.mapStatusTextBox}>
+              <AppText style={[styles.mapStatusName, { color: succubus.color }]}>NINO</AppText>
+              <AppText style={styles.mapStatusLine}>Lv.{succubus.level}</AppText>
+            </View>
           </View>
         </View>
 
@@ -404,26 +391,14 @@ export default function OutsideScreen() {
 
         {phase === "battle" ? (
           <Card style={styles.battleCard}>
-            <View style={styles.portraitFrame}>
-              <Image
-                source={succubusImages[succubus.stage][eventImage]}
-                style={styles.portraitImage}
-                contentFit="contain"
-              />
-              <View style={styles.eventBadge}>
-                <AppText style={styles.eventBadgeText}>{outsideEventLabels[eventImage]}</AppText>
-              </View>
-            </View>
             <Gauge label="HP" value={battle.hp} color="#7cb342" />
             <Gauge label="MP" value={battle.mp} color="#29b6f6" />
             <Gauge label="欲望" value={battle.desire} color="#ff69b4" />
             <Gauge label="服従" value={battle.obedience} color="#d9202a" />
             <Gauge label="サキュバス集中" value={battle.enemyFocus} color={succubus.color} />
-            <View style={styles.commands}>
-              <PrimaryButton title="誘惑に耐える" onPress={() => resolveCommand("resist")} />
-              <PrimaryButton title="精神集中" tone="order" onPress={() => resolveCommand("focus")} />
-              <PrimaryButton title="逃げる" tone="secondary" onPress={() => resolveCommand("run")} />
-            </View>
+            <AppText style={styles.battleHelp}>
+              マップ左下のCOMMANDから行動を選択してください。
+            </AppText>
           </Card>
         ) : (
           <Card>
@@ -481,103 +456,17 @@ function Gauge({ label, value, color }: { label: string; value: number; color: s
   );
 }
 
-function PixelTree() {
-  return (
-    <View style={styles.tree}>
-      <Image source={pixelSprites.tree} style={styles.treeImage} contentFit="contain" />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#050505" },
   content: { flex: 1, gap: 12, padding: 14 },
   pixelMap: {
-    height: 320,
+    height: 300,
     overflow: "hidden",
     borderWidth: 2,
     borderColor: "#fff",
     backgroundColor: "#10351c",
   },
-  tileOverlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    opacity: 0.24,
-    backgroundColor: "#0b2514",
-  },
-  mapRoad: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: "38%",
-    width: "24%",
-    backgroundColor: "#7b6a58",
-  },
-  topMoveZone: {
-    position: "absolute",
-    top: 10,
-    left: "34%",
-    width: "32%",
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-    backgroundColor: "#2b1333",
-  },
-  topMoveText: { color: "#fff", fontSize: 13, fontWeight: "900" },
-  door: {
-    position: "absolute",
-    bottom: 0,
-    left: "37%",
-    width: "26%",
-    height: 56,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  doorSprite: { width: 72, height: 72 },
-  mapTreeLeft: { position: "absolute", left: 34, bottom: 70 },
-  mapTreeRight: { position: "absolute", right: 34, bottom: 70 },
-  mapPlayer: {
-    position: "absolute",
-    left: "45%",
-    bottom: 100,
-    width: 42,
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapPlayerStopped: { bottom: 150 },
-  mapSuccubus: {
-    position: "absolute",
-    left: "58%",
-    top: 84,
-    width: 46,
-    height: 58,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapSuccubusNear: { top: 132, left: "54%" },
-  mapSpriteImage: { width: "100%", height: "100%" },
-  portraitFrame: {
-    position: "relative",
-    height: 300,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#fff",
-    backgroundColor: "#000",
-  },
-  portraitImage: { width: "100%", height: "100%" },
-  pixelSky: {
-    height: 300,
-    overflow: "hidden",
-    borderBottomWidth: 2,
-    borderBottomColor: "#fff",
-  },
-  eventImage: {
+  mapBackground: {
     position: "absolute",
     top: 0,
     right: 0,
@@ -586,79 +475,115 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  imageShade: {
+  topMoveZone: {
     position: "absolute",
     top: 0,
-    right: 0,
-    bottom: 0,
     left: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.35)",
+    right: 0,
+    height: 150,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  eventBadge: {
+  topMoveText: {
     position: "absolute",
-    top: 12,
-    left: 12,
+    top: 10,
+    right: 10,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: "#fff",
-    backgroundColor: "rgba(0, 0, 0, 0.62)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  eventBadgeText: {
+    backgroundColor: "rgba(0,0,0,0.56)",
     color: "#fff",
     fontSize: 11,
     fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  moon: {
+  door: {
     position: "absolute",
-    top: 28,
-    right: 34,
-    width: 42,
-    height: 42,
-    borderRadius: 0,
-    backgroundColor: "#f6e7a1",
-  },
-  pixelGround: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 105,
-    backgroundColor: "#132718",
-  },
-  pixelRoad: {
-    position: "absolute",
-    left: "38%",
-    bottom: 0,
-    width: "24%",
-    height: 105,
-    backgroundColor: "#67564a",
-  },
-  playerSprite: {
-    position: "absolute",
-    left: "44%",
-    bottom: 24,
-    width: 28,
-    height: 38,
+    bottom: 2,
+    left: "43%",
+    width: 66,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-    backgroundColor: "#1f5fae",
   },
-  succubusSprite: {
+  doorSprite: { width: 76, height: 76 },
+  mapPlayer: {
     position: "absolute",
-    right: "24%",
-    bottom: 38,
+    left: "56%",
+    top: 144,
+    width: 62,
+    height: 62,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapPlayerStopped: { top: 112, left: "58%" },
+  mapSuccubus: {
+    position: "absolute",
+    left: "23%",
+    top: 66,
+    width: 84,
+    height: 84,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapSuccubusNear: { top: 88, left: "35%", width: 92, height: 92 },
+  mapSpriteImage: { width: "100%", height: "100%" },
+  mapCommandPanel: {
+    position: "absolute",
+    left: 8,
+    bottom: 10,
+    width: 130,
+    borderWidth: 2,
+    borderColor: "#d6f5ff",
+    backgroundColor: "rgba(4, 23, 34, 0.9)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 3,
+  },
+  commandTitle: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  commandLine: {
+    minHeight: 20,
+    justifyContent: "center",
+    paddingLeft: 4,
+  },
+  commandText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  mapStatusPanel: {
+    position: "absolute",
+    right: 8,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  mapStatusFace: {
     width: 32,
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    backgroundColor: "#1b0713",
+    height: 32,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#20141b",
   },
-  tree: { width: 58, height: 58 },
-  treeImage: { width: "100%", height: "100%" },
+  mapStatusTextBox: {
+    width: 68,
+    minHeight: 34,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "rgba(10, 12, 18, 0.88)",
+    paddingHorizontal: 4,
+    justifyContent: "center",
+  },
+  mapStatusName: { color: "#fff", fontSize: 8, fontWeight: "900" },
+  mapStatusLine: { color: "#fff", fontSize: 8, fontWeight: "900" },
   kicker: {
     color: "#ff69b4",
     fontSize: 12,
@@ -696,6 +621,12 @@ const styles = StyleSheet.create({
   },
   message: { color: "#fff", fontSize: 15, lineHeight: 24, fontWeight: "800" },
   battleCard: { borderColor: "#9b5de5" },
+  battleHelp: {
+    color: "#aaa",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
   temptationCard: { borderColor: "#ff69b4" },
   gaugeRow: { gap: 5 },
   gaugeHeader: { flexDirection: "row", justifyContent: "space-between" },
@@ -710,13 +641,4 @@ const styles = StyleSheet.create({
   },
   gaugeFill: { height: "100%" },
   commands: { gap: 10 },
-  mapButton: {
-    borderWidth: 1,
-    borderColor: "#fff",
-    borderRadius: 4,
-    padding: 12,
-    backgroundColor: "#000",
-  },
-  mapButtonActive: { backgroundColor: "#7b2cbf" },
-  mapButtonText: { color: "#fff", textAlign: "center", fontWeight: "900" },
 });
