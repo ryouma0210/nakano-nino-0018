@@ -6,7 +6,7 @@ import type { AppSettings } from "@/types/models";
 
 type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
 export type LoopAudioName = "earLick" | "nippleScratch";
-export type BgmMode = "default" | "outsideTemptation" | "outsideBattle";
+export type BgmMode = "default" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
   settings: AppSettings | null;
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
@@ -36,6 +36,7 @@ const AudioContext = createContext<AudioContextValue>({
 const bgmSource = require("../../assets/audio/kyouhunomori.mp4");
 const outsideTemptationBgmSource = require("../../assets/audio/voice-samples/voice_whisper.wav");
 const outsideBattleBgmSource = require("../../assets/audio/kyouhunomori.mp4");
+const outsideCharmBgmSource = require("../../assets/audio/yuuwakubgm.mp4");
 
 export function AudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -45,6 +46,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const bgm = useAudioPlayer(bgmSource);
   const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
   const outsideBattleBgm = useAudioPlayer(outsideBattleBgmSource);
+  const outsideCharmBgm = useAudioPlayer(outsideCharmBgmSource);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.mp4"));
@@ -74,6 +76,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
       default: bgm,
       outsideTemptation: outsideTemptationBgm,
       outsideBattle: outsideBattleBgm,
+      outsideCharm: outsideCharmBgm,
     };
     Object.values(bgms).forEach((player) => {
       player.pause();
@@ -83,7 +86,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
     if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
       bgms[bgmMode].play();
     }
-  }, [bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideTemptationBgm, sessionAudioActive, settings]);
+  }, [bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
