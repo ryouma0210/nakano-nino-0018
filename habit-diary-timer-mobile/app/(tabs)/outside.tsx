@@ -20,6 +20,8 @@ type BattleStatus = {
 };
 type MapStep = 0 | 1 | 2;
 type MapArea = "center" | "left" | "right" | "top";
+type Direction = "up" | "down" | "left" | "right";
+type MapPosition = { x: number; y: number };
 
 const levelKey = "outside_game_level";
 const levelDateKey = "outside_game_level_date";
@@ -27,6 +29,12 @@ const dailyPointDateKey = "outside_game_point_date";
 const dailyPointKey = "outside_game_point_today";
 const succubusAbsorbDateKey = "outside_game_succubus_absorb_date";
 const succubusAbsorbKey = "outside_game_succubus_absorb_today";
+const startPositions: Record<MapArea, MapPosition> = {
+  center: { x: 48, y: 74 },
+  left: { x: 68, y: 54 },
+  right: { x: 24, y: 54 },
+  top: { x: 48, y: 76 },
+};
 const pixelSprites = {
   mapCenter: require("../../assets/characters/outside-pixels/outside-map-bg.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
@@ -170,6 +178,7 @@ export default function OutsideScreen() {
   const [phase, setPhase] = useState<Phase>("explore");
   const [mapArea, setMapArea] = useState<MapArea>("center");
   const [mapStep, setMapStep] = useState<MapStep>(0);
+  const [mapPosition, setMapPosition] = useState<MapPosition>(startPositions.center);
   const [charmTurns, setCharmTurns] = useState(0);
   const [message, setMessage] = useState(
     "館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。",
@@ -218,11 +227,11 @@ export default function OutsideScreen() {
     };
   }, [charmTurns, phase, setBgmMode, stopEffect]);
 
-  function startEncounter() {
+  function startEncounter(openingMessage?: string, initialCharmTurns = 0) {
     setPhase("battle");
     setMapArea("center");
     setMapStep(2);
-    setCharmTurns(0);
+    setCharmTurns(initialCharmTurns);
     setBattle({
       hp: 100,
       mp: 50,
@@ -230,7 +239,7 @@ export default function OutsideScreen() {
       obedience: 0,
       enemyFocus: 100,
     });
-    setMessage(`サキュバスがこちらに近づいてきた。\n${battleLines[succubus.stage].appear}`);
+    setMessage(`${openingMessage ?? "サキュバスがこちらに近づいてきた。"}\n${battleLines[succubus.stage].appear}`);
   }
 
   function advanceMap() {
@@ -242,6 +251,7 @@ export default function OutsideScreen() {
     if (phase !== "explore") return;
     setMapArea(nextArea);
     setMapStep(0);
+    setMapPosition(startPositions[nextArea]);
     if (nextArea === "left") {
       setMessage("左の道を進むと、静かな浄化の水辺に出た。ここなら体勢を立て直せそうだ。");
     } else if (nextArea === "right") {
@@ -253,13 +263,79 @@ export default function OutsideScreen() {
     }
   }
 
+  function movePlayer(direction: Direction) {
+    if (phase !== "explore" || mapStep > 0) return;
+    const step = 7;
+    const next = { ...mapPosition };
+    if (direction === "up") next.y -= step;
+    if (direction === "down") next.y += step;
+    if (direction === "left") next.x -= step;
+    if (direction === "right") next.x += step;
+
+    if (mapArea === "center") {
+      if (next.y <= 18) {
+        moveMap("top");
+        return;
+      }
+      if (next.y >= 88) {
+        router.replace("/(tabs)/nino-room");
+        return;
+      }
+      if (next.x <= 14) {
+        moveMap("left");
+        return;
+      }
+      if (next.x >= 82) {
+        moveMap("right");
+        return;
+      }
+    }
+
+    if (mapArea === "left" && next.x >= 86) {
+      moveMap("center");
+      return;
+    }
+    if (mapArea === "right" && next.x <= 14) {
+      moveMap("center");
+      return;
+    }
+    if (mapArea === "top") {
+      if (next.y >= 88) {
+        moveMap("center");
+        return;
+      }
+      if (next.y <= 52) {
+        exploreTopArea();
+        return;
+      }
+    }
+
+    setMapPosition({
+      x: Math.max(8, Math.min(88, next.x)),
+      y: Math.max(12, Math.min(88, next.y)),
+    });
+  }
+
   function exploreTopArea() {
     if (phase !== "explore" || mapArea !== "top") return;
     setMapStep(1);
-    setMessage("！\n木の物陰にいたサキュバスに呼び止められた。戦闘が始まる。");
-    setTimeout(() => {
-      startEncounter();
-    }, 650);
+    setMessage("！\n木の物陰にいたサキュバスに呼び止められた。どう返す？");
+  }
+
+  function chooseEncounter(choice: "resist" | "listen" | "run") {
+    if (phase !== "explore" || mapArea !== "top" || mapStep === 0) return;
+    if (choice === "run") {
+      setMapArea("center");
+      setMapStep(0);
+      setMapPosition(startPositions.center);
+      setMessage("咄嗟に身を引いて、十字路まで戻った。まだ甘い声が耳に残っている。");
+      return;
+    }
+    if (choice === "listen") {
+      startEncounter("少しだけ声を聞いてしまった。胸の奥が甘く揺れる。", 1);
+      return;
+    }
+    startEncounter("呼び止める声を振り払い、戦闘態勢に入った。");
   }
 
   function exploreLeftArea() {
@@ -366,6 +442,7 @@ export default function OutsideScreen() {
     setPhase("explore");
     setMapArea("center");
     setMapStep(0);
+    setMapPosition(startPositions.center);
     setCharmTurns(0);
     setMessage("もう一度、帰り道を探す。油断しないように進もう。");
     setBattle({
@@ -487,15 +564,28 @@ export default function OutsideScreen() {
                   <AppText style={styles.exclamationText}>!</AppText>
                 </View>
               ) : null}
+              {mapStep > 0 ? (
+                <View style={styles.mapChoiceBox}>
+                  <AppText style={styles.mapChoiceTitle}>サキュバスに呼び止められた</AppText>
+                  <Pressable style={styles.mapChoiceButton} onPress={() => chooseEncounter("resist")}>
+                    <AppText style={styles.mapChoiceText}>誘惑に耐える</AppText>
+                  </Pressable>
+                  <Pressable style={[styles.mapChoiceButton, styles.mapChoiceSelected]} onPress={() => chooseEncounter("listen")}>
+                    <AppText style={styles.mapChoiceText}>少し話を聞く</AppText>
+                  </Pressable>
+                  <Pressable style={styles.mapChoiceButton} onPress={() => chooseEncounter("run")}>
+                    <AppText style={styles.mapChoiceText}>すぐ逃げる</AppText>
+                  </Pressable>
+                </View>
+              ) : null}
             </>
           )}
           <View style={[
             styles.mapPlayer,
-            mapArea === "center" && mapStep === 1 && styles.mapPlayerWalking,
             mapArea === "left" && styles.mapPlayerLeftArea,
             mapArea === "right" && styles.mapPlayerRightArea,
-            mapArea === "top" && styles.mapPlayerTopArea,
             mapArea === "top" && mapStep > 0 && styles.mapPlayerTopEncounter,
+            mapStep === 0 && { left: `${mapPosition.x}%`, top: `${mapPosition.y}%` },
           ]}>
             <Image
               source={mapArea === "top" || (mapArea === "center" && mapStep > 0)
@@ -523,6 +613,20 @@ export default function OutsideScreen() {
             <AppText style={styles.mapMessage}>{message}</AppText>
           </View>
         </View>
+        <View style={styles.dpad}>
+          <Pressable style={[styles.dpadButton, styles.dpadUp]} onPress={() => movePlayer("up")}>
+            <AppText style={styles.dpadText}>⌃</AppText>
+          </Pressable>
+          <Pressable style={[styles.dpadButton, styles.dpadLeft]} onPress={() => movePlayer("left")}>
+            <AppText style={styles.dpadText}>‹</AppText>
+          </Pressable>
+          <Pressable style={[styles.dpadButton, styles.dpadRight]} onPress={() => movePlayer("right")}>
+            <AppText style={styles.dpadText}>›</AppText>
+          </Pressable>
+          <Pressable style={[styles.dpadButton, styles.dpadDown]} onPress={() => movePlayer("down")}>
+            <AppText style={styles.dpadText}>⌄</AppText>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -547,14 +651,57 @@ const styles = StyleSheet.create({
   mapScreen: {
     flex: 1,
     padding: 10,
+    justifyContent: "center",
     backgroundColor: "#050505",
   },
+  dpad: {
+    position: "absolute",
+    top: 18,
+    left: 18,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    backgroundColor: "rgba(0, 0, 0, 0.12)",
+  },
+  dpadButton: {
+    position: "absolute",
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dpadUp: {
+    top: 8,
+    left: 52,
+  },
+  dpadLeft: {
+    top: 52,
+    left: 8,
+  },
+  dpadRight: {
+    top: 52,
+    right: 8,
+  },
+  dpadDown: {
+    bottom: 8,
+    left: 52,
+  },
+  dpadText: {
+    color: "#fff",
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: "900",
+  },
   fullMap: {
-    flex: 1,
+    width: "100%",
+    aspectRatio: 1,
+    maxHeight: "100%",
     overflow: "hidden",
     borderWidth: 2,
     borderColor: "#fff",
-    backgroundColor: "#10351c",
+    backgroundColor: "#000",
   },
   mapBackground: {
     position: "absolute",
@@ -667,11 +814,11 @@ const styles = StyleSheet.create({
     left: "40%",
   },
   mapPlayerTopArea: {
-    top: "72%",
+    top: "71%",
     left: "47%",
   },
   mapPlayerTopEncounter: {
-    top: "48%",
+    top: "47%",
     left: "47%",
   },
   mapSuccubus: {
@@ -700,8 +847,8 @@ const styles = StyleSheet.create({
   },
   mapSuccubusSide: {
     position: "absolute",
-    left: "61%",
-    top: "36%",
+    left: "67%",
+    top: "43%",
     width: 46,
     height: 46,
     alignItems: "center",
@@ -709,8 +856,8 @@ const styles = StyleSheet.create({
   },
   exclamation: {
     position: "absolute",
-    left: "58%",
-    top: "31%",
+    left: "61%",
+    top: "39%",
     width: 24,
     height: 24,
     alignItems: "center",
@@ -724,6 +871,41 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     lineHeight: 20,
+  },
+  mapChoiceBox: {
+    position: "absolute",
+    right: 18,
+    bottom: 18,
+    left: 18,
+    gap: 6,
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "rgba(0, 0, 0, 0.78)",
+    padding: 10,
+  },
+  mapChoiceTitle: {
+    color: "#ff69b4",
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "900",
+    marginBottom: 2,
+  },
+  mapChoiceButton: {
+    borderWidth: 1,
+    borderColor: "#777",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  mapChoiceSelected: {
+    borderColor: "#a7fff1",
+    backgroundColor: "rgba(108, 180, 165, 0.45)",
+  },
+  mapChoiceText: {
+    color: "#fff",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900",
   },
   mapSpriteImage: { width: "100%", height: "100%" },
   mapHint: {
