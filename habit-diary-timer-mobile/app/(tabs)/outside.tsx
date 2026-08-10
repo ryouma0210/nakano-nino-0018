@@ -431,7 +431,7 @@ export default function OutsideScreen() {
         setBgmMode("default");
       };
     }
-    if (phase === "battle" || phase === "loss") {
+    if (phase === "battle") {
       setBgmMode("outsideBattle");
       return () => {
         stopEffect("trainingStart");
