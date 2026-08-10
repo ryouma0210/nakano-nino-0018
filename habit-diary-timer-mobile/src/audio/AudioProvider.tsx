@@ -4,7 +4,7 @@ import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
-type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideLossRhythm" | "punishmentHit" | "ejaculation" | "complete";
+type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "punishmentHit" | "ejaculation" | "complete";
 export type LoopAudioName = "earLick" | "nippleScratch";
 export type BgmMode = "default" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
@@ -53,6 +53,8 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
   const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
   const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
+  const outsideEarLick = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
+  const outsideNipple = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
   const outsideLossRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
   const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.mp4"));
@@ -79,10 +81,10 @@ export function AudioProvider({ children }: PropsWithChildren) {
       outsideBattle: outsideBattleBgm,
       outsideCharm: outsideCharmBgm,
     };
-    Object.values(bgms).forEach((player) => {
+    Object.entries(bgms).forEach(([mode, player]) => {
       player.pause();
       player.loop = true;
-      player.volume = settings.musicVolume;
+      player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
     });
     if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
       bgms[bgmMode].play();
@@ -98,17 +100,17 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   const playEffect = useCallback((name: EffectName) => {
     if (!settings?.soundEnabled) return;
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideLossRhythm, punishmentHit, ejaculation, complete }[name];
+    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEarLick, outsideNipple, outsideLossRhythm, punishmentHit, ejaculation, complete }[name];
     player.loop = name === "preparationLoop" || name === "defeatLoop" || name === "trainingStart" || name === "outsideLossRhythm";
     player.volume = settings.soundVolume;
     player.seekTo(0).then(() => player.play()).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, outsideLossRhythm, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
+  }, [button, complete, defeatLoop, dialogue, ejaculation, outsideEarLick, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const stopEffect = useCallback((name: EffectName) => {
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideLossRhythm, punishmentHit, ejaculation, complete }[name];
+    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEarLick, outsideNipple, outsideLossRhythm, punishmentHit, ejaculation, complete }[name];
     player.pause();
     player.seekTo(0).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, outsideLossRhythm, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+  }, [button, complete, defeatLoop, dialogue, ejaculation, outsideEarLick, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   const stopLoopAudio = useCallback(() => {
     earLickLoop.pause();

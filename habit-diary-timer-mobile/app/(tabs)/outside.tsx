@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Image } from "expo-image";
 import { AppText } from "@/components/AppText";
@@ -14,6 +14,7 @@ type SuccubusStage = "beginner" | "middle" | "queen";
 type LossEventKind = "tail" | "chest" | "back";
 type BattleCommand = "attack" | "defend" | LossEventKind | "run";
 type BattleMenu = "root" | "fight" | "surrender";
+type TemptationEffect = "kiss" | "heart" | null;
 type BattleStatus = {
   hp: number;
   mp: number;
@@ -49,6 +50,9 @@ const pixelSprites = {
   playerBack: require("../../assets/characters/outside-pixels/player-back-dot.png"),
   door: require("../../assets/characters/outside-pixels/door-dot.png"),
   slime: require("../../assets/characters/outside-pixels/slime-dot.png"),
+  heartMark: require("../../assets/ui/outside-heart-mark.png"),
+  kissMark: require("../../assets/ui/outside-kiss-mark.png"),
+  crystal: require("../../assets/ui/outside-crystal.png"),
   succubus: {
     beginner: require("../../assets/characters/outside-events/beginner-battle.png"),
     middle: require("../../assets/characters/outside-events/middle-battle.png"),
@@ -381,6 +385,7 @@ export default function OutsideScreen() {
     "館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。",
   );
   const [battleMenu, setBattleMenu] = useState<BattleMenu>("root");
+  const [temptationEffect, setTemptationEffect] = useState<TemptationEffect>(null);
   const [lossEventIndex, setLossEventIndex] = useState(0);
   const [lossSummary, setLossSummary] = useState("");
   const [battle, setBattle] = useState<BattleStatus>({
@@ -416,9 +421,10 @@ export default function OutsideScreen() {
   useEffect(() => {
     if (phase === "loss") {
       setBgmMode("outsideCharm");
-      playEffect("outsideLossRhythm");
       return () => {
         stopEffect("trainingStart");
+        stopEffect("outsideEarLick");
+        stopEffect("outsideNipple");
         stopEffect("outsideLossRhythm");
         stopEffect("ejaculation");
         setBgmMode("default");
@@ -428,6 +434,8 @@ export default function OutsideScreen() {
       setBgmMode("outsideCharm");
       return () => {
         stopEffect("trainingStart");
+        stopEffect("outsideEarLick");
+        stopEffect("outsideNipple");
         setBgmMode("default");
       };
     }
@@ -435,13 +443,19 @@ export default function OutsideScreen() {
       setBgmMode("outsideBattle");
       return () => {
         stopEffect("trainingStart");
+        stopEffect("outsideEarLick");
+        stopEffect("outsideNipple");
         setBgmMode("default");
       };
     }
     setBgmMode("default");
     stopEffect("trainingStart");
+    stopEffect("outsideEarLick");
+    stopEffect("outsideNipple");
     return () => {
       stopEffect("trainingStart");
+      stopEffect("outsideEarLick");
+      stopEffect("outsideNipple");
       setBgmMode("default");
     };
   }, [charmTurns, phase, playEffect, setBgmMode, stopEffect]);
@@ -454,12 +468,12 @@ export default function OutsideScreen() {
     return () => clearInterval(id);
   }, [mapArea, phase]);
 
-  function startEncounter(openingMessage?: string, initialCharmTurns = 0) {
+  function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
     setPhase("battle");
     setBattleMenu("root");
     setMapArea("center");
     setMapStep(2);
-    setCharmTurns(initialCharmTurns);
+    setCharmTurns(initialCharmTurns ?? charmTurns);
     setBattle({
       hp: playerHp,
       mp: playerMp,
@@ -610,6 +624,11 @@ export default function OutsideScreen() {
     setMessage(`紫クリスタルでサキュバスLvを調整した。\n現在 ${succubusForLevel(level, nextAbsorb).title} Lv.${succubusForLevel(level, nextAbsorb).level}`);
   }
 
+  function activateCrystalCharm() {
+    setCharmTurns(3);
+    setMessage("紫クリスタルの光を浴びた。\n魅了モードになりました。戦闘時は逃げられません。");
+  }
+
   const defeatSlime = useCallback((slimeId: number) => {
     if (phase !== "explore" || mapArea !== "right") return;
     if (dailyOutsidePoints >= 100) {
@@ -682,13 +701,15 @@ export default function OutsideScreen() {
     const today = toDateKey();
     const absorbedLevel = Math.max(0, level - 1);
     const nextAbsorbBonus = Math.min(180, succubusAbsorbBonus + absorbedLevel);
+    const nextSuccubusLevel = succubusForLevel(level, nextAbsorbBonus).level;
     setLossEventIndex(0);
     setBattleMenu("root");
+    setTemptationEffect(null);
     setPhase("loss");
     setCharmTurns(0);
     setBattle((current) => ({ ...current, hp: 0, mp: Math.max(0, current.mp - 100), lastLossKind: kind }));
     setLossSummary(
-      `射精を1回奪われた。\nLv.${absorbedLevel} / MP100 / Pt50を吸収された。\n現在：Lv.1 / HP1 / MP1`,
+      `射精を1回奪われた。\nLv.${absorbedLevel} / MP100 / Pt50を吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1`,
     );
     setSuccubusAbsorbBonus(nextAbsorbBonus);
     saveSetting(succubusAbsorbDateKey, today);
@@ -705,6 +726,20 @@ export default function OutsideScreen() {
   function randomLossKind(): LossEventKind {
     const events: LossEventKind[] = ["tail", "chest", "back"];
     return events[Math.floor(Math.random() * events.length)] ?? "tail";
+  }
+
+  function playRandomTemptationEffect() {
+    stopEffect("outsideEarLick");
+    stopEffect("outsideNipple");
+    if (Math.random() < 0.5) {
+      setTemptationEffect("kiss");
+      setCharmTurns(3);
+      playEffect("outsideEarLick");
+      return "耳舐め";
+    }
+    setTemptationEffect("heart");
+    playEffect("outsideNipple");
+    return "乳首責め";
   }
 
   function resolveCommand(command: BattleCommand) {
@@ -744,7 +779,8 @@ export default function OutsideScreen() {
         applyGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind]);
         return;
       }
-      setMessage(`身構えて誘惑を受け流した。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP / MP+8`);
+      const effectLabel = playRandomTemptationEffect();
+      setMessage(`身構えて誘惑を受け流した。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP / MP+8\n${effectLabel}の誘惑が残っている。`);
       return;
     }
 
@@ -778,8 +814,9 @@ export default function OutsideScreen() {
       return;
     }
 
+    const effectLabel = playRandomTemptationEffect();
     setMessage(
-      `${battleLines[succubus.stage].attack}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP`,
+      `${battleLines[succubus.stage].attack}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が襲いかかる。`,
     );
   }
 
@@ -788,6 +825,11 @@ export default function OutsideScreen() {
     setLossEventIndex((current) => {
       if (current >= 19) return current;
       const next = current + 1;
+      if (next === 5) {
+        stopEffect("outsideEarLick");
+        stopEffect("outsideNipple");
+        playEffect("outsideLossRhythm");
+      }
       if (next === 19) {
         stopEffect("outsideLossRhythm");
         playEffect("ejaculation");
@@ -799,6 +841,7 @@ export default function OutsideScreen() {
   function resetBattle() {
     setPhase("explore");
     setBattleMenu("root");
+    setTemptationEffect(null);
     setMapArea("center");
     setMapStep(0);
     setMapPosition(startPositions.center);
@@ -825,82 +868,100 @@ export default function OutsideScreen() {
             </AppText>
           </View>
 
-          <View style={styles.battleStage}>
+          <View style={[styles.battleStage, phase === "loss" && styles.lossBattleStage]}>
             {phase === "loss" ? (
-              <Pressable style={styles.lossStage} onPress={advanceLossScene}>
-                <Image
-                  source={lossEventImages[lossImageIndex] ?? lossEventImages[0]}
-                  style={styles.lossImage}
-                  contentFit="contain"
-                />
-                <AppText style={styles.lossImageLabel}>
-                  {lossEventIndex + 1} / 20
-                </AppText>
-              </Pressable>
+              <>
+                <Pressable style={styles.lossStage} onPress={advanceLossScene}>
+                  <Image
+                    source={lossEventImages[lossImageIndex] ?? lossEventImages[0]}
+                    style={styles.lossImage}
+                    contentFit="contain"
+                  />
+                  <AppText style={styles.lossImageLabel}>
+                    {lossEventIndex + 1} / 20
+                  </AppText>
+                </Pressable>
+                <Pressable style={styles.lossMessageBox} onPress={advanceLossScene}>
+                  <View style={styles.rowBetween}>
+                    <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
+                    <AppText style={styles.phase}>LOSS</AppText>
+                  </View>
+                  <AppText style={[styles.message, styles.gameOverMessage]}>{lossMessage}</AppText>
+                  {lossEventIndex < 19 ? <AppText style={styles.tapGuide}>タップ ▼</AppText> : null}
+                </Pressable>
+              </>
             ) : (
               <>
+                <View style={styles.enemyOverlay}>
+                  <AppText style={[styles.enemyOverlayName, { color: succubus.color }]}>
+                    {succubus.title} Lv.{succubus.level}
+                  </AppText>
+                  <AppText style={styles.enemyOverlayHp}>HP {Math.round(battle.enemyHp)}</AppText>
+                </View>
                 <View style={styles.enemyLarge}>
                   <Image
                     source={pixelSprites.succubus[succubus.stage]}
                     style={styles.enemyLargeImage}
                     contentFit="contain"
                   />
-                  <AppText style={[styles.enemyLargeName, { color: succubus.color }]}>
-                    {succubus.title} Lv.{succubus.level}
-                  </AppText>
                 </View>
-                <View style={styles.playerLarge}>
-                  <Image source={pixelSprites.playerBack} style={styles.playerLargeImage} contentFit="contain" />
-                  <AppText style={styles.playerLargeName}>YOU Lv.{level}</AppText>
+                {temptationEffect ? (
+                  <Image
+                    source={temptationEffect === "kiss" ? pixelSprites.kissMark : pixelSprites.heartMark}
+                    style={styles.temptationEffectMark}
+                    contentFit="contain"
+                  />
+                ) : null}
+                <View style={styles.battleStageMessage}>
+                  <View style={styles.rowBetween}>
+                    <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
+                    <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
+                  </View>
+                  {charmTurns > 0 ? (
+                    <AppText style={styles.charmText}>CHARM：逃亡失敗 あと{charmTurns}ターン</AppText>
+                  ) : null}
+                  <AppText style={styles.message}>{message}</AppText>
+                  <AppText style={styles.tapGuide}>タップ ▼</AppText>
                 </View>
               </>
             )}
           </View>
 
-          <Pressable
-            style={styles.battleMessageBox}
-            onPress={phase === "loss" ? advanceLossScene : undefined}
-          >
-            <View style={styles.rowBetween}>
-              <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
-              <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
-            </View>
-            {charmTurns > 0 ? (
-              <AppText style={styles.charmText}>CHARM：逃亡失敗 あと{charmTurns}ターン</AppText>
-            ) : null}
-            <AppText style={[styles.message, phase === "loss" && styles.gameOverMessage]}>
-              {phase === "loss" ? lossMessage : message}
-            </AppText>
-          </Pressable>
-
-          <View style={styles.battlePanel}>
-            <Gauge label="HP" value={battle.hp} color="#7cb342" />
-            <Gauge label="MP" value={battle.mp} color="#29b6f6" />
-            <Gauge label="サキュバスHP" value={battle.enemyHp} color={succubus.color} />
-          </View>
-
           {phase === "battle" ? (
-            <View style={styles.battleCommands}>
-              {battleMenu === "root" ? (
-                <>
-                  <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} />
-                  <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
-                  <PrimaryButton title="逃げる" tone="secondary" onPress={() => resolveCommand("run")} />
-                </>
-              ) : battleMenu === "fight" ? (
-                <>
-                  <PrimaryButton title="攻撃" onPress={() => resolveCommand("attack")} />
-                  <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
-                  <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
-                </>
-              ) : (
-                <>
-                  <PrimaryButton title="胸" tone="defeat" onPress={() => resolveCommand("chest")} />
-                  <PrimaryButton title="お尻" tone="defeat" onPress={() => resolveCommand("back")} />
-                  <PrimaryButton title="尻尾" tone="defeat" onPress={() => resolveCommand("tail")} />
-                  <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
-                </>
-              )}
+            <View style={styles.battleBottomRow}>
+              <View style={styles.commandPanel}>
+                <AppText style={styles.panelTitle}>選択</AppText>
+                <View style={styles.battleCommands}>
+                  {battleMenu === "root" ? (
+                    <>
+                      <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} />
+                      <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
+                      <PrimaryButton title="逃げる" tone="secondary" onPress={() => resolveCommand("run")} />
+                    </>
+                  ) : battleMenu === "fight" ? (
+                    <>
+                      <PrimaryButton title="攻撃" onPress={() => resolveCommand("attack")} />
+                      <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
+                      <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
+                    </>
+                  ) : (
+                    <>
+                      <PrimaryButton title="胸" tone="defeat" onPress={() => resolveCommand("chest")} />
+                      <PrimaryButton title="お尻" tone="defeat" onPress={() => resolveCommand("back")} />
+                      <PrimaryButton title="尻尾" tone="defeat" onPress={() => resolveCommand("tail")} />
+                      <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
+                    </>
+                  )}
+                </View>
+              </View>
+              <View style={styles.playerStatusPanel}>
+                <AppText style={styles.panelTitle}>自分</AppText>
+                <AppText style={styles.statusBattleBig}>HP {Math.round(battle.hp)}</AppText>
+                <AppText style={styles.statusBattleBig}>MP {Math.round(battle.mp)}</AppText>
+                <AppText style={charmTurns > 0 ? styles.charmedMark : styles.normalMark}>
+                  {charmTurns > 0 ? "魅了中" : "正常"}
+                </AppText>
+              </View>
             </View>
           ) : (
             <View style={styles.battleCommands}>
@@ -930,33 +991,11 @@ export default function OutsideScreen() {
               <Pressable style={styles.mapRightTap} onPress={() => moveMap("right")} />
               <Pressable style={styles.mapForwardTap} onPress={advanceMap} />
               <Pressable style={styles.mapDoorTap} onPress={() => router.replace("/(tabs)")} />
-              <Pressable style={styles.mapCrystalTap} onPress={() => setCrystalOpen((current) => !current)}>
+              <Pressable style={styles.mapCrystalTap} onPress={() => setCrystalOpen(true)}>
                 <View style={[styles.mapCrystal, { transform: [{ rotate: `${crystalRotation}deg` }] }]}>
-                  <AppText style={styles.mapCrystalText}>◆</AppText>
+                  <Image source={pixelSprites.crystal} style={styles.mapCrystalImage} contentFit="contain" />
                 </View>
               </Pressable>
-              {crystalOpen ? (
-                <View style={styles.crystalChoiceBox}>
-                  <View style={styles.rowBetween}>
-                    <AppText style={styles.crystalChoiceTitle}>紫クリスタル</AppText>
-                    <AppText style={styles.crystalChoiceMeta}>{succubus.title} Lv.{succubus.level}</AppText>
-                  </View>
-                  <View style={styles.crystalButtons}>
-                    <Pressable style={styles.crystalButton} onPress={() => adjustPlayerLevel(10)}>
-                      <AppText style={styles.crystalButtonText}>主人公 +10</AppText>
-                    </Pressable>
-                    <Pressable style={styles.crystalButton} onPress={() => adjustPlayerLevel(-10)}>
-                      <AppText style={styles.crystalButtonText}>主人公 -10</AppText>
-                    </Pressable>
-                    <Pressable style={styles.crystalButton} onPress={() => adjustSuccubusLevel(10)}>
-                      <AppText style={styles.crystalButtonText}>サキュバス +10</AppText>
-                    </Pressable>
-                    <Pressable style={styles.crystalButton} onPress={() => adjustSuccubusLevel(-10)}>
-                      <AppText style={styles.crystalButtonText}>サキュバス -10</AppText>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
             </>
           ) : mapArea === "left" ? (
             <>
@@ -1050,20 +1089,68 @@ export default function OutsideScreen() {
           </View>
         </View>
       </View>
-    </View>
-  );
-}
+      <Modal
+        visible={crystalOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setCrystalOpen(false)}
+      >
+        <View style={styles.crystalModalBackdrop}>
+          <View style={styles.crystalModal}>
+            <AppText style={styles.crystalModalKicker}>PURPLE CRYSTAL</AppText>
+            <AppText style={styles.crystalModalTitle}>紫クリスタル</AppText>
+            <AppText style={styles.crystalModalHelp}>
+              レベル調整と魅了モードを設定できます。
+            </AppText>
 
-function Gauge({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <View style={styles.gaugeRow}>
-      <View style={styles.gaugeHeader}>
-        <AppText style={styles.gaugeLabel}>{label}</AppText>
-        <AppText style={styles.gaugeValue}>{Math.round(value)}</AppText>
-      </View>
-      <View style={styles.gaugeTrack}>
-        <View style={[styles.gaugeFill, { width: `${clamp(value)}%`, backgroundColor: color }]} />
-      </View>
+            <View style={styles.crystalSettingRow}>
+              <View style={styles.crystalSettingText}>
+                <AppText style={styles.crystalSettingLabel}>自分のレベル</AppText>
+                <AppText style={styles.crystalSettingValue}>現在 Lv.{level}</AppText>
+              </View>
+              <View style={styles.crystalStepButtons}>
+                <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(-10)}>
+                  <AppText style={styles.crystalStepButtonText}>-10</AppText>
+                </Pressable>
+                <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(10)}>
+                  <AppText style={styles.crystalStepButtonText}>+10</AppText>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.crystalSettingRow}>
+              <View style={styles.crystalSettingText}>
+                <AppText style={styles.crystalSettingLabel}>サキュバスのレベル</AppText>
+                <AppText style={[styles.crystalSettingValue, { color: succubus.color }]}>
+                  現在 Lv.{succubus.level}
+                </AppText>
+              </View>
+              <View style={styles.crystalStepButtons}>
+                <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(-10)}>
+                  <AppText style={styles.crystalStepButtonText}>-10</AppText>
+                </Pressable>
+                <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(10)}>
+                  <AppText style={styles.crystalStepButtonText}>+10</AppText>
+                </Pressable>
+              </View>
+            </View>
+
+            <Pressable style={[styles.crystalCharmButton, charmTurns > 0 && styles.crystalCharmButtonActive]} onPress={activateCrystalCharm}>
+              <AppText style={styles.crystalCharmButtonText}>
+                {charmTurns > 0 ? `魅了モード中：あと${charmTurns}ターン` : "魅了モードになる"}
+              </AppText>
+            </Pressable>
+            <AppText style={styles.crystalModalNote}>
+              ※魅了モードになると、戦闘時に逃げられなくなります。
+            </AppText>
+
+            <Pressable style={styles.crystalCloseButton} onPress={() => setCrystalOpen(false)}>
+              <AppText style={styles.crystalCloseButtonText}>閉じる</AppText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1314,41 +1401,124 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   mapCrystal: {
-    width: 42,
-    height: 42,
+    width: 54,
+    height: 54,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-    backgroundColor: "rgba(117, 34, 186, 0.88)",
   },
-  mapCrystalText: {
-    color: "#d9a7ff",
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "900",
+  mapCrystalImage: { width: "100%", height: "100%" },
+  crystalModalBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
+    padding: 20,
   },
-  crystalChoiceBox: {
-    position: "absolute",
-    right: 14,
-    bottom: 14,
-    left: 14,
-    gap: 8,
+  crystalModal: {
+    width: "100%",
+    maxWidth: 440,
+    gap: 12,
     borderWidth: 2,
     borderColor: "#b967ff",
-    backgroundColor: "rgba(0, 0, 0, 0.86)",
-    padding: 10,
+    backgroundColor: "#08020f",
+    padding: 18,
   },
-  crystalChoiceTitle: {
+  crystalModalKicker: {
+    color: "#d9a7ff",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
+  crystalModalTitle: {
+    color: "#fff",
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
+  crystalModalHelp: {
+    color: "#cfcfcf",
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  crystalSettingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.28)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    padding: 12,
+  },
+  crystalSettingText: {
+    flex: 1,
+    gap: 4,
+  },
+  crystalSettingLabel: {
+    color: "#fff",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+  crystalSettingValue: {
     color: "#d9a7ff",
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "900",
   },
-  crystalChoiceMeta: {
+  crystalStepButtons: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  crystalStepButton: {
+    minWidth: 52,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  crystalStepButtonText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
+    fontWeight: "900",
+  },
+  crystalCharmButton: {
+    borderWidth: 2,
+    borderColor: "#ff69b4",
+    backgroundColor: "#2c0626",
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  crystalCharmButtonActive: {
+    backgroundColor: "#d92078",
+  },
+  crystalCharmButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
+  crystalModalNote: {
+    color: "#ffb6d8",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  crystalCloseButton: {
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "#000",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  crystalCloseButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: "900",
   },
   mapHintTitle: {
@@ -1403,25 +1573,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "900",
   },
-  crystalButtons: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-  },
-  crystalButton: {
-    minWidth: 48,
-    borderWidth: 1,
-    borderColor: "#fff",
-    backgroundColor: "#000",
-    paddingVertical: 5,
-    alignItems: "center",
-  },
-  crystalButtonText: {
-    color: "#fff",
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "900",
-  },
   mapMessageBox: {
     position: "absolute",
     right: 12,
@@ -1442,7 +1593,7 @@ const styles = StyleSheet.create({
   },
   battleScreen: {
     flex: 1,
-    gap: 10,
+    gap: 8,
     padding: 12,
     backgroundColor: "#050505",
   },
@@ -1466,23 +1617,59 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   battleStage: {
-    flex: 1,
-    minHeight: 240,
+    flex: 1.5,
+    minHeight: 380,
     overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "#fff",
+    borderWidth: 0,
     backgroundColor: "#140914",
+  },
+  lossBattleStage: {
+    flex: 1,
+    minHeight: 540,
+    gap: 8,
+    borderWidth: 0,
+    backgroundColor: "#050505",
+  },
+  enemyOverlay: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    left: 12,
+    zIndex: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.75)",
+    backgroundColor: "rgba(0,0,0,0.72)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  enemyOverlayName: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+  enemyOverlayHp: {
+    color: "#fff",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900",
   },
   enemyLarge: {
     position: "absolute",
-    top: 16,
-    right: 12,
-    left: 12,
+    top: 58,
+    right: 8,
+    bottom: 128,
+    left: 8,
     alignItems: "center",
+    justifyContent: "center",
   },
   enemyLargeImage: {
-    width: "62%",
-    height: 170,
+    width: "88%",
+    height: "100%",
   },
   enemyLargeName: {
     fontSize: 13,
@@ -1507,8 +1694,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 8,
+    padding: 0,
     overflow: "hidden",
+    borderWidth: 0,
     backgroundColor: "#000",
   },
   lossImage: {
@@ -1533,6 +1721,35 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  battleStageMessage: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    left: 12,
+    zIndex: 4,
+    minHeight: 98,
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "rgba(0,0,0,0.78)",
+    padding: 12,
+    gap: 6,
+  },
+  temptationEffectMark: {
+    position: "absolute",
+    top: 72,
+    right: 18,
+    zIndex: 5,
+    width: 82,
+    height: 82,
+  },
+  lossMessageBox: {
+    minHeight: 150,
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "#111",
+    padding: 12,
+    gap: 8,
+  },
   battleMessageName: {
     color: "#ff69b4",
     fontSize: 12,
@@ -1547,6 +1764,63 @@ const styles = StyleSheet.create({
   },
   battleCommands: {
     gap: 8,
+  },
+  battleBottomRow: {
+    flex: 0.75,
+    minHeight: 210,
+    flexDirection: "row",
+    gap: 10,
+  },
+  commandPanel: {
+    flex: 1.1,
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "#111",
+    padding: 10,
+    gap: 8,
+  },
+  playerStatusPanel: {
+    flex: 0.9,
+    borderWidth: 2,
+    borderColor: "#fff",
+    backgroundColor: "#111",
+    padding: 10,
+    gap: 10,
+  },
+  panelTitle: {
+    color: "#ff69b4",
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
+  statusBattleBig: {
+    color: "#fff",
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
+  charmedMark: {
+    alignSelf: "flex-start",
+    color: "#ff69b4",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+    borderWidth: 1,
+    borderColor: "#ff69b4",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  normalMark: {
+    alignSelf: "flex-start",
+    color: "#aaa",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+    borderWidth: 1,
+    borderColor: "#555",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   rowBetween: {
     flexDirection: "row",
@@ -1563,6 +1837,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   message: { color: "#fff", fontSize: 15, lineHeight: 24, fontWeight: "800" },
+  tapGuide: {
+    alignSelf: "flex-end",
+    color: "#aaa",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "900",
+  },
   gameOverMessage: {
     color: "#d9202a",
     fontWeight: "900",
