@@ -11,10 +11,11 @@ import { toDateKey, toDateTimeKey } from "@/utils/date";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type SuccubusStage = "beginner" | "middle" | "queen";
-type LossEventKind = "tail" | "chest" | "back";
+type LossEventKind = "tail" | "chest" | "back" | "foot";
 type BattleCommand = "attack" | "defend" | LossEventKind | "run";
 type BattleMenu = "root" | "fight" | "surrender";
 type TemptationEffect = "kiss" | "heart" | null;
+type BattleEnemyImage = "battle" | LossEventKind;
 type BattleStatus = {
   hp: number;
   mp: number;
@@ -63,16 +64,19 @@ const pixelSprites = {
       tail: require("../../assets/characters/outside-events/beginner-tail.png"),
       chest: require("../../assets/characters/outside-events/beginner-chest.png"),
       back: require("../../assets/characters/outside-events/beginner-overlook.png"),
+      foot: require("../../assets/characters/outside-events/beginner-foot_01.jpg"),
     },
     middle: {
       tail: require("../../assets/characters/outside-events/middle-tail.png"),
       chest: require("../../assets/characters/outside-events/middle-chest.png"),
       back: require("../../assets/characters/outside-events/middle-overlook.png"),
+      foot: require("../../assets/characters/outside-events/middle-foot_01.jpg"),
     },
     queen: {
       tail: require("../../assets/characters/outside-events/queen-tail.png"),
       chest: require("../../assets/characters/outside-events/queen-chest.png"),
       back: require("../../assets/characters/outside-events/queen-overlook.png"),
+      foot: require("../../assets/characters/outside-events/queen-foot_01.jpg"),
     },
   },
   eventStages: {
@@ -80,42 +84,66 @@ const pixelSprites = {
       tail: [
         require("../../assets/characters/outside-events/beginner-tail.png"),
         require("../../assets/characters/outside-events/beginner-tail.png"),
+        require("../../assets/characters/outside-events/beginner-tail.png"),
       ],
       chest: [
+        require("../../assets/characters/outside-events/beginner-chest_01.jpg"),
         require("../../assets/characters/outside-events/beginner-chest_02.jpg"),
         require("../../assets/characters/outside-events/beginner-chest_03.jpg"),
       ],
       back: [
+        require("../../assets/characters/outside-events/beginner-overlook_01.jpg"),
         require("../../assets/characters/outside-events/beginner-overlook_02.jpg"),
-        require("../../assets/characters/outside-events/beginner-overlook.png"),
+        require("../../assets/characters/outside-events/beginner-overlook_03.jpg"),
+      ],
+      foot: [
+        require("../../assets/characters/outside-events/beginner-foot_01.jpg"),
+        require("../../assets/characters/outside-events/beginner-foot_02.jpg"),
+        require("../../assets/characters/outside-events/beginner-foot_03.jpg"),
       ],
     },
     middle: {
       tail: [
         require("../../assets/characters/outside-events/middle-tail.png"),
         require("../../assets/characters/outside-events/middle-tail.png"),
+        require("../../assets/characters/outside-events/middle-tail.png"),
       ],
       chest: [
+        require("../../assets/characters/outside-events/middle-chest_01.jpg"),
         require("../../assets/characters/outside-events/middle-chest_02.jpg"),
         require("../../assets/characters/outside-events/middle-chest_03.jpg"),
       ],
       back: [
+        require("../../assets/characters/outside-events/middle-overlook_01.jpg"),
         require("../../assets/characters/outside-events/middle-overlook_02.jpg"),
-        require("../../assets/characters/outside-events/middle-overlook.png"),
+        require("../../assets/characters/outside-events/middle-overlook_03.jpg"),
+      ],
+      foot: [
+        require("../../assets/characters/outside-events/middle-foot_01.jpg"),
+        require("../../assets/characters/outside-events/middle-foot_02.jpg"),
+        require("../../assets/characters/outside-events/middle-foot_03.jpg"),
       ],
     },
     queen: {
       tail: [
         require("../../assets/characters/outside-events/queen-tail.png"),
         require("../../assets/characters/outside-events/queen-tail.png"),
+        require("../../assets/characters/outside-events/queen-tail.png"),
       ],
       chest: [
+        require("../../assets/characters/outside-events/queen-chest_01.jpg"),
         require("../../assets/characters/outside-events/queen-chest_02.jpg"),
         require("../../assets/characters/outside-events/queen-chest_03.jpg"),
       ],
       back: [
+        require("../../assets/characters/outside-events/queen-overlook_01.jpg"),
         require("../../assets/characters/outside-events/queen-overlook_02.jpg"),
-        require("../../assets/characters/outside-events/queen-overlook.png"),
+        require("../../assets/characters/outside-events/queen-overlook_03.jpg"),
+      ],
+      foot: [
+        require("../../assets/characters/outside-events/queen-foot_01.jpg"),
+        require("../../assets/characters/outside-events/queen-foot_02.jpg"),
+        require("../../assets/characters/outside-events/queen-foot_03.jpg"),
       ],
     },
   },
@@ -137,6 +165,7 @@ const battleLines: Record<SuccubusStage, {
       tail: "尻尾の誘惑に負けた。細い尻尾が絡みつき、力が抜けていく。",
       chest: "胸元の誘惑に負けた。甘い香りで頭がぼんやりしていく。",
       back: "お尻の誘惑に負けた。見下ろす笑顔に逆らえなくなった。",
+      foot: "足裏の誘惑に負けた。踏みつけるような視線に、抵抗心が削られていく。",
     },
   },
   middle: {
@@ -148,6 +177,7 @@ const battleLines: Record<SuccubusStage, {
       tail: "尻尾の誘惑に負けた。絡め取られた瞬間、抵抗する力がほどけていく。",
       chest: "胸元の誘惑に負けた。近すぎる距離に、思考が甘く溶けていく。",
       back: "お尻の誘惑に負けた。逃げ道を塞がれ、完全にペースを奪われた。",
+      foot: "足裏の誘惑に負けた。余裕の笑みで踏み込まれ、逃げる気力を奪われた。",
     },
   },
   queen: {
@@ -159,6 +189,7 @@ const battleLines: Record<SuccubusStage, {
       tail: "女王の尻尾の誘惑に負けた。抗う前に、主導権ごと奪われた。",
       chest: "女王の胸元の誘惑に負けた。呼吸すら彼女のリズムに支配された。",
       back: "女王のお尻の誘惑に負けた。見下ろされるだけで、敗北を理解した。",
+      foot: "女王の足裏の誘惑に負けた。見下ろされた瞬間、勝敗はもう決まっていた。",
     },
   },
 };
@@ -173,6 +204,7 @@ const lossLabels: Record<LossEventKind, string> = {
   tail: "尻尾",
   chest: "おっぱい",
   back: "お尻",
+  foot: "足裏",
 };
 
 const lossEventComments: Record<LossEventKind, string[]> = {
@@ -241,6 +273,28 @@ const lossEventComments: Record<LossEventKind, string[]> = {
     "完全に視線を奪われ、逃げる意志が消える。",
     "負けを認めるしかないところまで追い込まれた。",
     "お尻の誘惑に完全敗北した。",
+  ],
+  foot: [
+    "足音が近づくたび、胸の奥が嫌なほど跳ねた。",
+    "見下ろされる視線に、反射的に一歩下がってしまう。",
+    "サキュバスは足先で逃げ道をなぞり、楽しそうに笑った。",
+    "踏み込まれるだけで、剣を握る手が弱くなる。",
+    "足裏の気配が近づき、抵抗する意思が揺らいでいく。",
+    "近すぎる距離に、呼吸の仕方を忘れそうになる。",
+    "サキュバスは余裕の表情で、こちらの反応を観察している。",
+    "逃げようとしても、足元から力が抜けていく。",
+    "踏みつけられるような圧に、判断が鈍っていく。",
+    "屈辱と甘い魔力が混ざり、頭の中が熱くなる。",
+    "もう真正面から見返せない。視線が足元へ落ちてしまう。",
+    "サキュバスは勝ちを確信したように、ゆっくり距離を詰めた。",
+    "足先の動きに合わせて、心まで誘導されていく。",
+    "反撃しようとしても、体が少しも前へ出ない。",
+    "近づくたびに、抵抗心が薄く削られていく。",
+    "情けないほど、足元の魔力に捕まってしまった。",
+    "サキュバスの声が甘く響き、敗北感が濃くなる。",
+    "最後の意地まで、静かに踏み砕かれていく。",
+    "もう逃げられない。足元から完全に支配された。",
+    "足裏の誘惑に完全敗北した。",
   ],
 };
 
@@ -385,7 +439,9 @@ export default function OutsideScreen() {
     "館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。",
   );
   const [battleMenu, setBattleMenu] = useState<BattleMenu>("root");
+  const [battleAwaitingChoice, setBattleAwaitingChoice] = useState(false);
   const [temptationEffect, setTemptationEffect] = useState<TemptationEffect>(null);
+  const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
   const [lossEventIndex, setLossEventIndex] = useState(0);
   const [lossSummary, setLossSummary] = useState("");
   const [battle, setBattle] = useState<BattleStatus>({
@@ -402,11 +458,15 @@ export default function OutsideScreen() {
   const lossEventImages = useMemo(() => {
     return pixelSprites.eventStages[succubus.stage][battle.lastLossKind];
   }, [battle.lastLossKind, succubus.stage]);
-  const lossImageIndex = lossEventIndex < 10 ? 0 : 1;
+  const battleEnemyImageSource = useMemo(() => {
+    if (battleEnemyImage === "battle") return pixelSprites.succubus[succubus.stage];
+    return pixelSprites.events[succubus.stage][battleEnemyImage];
+  }, [battleEnemyImage, succubus.stage]);
+  const lossImageIndex = lossEventIndex < 5 ? 0 : lossEventIndex < 15 ? 1 : 2;
   const lossMessage = phase === "loss"
     ? [
         lossEventComments[battle.lastLossKind][lossEventIndex] ?? lossEventComments[battle.lastLossKind][0],
-        lossEventIndex < 19 ? "タップして次へ" : lossSummary,
+        lossEventIndex >= 19 ? lossSummary : "",
       ].filter(Boolean).join("\n")
     : message;
   const mapSource =
@@ -463,14 +523,21 @@ export default function OutsideScreen() {
   useEffect(() => {
     if (phase !== "explore" || mapArea !== "center") return;
     const id = setInterval(() => {
-      setCrystalRotation((current) => (current + 45) % 360);
-    }, 380);
+      setCrystalRotation((current) => (current + 10) % 360);
+    }, 80);
     return () => clearInterval(id);
   }, [mapArea, phase]);
+
+  function openCrystalSettings() {
+    setMessage("");
+    setCrystalOpen(true);
+  }
 
   function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
     setPhase("battle");
     setBattleMenu("root");
+    setBattleAwaitingChoice(false);
+    setBattleEnemyImage("battle");
     setMapArea("center");
     setMapStep(2);
     setCharmTurns(initialCharmTurns ?? charmTurns);
@@ -529,6 +596,11 @@ export default function OutsideScreen() {
     if (direction === "right") next.x += step;
 
     if (mapArea === "center") {
+      if (isNear(next, { x: 48, y: 52 }, 9)) {
+        setMapPosition({ x: 48, y: 52 });
+        openCrystalSettings();
+        return;
+      }
       if (next.y <= 18) {
         moveMap("top");
         return;
@@ -575,7 +647,16 @@ export default function OutsideScreen() {
   function exploreTopArea() {
     if (phase !== "explore" || mapArea !== "top") return;
     setMapStep(1);
-    setMessage("！\n木の物陰にいたサキュバスに呼び止められた。どう返す？");
+    setMessage("木の物陰にいたサキュバスに呼び止められた。");
+  }
+
+  function handleMapMessagePress() {
+    if (phase === "explore" && mapArea === "top" && mapStep === 1) {
+      setMapStep(2);
+      setMessage("");
+      return;
+    }
+    setMessage("");
   }
 
   function chooseEncounter(choice: "resist" | "listen" | "run") {
@@ -588,7 +669,7 @@ export default function OutsideScreen() {
       return;
     }
     if (choice === "listen") {
-      startEncounter("少しだけ声を聞いてしまった。胸の奥が甘く揺れる。", 3);
+      startEncounter("少しだけ声を聞いてしまった。胸の奥が甘く揺れる。", 1);
       return;
     }
     startEncounter("呼び止める声を振り払い、戦闘態勢に入った。");
@@ -613,7 +694,7 @@ export default function OutsideScreen() {
   function adjustPlayerLevel(delta: number) {
     const nextLevel = Math.max(1, Math.min(100, level + delta));
     savePlayerStats(nextLevel, playerHp, playerMp);
-    setMessage(`紫クリスタルで主人公Lvを調整した。\n現在 Lv.${nextLevel}`);
+    setMessage(`設定で主人公Lvを調整した。\n現在 Lv.${nextLevel}`);
   }
 
   function adjustSuccubusLevel(delta: number) {
@@ -621,12 +702,12 @@ export default function OutsideScreen() {
     setSuccubusAbsorbBonus(nextAbsorb);
     saveSetting(succubusAbsorbKey, String(nextAbsorb));
     saveSetting(succubusAbsorbDateKey, toDateKey());
-    setMessage(`紫クリスタルでサキュバスLvを調整した。\n現在 ${succubusForLevel(level, nextAbsorb).title} Lv.${succubusForLevel(level, nextAbsorb).level}`);
+    setMessage(`設定でサキュバスLvを調整した。\n現在 ${succubusForLevel(level, nextAbsorb).title} Lv.${succubusForLevel(level, nextAbsorb).level}`);
   }
 
   function activateCrystalCharm() {
-    setCharmTurns(3);
-    setMessage("紫クリスタルの光を浴びた。\n魅了モードになりました。戦闘時は逃げられません。");
+    setCharmTurns(1);
+    setMessage("設定で魅了モードになりました。\n左の水辺で浄化するまで、戦闘時は逃げられません。");
   }
 
   const defeatSlime = useCallback((slimeId: number) => {
@@ -705,6 +786,7 @@ export default function OutsideScreen() {
     setLossEventIndex(0);
     setBattleMenu("root");
     setTemptationEffect(null);
+    setBattleEnemyImage(kind);
     setPhase("loss");
     setCharmTurns(0);
     setBattle((current) => ({ ...current, hp: 0, mp: Math.max(0, current.mp - 100), lastLossKind: kind }));
@@ -724,8 +806,12 @@ export default function OutsideScreen() {
   }
 
   function randomLossKind(): LossEventKind {
-    const events: LossEventKind[] = ["tail", "chest", "back"];
-    return events[Math.floor(Math.random() * events.length)] ?? "tail";
+    const events: LossEventKind[] = ["chest", "back", "foot"];
+    return events[Math.floor(Math.random() * events.length)] ?? "chest";
+  }
+
+  function shouldUseNormalAttack() {
+    return Math.random() < 0.35;
   }
 
   function playRandomTemptationEffect() {
@@ -733,7 +819,7 @@ export default function OutsideScreen() {
     stopEffect("outsideNipple");
     if (Math.random() < 0.5) {
       setTemptationEffect("kiss");
-      setCharmTurns(3);
+      setCharmTurns(1);
       playEffect("outsideEarLick");
       return "耳舐め";
     }
@@ -745,10 +831,12 @@ export default function OutsideScreen() {
   function resolveCommand(command: BattleCommand) {
     if (phase !== "battle") return;
     setBattleMenu("root");
+    setBattleAwaitingChoice(false);
+    setBattleEnemyImage("battle");
     if (command === "run") {
+      playEffect("outsideEscape");
       if (charmTurns > 0) {
-        setCharmTurns((current) => Math.max(0, current - 1));
-        setMessage(`魅了モード中で逃げられない。\nあと${Math.max(0, charmTurns - 1)}ターン、足が言うことを聞かない。`);
+        setMessage("魅了モード中で逃げられない。\n左の水辺で浄化するまで、足が言うことを聞かない。");
         return;
       }
       setPhase("explore");
@@ -764,19 +852,51 @@ export default function OutsideScreen() {
       return;
     }
 
-    if (command === "defend") {
+    if (command === "attack" && charmTurns > 0) {
+      playEffect("outsideEvade");
       const enemyKind = randomLossKind();
-      const damage = Math.ceil(enemyAttackDamage[succubus.stage] / 2);
+      const damage = enemyAttackDamage[succubus.stage];
       const nextHp = clamp(battle.hp - damage);
-      const nextMp = clamp(battle.mp + 8);
+      const nextMp = clamp(battle.mp - 6);
+      setBattleEnemyImage(enemyKind);
+      setTemptationEffect(null);
       setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
       setPlayerHp(Math.max(1, nextHp));
       setPlayerMp(Math.max(1, nextMp));
       saveSetting(hpKey, String(Math.max(1, nextHp)));
       saveSetting(mpKey, String(Math.max(1, nextMp)));
-      setCharmTurns((current) => Math.max(0, current - 1));
       if (nextHp <= 0) {
         applyGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind]);
+        return;
+      }
+      const effectLabel = playRandomTemptationEffect();
+      setMessage(
+        `魅了モード中で攻撃が当たらない。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`,
+      );
+      return;
+    }
+
+    if (command === "defend") {
+      playEffect("outsideEvade");
+      const normalAttack = shouldUseNormalAttack();
+      const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
+      const damage = Math.ceil(enemyAttackDamage[succubus.stage] * (normalAttack ? 0.35 : 0.5));
+      const nextHp = clamp(battle.hp - damage);
+      const nextMp = clamp(battle.mp + 8);
+      setBattleEnemyImage(enemyKind);
+      setTemptationEffect(null);
+      setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
+      setPlayerHp(Math.max(1, nextHp));
+      setPlayerMp(Math.max(1, nextMp));
+      saveSetting(hpKey, String(Math.max(1, nextHp)));
+      saveSetting(mpKey, String(Math.max(1, nextMp)));
+      if (nextHp <= 0) {
+        const lossKind = normalAttack ? randomLossKind() : enemyKind;
+        applyGameOver(lossKind, battleLines[succubus.stage].lose[lossKind]);
+        return;
+      }
+      if (normalAttack) {
+        setMessage(`身構えて通常攻撃を受け流した。\n尻尾の通常攻撃：-${damage}HP / MP+8\n誘惑ではない。ただの攻撃でも油断できない。`);
         return;
       }
       const effectLabel = playRandomTemptationEffect();
@@ -784,6 +904,7 @@ export default function OutsideScreen() {
       return;
     }
 
+    playEffect("outsideAttack");
     const attackDamage = Math.max(18, 34 - Math.max(0, succubus.level - level) * 0.25);
     const nextEnemyHp = clamp(battle.enemyHp - attackDamage);
     if (nextEnemyHp <= 0) {
@@ -798,19 +919,29 @@ export default function OutsideScreen() {
       return;
     }
 
-    const enemyKind = randomLossKind();
-    const damage = enemyAttackDamage[succubus.stage];
+    const normalAttack = shouldUseNormalAttack();
+    const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
+    const damage = normalAttack ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7) : enemyAttackDamage[succubus.stage];
     const nextHp = clamp(battle.hp - damage);
-    const nextMp = clamp(battle.mp - 6);
+    const nextMp = clamp(battle.mp + (normalAttack ? 0 : -6));
+    setBattleEnemyImage(enemyKind);
+    setTemptationEffect(null);
     setBattle({ ...battle, hp: nextHp, mp: nextMp, enemyHp: nextEnemyHp, lastLossKind: enemyKind });
     setPlayerHp(Math.max(1, nextHp));
     setPlayerMp(Math.max(1, nextMp));
     saveSetting(hpKey, String(Math.max(1, nextHp)));
     saveSetting(mpKey, String(Math.max(1, nextMp)));
-    setCharmTurns((current) => Math.max(0, current - 1));
 
     if (nextHp <= 0) {
-      applyGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind]);
+      const lossKind = normalAttack ? randomLossKind() : enemyKind;
+      applyGameOver(lossKind, battleLines[succubus.stage].lose[lossKind]);
+      return;
+    }
+
+    if (normalAttack) {
+      setMessage(
+        `${battleLines[succubus.stage].attack}\n尻尾の通常攻撃：-${damage}HP\n誘惑ではなく、鋭い尻尾で反撃してきた。`,
+      );
       return;
     }
 
@@ -830,7 +961,7 @@ export default function OutsideScreen() {
         stopEffect("outsideNipple");
         playEffect("outsideLossRhythm");
       }
-      if (next === 19) {
+      if (next === 15) {
         stopEffect("outsideLossRhythm");
         playEffect("ejaculation");
       }
@@ -841,7 +972,9 @@ export default function OutsideScreen() {
   function resetBattle() {
     setPhase("explore");
     setBattleMenu("root");
+    setBattleAwaitingChoice(false);
     setTemptationEffect(null);
+    setBattleEnemyImage("battle");
     setMapArea("center");
     setMapStep(0);
     setMapPosition(startPositions.center);
@@ -853,6 +986,11 @@ export default function OutsideScreen() {
       enemyHp: 100,
       lastLossKind: "tail",
     });
+  }
+
+  function handleBattleMessagePress() {
+    if (phase !== "battle") return;
+    setBattleAwaitingChoice(true);
   }
 
   if (phase === "battle" || phase === "result" || phase === "loss") {
@@ -900,7 +1038,7 @@ export default function OutsideScreen() {
                 </View>
                 <View style={styles.enemyLarge}>
                   <Image
-                    source={pixelSprites.succubus[succubus.stage]}
+                    source={battleEnemyImageSource}
                     style={styles.enemyLargeImage}
                     contentFit="contain"
                   />
@@ -912,58 +1050,60 @@ export default function OutsideScreen() {
                     contentFit="contain"
                   />
                 ) : null}
-                <View style={styles.battleStageMessage}>
+                {battleAwaitingChoice ? (
+                  <View style={styles.battleChoiceOverlay}>
+                    <View style={styles.commandPanel}>
+                      <AppText style={styles.panelTitle}>選択</AppText>
+                      <View style={styles.battleCommands}>
+                        {battleMenu === "root" ? (
+                          <>
+                            <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} />
+                            <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
+                            <PrimaryButton title="逃げる" tone="secondary" onPress={() => resolveCommand("run")} />
+                          </>
+                        ) : battleMenu === "fight" ? (
+                          <>
+                            <PrimaryButton title="攻撃" onPress={() => resolveCommand("attack")} />
+                            <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
+                            <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
+                          </>
+                        ) : (
+                          <>
+                            <PrimaryButton title="おっぱい" tone="defeat" onPress={() => resolveCommand("chest")} />
+                            <PrimaryButton title="お尻" tone="defeat" onPress={() => resolveCommand("back")} />
+                            <PrimaryButton title="足裏" tone="defeat" onPress={() => resolveCommand("foot")} />
+                            <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
+                          </>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.playerStatusPanel}>
+                      <AppText style={styles.panelTitle}>自分</AppText>
+                      <AppText style={styles.statusBattleBig}>HP {Math.round(battle.hp)}</AppText>
+                      <AppText style={styles.statusBattleBig}>MP {Math.round(battle.mp)}</AppText>
+                      <AppText style={charmTurns > 0 ? styles.charmedMark : styles.normalMark}>
+                        {charmTurns > 0 ? "魅了中" : "正常"}
+                      </AppText>
+                    </View>
+                  </View>
+                ) : (
+                <Pressable style={styles.battleStageMessage} onPress={handleBattleMessagePress}>
                   <View style={styles.rowBetween}>
                     <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
                     <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
                   </View>
                   {charmTurns > 0 ? (
-                    <AppText style={styles.charmText}>CHARM：逃亡失敗 あと{charmTurns}ターン</AppText>
+                    <AppText style={styles.charmText}>CHARM：逃亡不可 / 左の水辺で解除</AppText>
                   ) : null}
                   <AppText style={styles.message}>{message}</AppText>
                   <AppText style={styles.tapGuide}>タップ ▼</AppText>
-                </View>
+                </Pressable>
+                )}
               </>
             )}
           </View>
 
-          {phase === "battle" ? (
-            <View style={styles.battleBottomRow}>
-              <View style={styles.commandPanel}>
-                <AppText style={styles.panelTitle}>選択</AppText>
-                <View style={styles.battleCommands}>
-                  {battleMenu === "root" ? (
-                    <>
-                      <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} />
-                      <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
-                      <PrimaryButton title="逃げる" tone="secondary" onPress={() => resolveCommand("run")} />
-                    </>
-                  ) : battleMenu === "fight" ? (
-                    <>
-                      <PrimaryButton title="攻撃" onPress={() => resolveCommand("attack")} />
-                      <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
-                      <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
-                    </>
-                  ) : (
-                    <>
-                      <PrimaryButton title="胸" tone="defeat" onPress={() => resolveCommand("chest")} />
-                      <PrimaryButton title="お尻" tone="defeat" onPress={() => resolveCommand("back")} />
-                      <PrimaryButton title="尻尾" tone="defeat" onPress={() => resolveCommand("tail")} />
-                      <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
-                    </>
-                  )}
-                </View>
-              </View>
-              <View style={styles.playerStatusPanel}>
-                <AppText style={styles.panelTitle}>自分</AppText>
-                <AppText style={styles.statusBattleBig}>HP {Math.round(battle.hp)}</AppText>
-                <AppText style={styles.statusBattleBig}>MP {Math.round(battle.mp)}</AppText>
-                <AppText style={charmTurns > 0 ? styles.charmedMark : styles.normalMark}>
-                  {charmTurns > 0 ? "魅了中" : "正常"}
-                </AppText>
-              </View>
-            </View>
-          ) : (
+          {phase !== "battle" ? (
             <View style={styles.battleCommands}>
               {phase === "result" ? (
                 <PrimaryButton title="マップへ戻る" tone="contract" onPress={resetBattle} />
@@ -974,7 +1114,7 @@ export default function OutsideScreen() {
                 onPress={() => router.replace("/(tabs)")}
               />
             </View>
-          )}
+          ) : null}
         </View>
       </View>
     );
@@ -991,8 +1131,8 @@ export default function OutsideScreen() {
               <Pressable style={styles.mapRightTap} onPress={() => moveMap("right")} />
               <Pressable style={styles.mapForwardTap} onPress={advanceMap} />
               <Pressable style={styles.mapDoorTap} onPress={() => router.replace("/(tabs)")} />
-              <Pressable style={styles.mapCrystalTap} onPress={() => setCrystalOpen(true)}>
-                <View style={[styles.mapCrystal, { transform: [{ rotate: `${crystalRotation}deg` }] }]}>
+              <Pressable hitSlop={18} style={styles.mapCrystalTap} onPress={openCrystalSettings}>
+                <View style={[styles.mapCrystal, { transform: [{ rotateZ: `${crystalRotation}deg` }] }]}>
                   <Image source={pixelSprites.crystal} style={styles.mapCrystalImage} contentFit="contain" />
                 </View>
               </Pressable>
@@ -1015,7 +1155,7 @@ export default function OutsideScreen() {
                   <AppText style={styles.exclamationText}>!</AppText>
                 </View>
               ) : null}
-              {mapStep > 0 ? (
+              {mapStep === 2 ? (
                 <View style={styles.mapChoiceBox}>
                   <AppText style={styles.mapChoiceTitle}>サキュバスに呼び止められた</AppText>
                   <Pressable style={styles.mapChoiceButton} onPress={() => chooseEncounter("resist")}>
@@ -1056,8 +1196,9 @@ export default function OutsideScreen() {
                 ))
             : null}
           {!crystalOpen && message ? (
-            <Pressable style={styles.mapMessageBox} onPress={() => setMessage("")}>
+            <Pressable style={styles.mapMessageBox} onPress={handleMapMessagePress}>
               <AppText style={styles.mapMessage}>{message}</AppText>
+              <AppText style={styles.mapTapGuide}>タップ ▼</AppText>
             </Pressable>
           ) : null}
         </View>
@@ -1098,8 +1239,8 @@ export default function OutsideScreen() {
       >
         <View style={styles.crystalModalBackdrop}>
           <View style={styles.crystalModal}>
-            <AppText style={styles.crystalModalKicker}>PURPLE CRYSTAL</AppText>
-            <AppText style={styles.crystalModalTitle}>紫クリスタル</AppText>
+            <AppText style={styles.crystalModalKicker}>OUTSIDE SETTINGS</AppText>
+            <AppText style={styles.crystalModalTitle}>設定</AppText>
             <AppText style={styles.crystalModalHelp}>
               レベル調整と魅了モードを設定できます。
             </AppText>
@@ -1138,11 +1279,11 @@ export default function OutsideScreen() {
 
             <Pressable style={[styles.crystalCharmButton, charmTurns > 0 && styles.crystalCharmButtonActive]} onPress={activateCrystalCharm}>
               <AppText style={styles.crystalCharmButtonText}>
-                {charmTurns > 0 ? `魅了モード中：あと${charmTurns}ターン` : "魅了モードになる"}
+                {charmTurns > 0 ? "魅了モード中" : "魅了モードになる"}
               </AppText>
             </Pressable>
             <AppText style={styles.crystalModalNote}>
-              ※魅了モードになると、戦闘時に逃げられなくなります。
+              ※魅了モードになると、戦闘時に逃げられなくなります。左の水辺に移動すると解除されます。
             </AppText>
 
             <Pressable style={styles.crystalCloseButton} onPress={() => setCrystalOpen(false)}>
@@ -1395,10 +1536,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "44%",
     top: "43%",
-    width: 58,
-    height: 58,
+    width: 68,
+    height: 68,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 30,
+    elevation: 30,
   },
   mapCrystal: {
     width: 54,
@@ -1584,11 +1727,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.78)",
     padding: 14,
     minHeight: 72,
+    gap: 8,
   },
   mapMessage: {
     color: "#fff",
     fontSize: 14,
     lineHeight: 22,
+    fontWeight: "900",
+  },
+  mapTapGuide: {
+    alignSelf: "flex-end",
+    color: "#aaa",
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "900",
   },
   battleScreen: {
@@ -1617,8 +1768,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   battleStage: {
-    flex: 1.5,
-    minHeight: 380,
+    flex: 1,
+    minHeight: 620,
     overflow: "hidden",
     borderWidth: 0,
     backgroundColor: "#140914",
@@ -1662,7 +1813,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 58,
     right: 8,
-    bottom: 128,
+    bottom: 8,
     left: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -1734,6 +1885,15 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
+  battleChoiceOverlay: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    left: 12,
+    zIndex: 5,
+    flexDirection: "row",
+    gap: 10,
+  },
   temptationEffectMark: {
     position: "absolute",
     top: 72,
@@ -1775,7 +1935,7 @@ const styles = StyleSheet.create({
     flex: 1.1,
     borderWidth: 2,
     borderColor: "#fff",
-    backgroundColor: "#111",
+    backgroundColor: "rgba(17, 17, 17, 0.92)",
     padding: 10,
     gap: 8,
   },
@@ -1783,7 +1943,7 @@ const styles = StyleSheet.create({
     flex: 0.9,
     borderWidth: 2,
     borderColor: "#fff",
-    backgroundColor: "#111",
+    backgroundColor: "rgba(17, 17, 17, 0.92)",
     padding: 10,
     gap: 10,
   },
