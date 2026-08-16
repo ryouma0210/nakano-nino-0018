@@ -33,10 +33,10 @@ const AudioContext = createContext<AudioContextValue>({
   setSessionAudioActive: () => {},
 });
 
-const bgmSource = require("../../assets/audio/kyouhunomori.mp4");
+const bgmSource = require("../../assets/audio/kyouhunomori.m4a");
 const outsideTemptationBgmSource = require("../../assets/audio/voice-samples/voice_whisper.wav");
-const outsideBattleBgmSource = require("../../assets/audio/kyouhunomori.mp4");
-const outsideCharmBgmSource = require("../../assets/audio/yuuwakubgm.mp4");
+const outsideBattleBgmSource = require("../../assets/audio/kyouhunomori.m4a");
+const outsideCharmBgmSource = require("../../assets/audio/yuuwakubgm.m4a");
 
 export function AudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -49,21 +49,21 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const outsideCharmBgm = useAudioPlayer(outsideCharmBgmSource);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
-  const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.mp4"));
-  const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
-  const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
-  const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
+  const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.m4a"));
+  const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
+  const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
+  const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.m4a"));
   const outsideEscape = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const outsideAttack = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
   const outsideEvade = useAudioPlayer(require("../../assets/audio/button.wav"));
-  const outsideEarLick = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
-  const outsideNipple = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
-  const outsideLossRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
+  const outsideEarLick = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
+  const outsideNipple = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
+  const outsideLossRhythm = useAudioPlayer(require("../../assets/audio/tekoki.m4a"));
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
-  const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.mp4"));
+  const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.m4a"));
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
-  const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
-  const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
+  const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
+  const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
 
   useEffect(() => {
     if (typeof setAudioModeAsync === "function") {
