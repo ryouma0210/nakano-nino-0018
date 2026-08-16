@@ -21,6 +21,7 @@ export default function TabLayout() {
       <Stack.Screen name="mypage" options={{ title: "マイページ" }} />
       <Stack.Screen name="orders" options={{ title: "本日の命令部屋" }} />
       <Stack.Screen name="collection" options={{ title: "コレクション部屋" }} />
+      <Stack.Screen name="today" options={{ title: "本日の記録" }} />
       <Stack.Screen name="report" options={{ title: "週間報告部屋" }} />
       <Stack.Screen name="contract" options={{ title: "契約部屋" }} />
       <Stack.Screen name="files" options={{ title: "ファイル格納部屋" }} />

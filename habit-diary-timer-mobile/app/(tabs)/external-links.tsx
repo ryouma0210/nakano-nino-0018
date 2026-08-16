@@ -44,13 +44,13 @@ export default function ExternalLinksScreen() {
 
       <View style={styles.card}>
         <AppText style={styles.lead}>外部リンク</AppText>
+        <AppText style={styles.note}>お貢ぎ：PayPayまたはアマギフのみ♡</AppText>
         {links.map((link) => (
           <View key={link.label} style={styles.linkRow}>
             <AppText style={styles.linkLabel}>{link.label}</AppText>
             <PrimaryButton title="開く" tone="secondary" onPress={() => openLink(link.url)} />
           </View>
-        ))}
-        <AppText style={styles.note}>お貢ぎはPayPayかアマギフよ♡</AppText>
+        ))}        
       </View>
 
       <PrimaryButton

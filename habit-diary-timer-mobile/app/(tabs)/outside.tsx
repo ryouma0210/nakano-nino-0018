@@ -45,7 +45,7 @@ const startPositions: Record<MapArea, MapPosition> = {
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
 const pixelSprites = {
-  mapCenter: require("../../assets/characters/outside-pixels/outside-map-bg.png"),
+  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
   mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
@@ -1263,13 +1263,13 @@ export default function OutsideScreen() {
                 <View style={styles.mapChoiceBox}>
                   <AppText style={styles.mapChoiceTitle}>サキュバスに呼び止められた</AppText>
                   <Pressable style={styles.mapChoiceButton} onPress={() => chooseEncounter("resist")}>
-                    <AppText style={styles.mapChoiceText}>誘惑に耐える</AppText>
+                    <AppText style={styles.mapChoiceText}>戦闘開始</AppText>
                   </Pressable>
-                  <Pressable style={[styles.mapChoiceButton, styles.mapChoiceSelected]} onPress={() => chooseEncounter("listen")}>
-                    <AppText style={styles.mapChoiceText}>サキュバスと目が合う</AppText>
+                  <Pressable style={[styles.mapChoiceButton, styles.mapChoicePink]} onPress={() => chooseEncounter("listen")}>
+                    <AppText style={[styles.mapChoiceText, styles.mapChoicePinkText]}>サキュバスと目が合う</AppText>
                   </Pressable>
-                  <Pressable style={styles.mapChoiceButton} onPress={() => chooseEncounter("run")}>
-                    <AppText style={styles.mapChoiceText}>すぐ逃げる</AppText>
+                  <Pressable style={[styles.mapChoiceButton, styles.mapChoiceRed]} onPress={() => chooseEncounter("run")}>
+                    <AppText style={[styles.mapChoiceText, styles.mapChoiceRedText]}>すぐ逃げる</AppText>
                   </Pressable>
                 </View>
               ) : null}
@@ -1623,11 +1623,25 @@ const styles = StyleSheet.create({
     borderColor: "#a7fff1",
     backgroundColor: "rgba(108, 180, 165, 0.45)",
   },
+  mapChoicePink: {
+    borderColor: "#ff69b4",
+    backgroundColor: "rgba(255, 105, 180, 0.1)",
+  },
+  mapChoiceRed: {
+    borderColor: "#e01f2d",
+    backgroundColor: "rgba(224, 31, 45, 0.1)",
+  },
   mapChoiceText: {
     color: "#fff",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "900",
+  },
+  mapChoicePinkText: {
+    color: "#ff69b4",
+  },
+  mapChoiceRedText: {
+    color: "#e01f2d",
   },
   mapSpriteImage: { width: "100%", height: "100%" },
   mapSlime: {
