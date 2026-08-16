@@ -12,6 +12,7 @@ import { execute } from "@/database/client";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
 import { defaultSettings, settingsService } from "@/services/settingsService";
+import { slaveContractService } from "@/services/slaveContractService";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { contractService, dailyOrderService } from "@/services/gameRoomService";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -31,7 +32,7 @@ const partialResetItems: {
 }[] = [
   { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置きの全記録" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
-  { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・契約後の追加ルール" },
+  { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・解約日・契約後の追加ルール" },
   { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
   { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画" },
 ];
@@ -74,6 +75,8 @@ export default function SettingsScreen() {
       execute("DELETE FROM app_settings");
       await settingsService.reset();
       await dailyOrderService.clearAll();
+      await contractService.clear();
+      await slaveContractService.clear();
       await notificationService.cancelAll();
       await fileStorageService.clear();
       loadSize();
@@ -110,7 +113,10 @@ export default function SettingsScreen() {
         execute("DELETE FROM reward_redemptions");
         execute("DELETE FROM point_transactions");
       }
-      if (selected.has("contract")) await contractService.clear();
+      if (selected.has("contract")) {
+        await contractService.clear();
+        await slaveContractService.clear();
+      }
       if (selected.has("settings")) {
         await updateAudioSettings({
           backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,

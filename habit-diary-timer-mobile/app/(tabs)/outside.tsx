@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -51,6 +51,8 @@ const pixelSprites = {
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
   playerFront: require("../../assets/characters/outside-pixels/player-front-dot.png"),
   playerBack: require("../../assets/characters/outside-pixels/player-back-dot.png"),
+  playerLeft: require("../../assets/characters/outside-pixels/player-left-dot.png"),
+  playerRight: require("../../assets/characters/outside-pixels/player-right-dot.png"),
   door: require("../../assets/characters/outside-pixels/door-dot.png"),
   slime: require("../../assets/characters/outside-pixels/slime-dot.png"),
   heartMark: require("../../assets/ui/outside-heart-mark.png"),
@@ -433,6 +435,13 @@ function isNear(a: MapPosition, b: MapPosition, range = 8) {
   return Math.abs(a.x - b.x) <= range && Math.abs(a.y - b.y) <= range;
 }
 
+function playerSpriteForFacing(facing: Direction) {
+  if (facing === "up") return pixelSprites.playerBack;
+  if (facing === "left") return pixelSprites.playerLeft;
+  if (facing === "right") return pixelSprites.playerRight;
+  return pixelSprites.playerFront;
+}
+
 export default function OutsideScreen() {
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
   const [level, setLevel] = useState(initializeLevel);
@@ -454,6 +463,7 @@ export default function OutsideScreen() {
   );
   const [battleMenu, setBattleMenu] = useState<BattleMenu>("root");
   const [battleAwaitingChoice, setBattleAwaitingChoice] = useState(false);
+  const [pendingGameOver, setPendingGameOver] = useState<{ kind: LossEventKind; reason: string } | null>(null);
   const [temptationEffect, setTemptationEffect] = useState<TemptationEffect>(null);
   const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
   const [lossEventIndex, setLossEventIndex] = useState(0);
@@ -464,6 +474,23 @@ export default function OutsideScreen() {
     enemyHp: 100,
     lastLossKind: "tail",
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      setPhase("explore");
+      setMapArea("center");
+      setMapStep(0);
+      setMapPosition(startPositions.center);
+      setPlayerFacing("down");
+      setCrystalOpen(false);
+      setBattleMenu("root");
+      setBattleAwaitingChoice(false);
+      setPendingGameOver(null);
+      setTemptationEffect(null);
+      setBattleEnemyImage("battle");
+      setMessage("館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。");
+    }, []),
+  );
 
   const succubus = useMemo(
     () => succubusForLevel(level, succubusAbsorbBonus),
@@ -560,6 +587,7 @@ export default function OutsideScreen() {
     setPhase("battle");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
+    setPendingGameOver(null);
     setBattleEnemyImage("battle");
     setTemptationEffect(null);
     setMapArea("center");
@@ -835,6 +863,13 @@ export default function OutsideScreen() {
     setMessage(reason);
   }
 
+  function queueGameOver(kind: LossEventKind, reason: string, finalAttackMessage: string) {
+    setPendingGameOver({ kind, reason });
+    setBattleMenu("root");
+    setBattleAwaitingChoice(false);
+    setMessage(`${finalAttackMessage}\nHPが尽きた……タップして敗北シーンへ。`);
+  }
+
   function randomLossKind(): LossEventKind {
     const events: LossEventKind[] = ["chest", "back", "foot"];
     return events[Math.floor(Math.random() * events.length)] ?? "chest";
@@ -862,6 +897,7 @@ export default function OutsideScreen() {
     if (phase !== "battle") return;
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
+    setPendingGameOver(null);
     setBattleEnemyImage("battle");
     if (command === "run") {
       playEffect("outsideEscape");
@@ -877,14 +913,13 @@ export default function OutsideScreen() {
         setPlayerMp(Math.max(1, nextMp));
         saveSetting(hpKey, String(Math.max(1, nextHp)));
         saveSetting(mpKey, String(Math.max(1, nextMp)));
+        const effectLabel = playRandomTemptationEffect();
+        const finalAttackMessage = `魅了モード中で逃げられない。\n逃げようとした隙に${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
         if (nextHp <= 0) {
-          applyGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind]);
+          queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
           return;
         }
-        const effectLabel = playRandomTemptationEffect();
-        setMessage(
-          `魅了モード中で逃げられない。\n逃げようとした隙に${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`,
-        );
+        setMessage(finalAttackMessage);
         return;
       }
       setPhase("explore");
@@ -913,14 +948,13 @@ export default function OutsideScreen() {
       setPlayerMp(Math.max(1, nextMp));
       saveSetting(hpKey, String(Math.max(1, nextHp)));
       saveSetting(mpKey, String(Math.max(1, nextMp)));
+      const effectLabel = playRandomTemptationEffect();
+      const finalAttackMessage = `魅了モード中で攻撃が当たらない。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
       if (nextHp <= 0) {
-        applyGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind]);
+        queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
         return;
       }
-      const effectLabel = playRandomTemptationEffect();
-      setMessage(
-        `魅了モード中で攻撃が当たらない。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`,
-      );
+      setMessage(finalAttackMessage);
       return;
     }
 
@@ -938,17 +972,23 @@ export default function OutsideScreen() {
       setPlayerMp(Math.max(1, nextMp));
       saveSetting(hpKey, String(Math.max(1, nextHp)));
       saveSetting(mpKey, String(Math.max(1, nextMp)));
-      if (nextHp <= 0) {
-        const lossKind = normalAttack ? randomLossKind() : enemyKind;
-        applyGameOver(lossKind, battleLines[succubus.stage].lose[lossKind]);
-        return;
-      }
       if (normalAttack) {
-        setMessage(`身構えて通常攻撃を受け流した。\n尻尾の通常攻撃：-${damage}HP / MP+8\n誘惑ではない。ただの攻撃でも油断できない。`);
+        const lossKind = randomLossKind();
+        const finalAttackMessage = `身構えて通常攻撃を受け流した。\n尻尾の通常攻撃：-${damage}HP / MP+8\n誘惑ではない。ただの攻撃でも油断できない。`;
+        if (nextHp <= 0) {
+          queueGameOver(lossKind, battleLines[succubus.stage].lose[lossKind], finalAttackMessage);
+          return;
+        }
+        setMessage(finalAttackMessage);
         return;
       }
       const effectLabel = playRandomTemptationEffect();
-      setMessage(`身構えて誘惑を受け流した。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP / MP+8\n${effectLabel}の誘惑が残っている。`);
+      const finalAttackMessage = `身構えて誘惑を受け流した。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP / MP+8\n${effectLabel}の誘惑が残っている。`;
+      if (nextHp <= 0) {
+        queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
+        return;
+      }
+      setMessage(finalAttackMessage);
       return;
     }
 
@@ -980,23 +1020,24 @@ export default function OutsideScreen() {
     saveSetting(hpKey, String(Math.max(1, nextHp)));
     saveSetting(mpKey, String(Math.max(1, nextMp)));
 
-    if (nextHp <= 0) {
-      const lossKind = normalAttack ? randomLossKind() : enemyKind;
-      applyGameOver(lossKind, battleLines[succubus.stage].lose[lossKind]);
-      return;
-    }
-
     if (normalAttack) {
-      setMessage(
-        `${battleLines[succubus.stage].attack}\n尻尾の通常攻撃：-${damage}HP\n誘惑ではなく、鋭い尻尾で反撃してきた。`,
-      );
+      const lossKind = randomLossKind();
+      const finalAttackMessage = `${battleLines[succubus.stage].attack}\n尻尾の通常攻撃：-${damage}HP\n誘惑ではなく、鋭い尻尾で反撃してきた。`;
+      if (nextHp <= 0) {
+        queueGameOver(lossKind, battleLines[succubus.stage].lose[lossKind], finalAttackMessage);
+        return;
+      }
+      setMessage(finalAttackMessage);
       return;
     }
 
     const effectLabel = playRandomTemptationEffect();
-    setMessage(
-      `${battleLines[succubus.stage].attack}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が襲いかかる。`,
-    );
+    const finalAttackMessage = `${battleLines[succubus.stage].attack}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が襲いかかる。`;
+    if (nextHp <= 0) {
+      queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
+      return;
+    }
+    setMessage(finalAttackMessage);
   }
 
   function advanceLossScene() {
@@ -1021,6 +1062,7 @@ export default function OutsideScreen() {
     setPhase("explore");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
+    setPendingGameOver(null);
     setTemptationEffect(null);
     setBattleEnemyImage("battle");
     setMapArea("center");
@@ -1038,6 +1080,12 @@ export default function OutsideScreen() {
 
   function handleBattleMessagePress() {
     if (phase !== "battle") return;
+    if (pendingGameOver) {
+      const next = pendingGameOver;
+      setPendingGameOver(null);
+      applyGameOver(next.kind, next.reason);
+      return;
+    }
     setBattleAwaitingChoice(true);
   }
 
@@ -1087,8 +1135,11 @@ export default function OutsideScreen() {
                 <View style={styles.enemyLarge}>
                   <Image
                     source={battleEnemyImageSource}
-                    style={styles.enemyLargeImage}
-                    contentFit="contain"
+                    style={[
+                      styles.enemyLargeImage,
+                      battleEnemyImage !== "battle" && styles.enemyLargeEventImage,
+                    ]}
+                    contentFit={battleEnemyImage === "battle" ? "contain" : "cover"}
                   />
                 </View>
                 {battleAwaitingChoice ? (
@@ -1232,12 +1283,8 @@ export default function OutsideScreen() {
             mapStep === 0 && { left: `${mapPosition.x}%`, top: `${mapPosition.y}%` },
           ]}>
             <Image
-              source={displayedPlayerFacing === "up" ? pixelSprites.playerBack : pixelSprites.playerFront}
-              style={[
-                styles.mapSpriteImage,
-                displayedPlayerFacing === "left" && styles.mapSpriteLeft,
-                displayedPlayerFacing === "right" && styles.mapSpriteRight,
-              ]}
+              source={playerSpriteForFacing(displayedPlayerFacing)}
+              style={styles.mapSpriteImage}
               contentFit="contain"
             />
           </View>
@@ -1583,8 +1630,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   mapSpriteImage: { width: "100%", height: "100%" },
-  mapSpriteLeft: { transform: [{ rotate: "-90deg" }] },
-  mapSpriteRight: { transform: [{ rotate: "90deg" }] },
   mapSlime: {
     position: "absolute",
     width: 38,
@@ -1901,6 +1946,10 @@ const styles = StyleSheet.create({
   },
   enemyLargeImage: {
     width: "88%",
+    height: "100%",
+  },
+  enemyLargeEventImage: {
+    width: "100%",
     height: "100%",
   },
   enemyLargeName: {

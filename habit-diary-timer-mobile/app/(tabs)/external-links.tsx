@@ -2,9 +2,7 @@ import { Linking, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
-import { roomMessages } from "@/constants/messages";
 import { lightTheme } from "@/constants/theme";
 
 const links = [
@@ -35,39 +33,24 @@ export default function ExternalLinksScreen() {
         <View style={styles.rule} />
       </View>
 
-      <RoomConversation
-        characterSource={require("../../assets/characters/settings-nino.png")}
-        roomName="外部リンク"
-        lines={roomMessages.menu.lines}
-        contractLines={roomMessages.menu.contractLines}
-      />
+      <View style={styles.contractCard}>
+        <AppText style={styles.contractLabel}>奴隷契約書　※本物</AppText>
+        <PrimaryButton
+          title="契約書を開く"
+          tone="contract"
+          onPress={() => router.push("/(tabs)/slave-contract")}
+        />
+      </View>
 
       <View style={styles.card}>
-        <AppText style={styles.lead}>
-          お貢ぎはPayPayかアマギフよ♡{"\n"}以下で送ってね。
-        </AppText>
-        <View style={styles.contractRow}>
-          <View style={styles.linkTextBox}>
-            <AppText style={styles.contractLabel}>奴隷契約書　※本物</AppText>
-            <AppText style={styles.linkUrl}>
-              名前を記入して、APP/WEBどちらでもPDF出力できます。
-            </AppText>
-          </View>
-          <PrimaryButton
-            title="開く"
-            tone="contract"
-            onPress={() => router.push("/(tabs)/slave-contract")}
-          />
-        </View>
+        <AppText style={styles.lead}>外部リンク</AppText>
         {links.map((link) => (
           <View key={link.label} style={styles.linkRow}>
-            <View style={styles.linkTextBox}>
-              <AppText style={styles.linkLabel}>{link.label}</AppText>
-              <AppText style={styles.linkUrl}>{link.url}</AppText>
-            </View>
+            <AppText style={styles.linkLabel}>{link.label}</AppText>
             <PrimaryButton title="開く" tone="secondary" onPress={() => openLink(link.url)} />
           </View>
         ))}
+        <AppText style={styles.note}>お貢ぎはPayPayかアマギフよ♡</AppText>
       </View>
 
       <PrimaryButton
@@ -101,6 +84,13 @@ const styles = StyleSheet.create({
     backgroundColor: lightTheme.surface,
     padding: 18,
   },
+  contractCard: {
+    gap: 14,
+    borderWidth: 2,
+    borderColor: "#8a2be2",
+    backgroundColor: "#17041F",
+    padding: 18,
+  },
   lead: {
     color: lightTheme.text,
     fontSize: 18,
@@ -113,18 +103,10 @@ const styles = StyleSheet.create({
     borderTopColor: lightTheme.border,
     paddingTop: 14,
   },
-  contractRow: {
-    gap: 10,
-    borderWidth: 2,
-    borderColor: "#8a2be2",
-    backgroundColor: "#17041F",
-    padding: 14,
-  },
-  linkTextBox: { gap: 6 },
   contractLabel: {
     color: lightTheme.text,
-    fontSize: 17,
-    lineHeight: 24,
+    fontSize: 20,
+    lineHeight: 28,
     fontWeight: "900",
   },
   linkLabel: {
@@ -133,7 +115,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: "900",
   },
-  linkUrl: {
+  note: {
     color: lightTheme.muted,
     fontSize: 12,
     lineHeight: 18,
