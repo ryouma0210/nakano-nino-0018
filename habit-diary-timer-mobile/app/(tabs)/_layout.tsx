@@ -25,6 +25,8 @@ export default function TabLayout() {
       <Stack.Screen name="contract" options={{ title: "契約部屋" }} />
       <Stack.Screen name="files" options={{ title: "ファイル格納部屋" }} />
       <Stack.Screen name="settings" options={{ title: "設定" }} />
+      <Stack.Screen name="external-links" options={{ title: "外部リンク" }} />
+      <Stack.Screen name="slave-contract" options={{ title: "奴隷契約書" }} />
     </Stack>
   );
 }

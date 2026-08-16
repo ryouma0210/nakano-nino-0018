@@ -53,9 +53,9 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
   const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
   const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
-  const outsideEscape = useAudioPlayer(require("../../assets/audio/button.wav"));
+  const outsideEscape = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const outsideAttack = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
-  const outsideEvade = useAudioPlayer(require("../../assets/audio/rhythm-hit.wav"));
+  const outsideEvade = useAudioPlayer(require("../../assets/audio/button.wav"));
   const outsideEarLick = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
   const outsideNipple = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
   const outsideLossRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));

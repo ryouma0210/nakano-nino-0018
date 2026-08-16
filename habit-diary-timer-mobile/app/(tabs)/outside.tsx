@@ -42,6 +42,8 @@ const startPositions: Record<MapArea, MapPosition> = {
   right: { x: 24, y: 54 },
   top: { x: 48, y: 76 },
 };
+const crystalPosition: MapPosition = { x: 48, y: 52 };
+const crystalExitPosition: MapPosition = { x: 48, y: 70 };
 const pixelSprites = {
   mapCenter: require("../../assets/characters/outside-pixels/outside-map-bg.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
@@ -64,19 +66,19 @@ const pixelSprites = {
       tail: require("../../assets/characters/outside-events/beginner-tail.png"),
       chest: require("../../assets/characters/outside-events/beginner-chest.png"),
       back: require("../../assets/characters/outside-events/beginner-overlook.png"),
-      foot: require("../../assets/characters/outside-events/beginner-foot_01.jpg"),
+      foot: require("../../assets/characters/outside-events/beginner-foot.png"),
     },
     middle: {
       tail: require("../../assets/characters/outside-events/middle-tail.png"),
       chest: require("../../assets/characters/outside-events/middle-chest.png"),
       back: require("../../assets/characters/outside-events/middle-overlook.png"),
-      foot: require("../../assets/characters/outside-events/middle-foot_01.jpg"),
+      foot: require("../../assets/characters/outside-events/middle-foot.png"),
     },
     queen: {
       tail: require("../../assets/characters/outside-events/queen-tail.png"),
       chest: require("../../assets/characters/outside-events/queen-chest.png"),
       back: require("../../assets/characters/outside-events/queen-overlook.png"),
-      foot: require("../../assets/characters/outside-events/queen-foot_01.jpg"),
+      foot: require("../../assets/characters/outside-events/queen-foot.png"),
     },
   },
   eventStages: {
@@ -359,21 +361,22 @@ function initializePlayerStat(key: string, fallback: number) {
   return Math.max(1, Math.min(100, value));
 }
 
-function succubusForLevel(level: number, absorbBonus: number) {
-  if (level < 30) {
+function succubusForLevel(level: number, savedSuccubusLevel: number) {
+  const succubusLevel = Math.max(1, Math.min(100, savedSuccubusLevel > 0 ? savedSuccubusLevel : level));
+  if (succubusLevel < 30) {
     return {
       stage: "beginner" as const,
       title: "ニノメスガキ初級サキュバス",
-      level: Math.min(30, Math.max(1, level + absorbBonus)),
+      level: succubusLevel,
       message: "Lv.1〜30。油断した相手を逆転する小悪魔。",
       color: "#ff69b4",
     };
   }
-  if (level < 80) {
+  if (succubusLevel < 80) {
     return {
       stage: "middle" as const,
       title: "上級サキュバス",
-      level: Math.min(79, Math.max(30, level + absorbBonus)),
+      level: succubusLevel,
       message: "Lv.30〜79。駆け引きと選択肢で揺さぶってくる。",
       color: "#9b5de5",
     };
@@ -381,7 +384,7 @@ function succubusForLevel(level: number, absorbBonus: number) {
   return {
     stage: "queen" as const,
     title: "女王サキュバス",
-    level: Math.max(80, Math.min(180, level + absorbBonus)),
+    level: succubusLevel,
     message: "Lv.80〜。圧倒的な格で、帰宅意思をねじ伏せにくる。",
     color: "#d9202a",
   };
@@ -416,6 +419,16 @@ function entryPosition(from: MapArea, to: MapArea): MapPosition {
   return startPositions[to];
 }
 
+function facingForEntry(from: MapArea, to: MapArea): Direction {
+  if (to === "top") return "up";
+  if (to === "left") return "left";
+  if (to === "right") return "right";
+  if (from === "top") return "down";
+  if (from === "left") return "right";
+  if (from === "right") return "left";
+  return "down";
+}
+
 function isNear(a: MapPosition, b: MapPosition, range = 8) {
   return Math.abs(a.x - b.x) <= range && Math.abs(a.y - b.y) <= range;
 }
@@ -431,6 +444,7 @@ export default function OutsideScreen() {
   const [mapArea, setMapArea] = useState<MapArea>("center");
   const [mapStep, setMapStep] = useState<MapStep>(0);
   const [mapPosition, setMapPosition] = useState<MapPosition>(startPositions.center);
+  const [playerFacing, setPlayerFacing] = useState<Direction>("down");
   const [crystalOpen, setCrystalOpen] = useState(false);
   const [crystalRotation, setCrystalRotation] = useState(0);
   const [slimes, setSlimes] = useState<MapSlime[]>(() => createSlimes());
@@ -455,6 +469,7 @@ export default function OutsideScreen() {
     () => succubusForLevel(level, succubusAbsorbBonus),
     [level, succubusAbsorbBonus],
   );
+  const crystalSpinScaleX = 0.28 + 0.72 * Math.abs(Math.cos((crystalRotation * Math.PI) / 180));
   const lossEventImages = useMemo(() => {
     return pixelSprites.eventStages[succubus.stage][battle.lastLossKind];
   }, [battle.lastLossKind, succubus.stage]);
@@ -477,6 +492,7 @@ export default function OutsideScreen() {
         : mapArea === "top"
           ? pixelSprites.mapTop
           : pixelSprites.mapCenter;
+  const displayedPlayerFacing: Direction = mapStep > 0 ? "up" : playerFacing;
 
   useEffect(() => {
     if (phase === "loss") {
@@ -533,14 +549,22 @@ export default function OutsideScreen() {
     setCrystalOpen(true);
   }
 
+  function closeCrystalSettings() {
+    setCrystalOpen(false);
+    setMapPosition(crystalExitPosition);
+    setPlayerFacing("down");
+    setMessage("クリスタルから少し離れた。");
+  }
+
   function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
     setPhase("battle");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
     setBattleEnemyImage("battle");
+    setTemptationEffect(null);
     setMapArea("center");
     setMapStep(2);
-    setCharmTurns(initialCharmTurns ?? charmTurns);
+    setCharmTurns(initialCharmTurns ?? (charmTurns > 0 ? charmTurns : 0));
     setBattle({
       hp: playerHp,
       mp: playerMp,
@@ -562,6 +586,7 @@ export default function OutsideScreen() {
     setMapStep(0);
     setCrystalOpen(false);
     setMapPosition(entryPosition(fromArea, nextArea));
+    setPlayerFacing(facingForEntry(fromArea, nextArea));
     if (nextArea === "left") {
       setCharmTurns(0);
       setPlayerHp(100);
@@ -588,6 +613,7 @@ export default function OutsideScreen() {
 
   function movePlayer(direction: Direction) {
     if (phase !== "explore" || mapStep > 0) return;
+    setPlayerFacing(direction);
     const step = 7;
     const next = { ...mapPosition };
     if (direction === "up") next.y -= step;
@@ -596,8 +622,8 @@ export default function OutsideScreen() {
     if (direction === "right") next.x += step;
 
     if (mapArea === "center") {
-      if (isNear(next, { x: 48, y: 52 }, 9)) {
-        setMapPosition({ x: 48, y: 52 });
+      if (isNear(next, crystalPosition, 9)) {
+        setMapPosition(crystalPosition);
         openCrystalSettings();
         return;
       }
@@ -646,6 +672,7 @@ export default function OutsideScreen() {
 
   function exploreTopArea() {
     if (phase !== "explore" || mapArea !== "top") return;
+    setPlayerFacing("up");
     setMapStep(1);
     setMessage("木の物陰にいたサキュバスに呼び止められた。");
   }
@@ -665,11 +692,14 @@ export default function OutsideScreen() {
       setMapArea("center");
       setMapStep(0);
       setMapPosition(entryPosition("top", "center"));
+      setPlayerFacing("down");
       setMessage("咄嗟に身を引いて、十字路まで戻った。まだ甘い声が耳に残っている。");
       return;
     }
     if (choice === "listen") {
-      startEncounter("少しだけ声を聞いてしまった。胸の奥が甘く揺れる。", 1);
+      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了モードになった。", 1);
+      setTemptationEffect("kiss");
+      playEffect("outsideEarLick");
       return;
     }
     startEncounter("呼び止める声を振り払い、戦闘態勢に入った。");
@@ -698,11 +728,12 @@ export default function OutsideScreen() {
   }
 
   function adjustSuccubusLevel(delta: number) {
-    const nextAbsorb = Math.max(0, Math.min(180, succubusAbsorbBonus + delta));
-    setSuccubusAbsorbBonus(nextAbsorb);
-    saveSetting(succubusAbsorbKey, String(nextAbsorb));
+    const nextSuccubusLevel = Math.max(1, Math.min(100, succubus.level + delta));
+    setSuccubusAbsorbBonus(nextSuccubusLevel);
+    saveSetting(succubusAbsorbKey, String(nextSuccubusLevel));
     saveSetting(succubusAbsorbDateKey, toDateKey());
-    setMessage(`設定でサキュバスLvを調整した。\n現在 ${succubusForLevel(level, nextAbsorb).title} Lv.${succubusForLevel(level, nextAbsorb).level}`);
+    const nextSuccubus = succubusForLevel(level, nextSuccubusLevel);
+    setMessage(`設定でサキュバスLvを調整した。\n現在 ${nextSuccubus.title} Lv.${nextSuccubus.level}`);
   }
 
   function activateCrystalCharm() {
@@ -781,8 +812,7 @@ export default function OutsideScreen() {
   function applyGameOver(kind: LossEventKind, reason: string) {
     const today = toDateKey();
     const absorbedLevel = Math.max(0, level - 1);
-    const nextAbsorbBonus = Math.min(180, succubusAbsorbBonus + absorbedLevel);
-    const nextSuccubusLevel = succubusForLevel(level, nextAbsorbBonus).level;
+    const nextSuccubusLevel = Math.min(100, succubus.level + absorbedLevel);
     setLossEventIndex(0);
     setBattleMenu("root");
     setTemptationEffect(null);
@@ -793,9 +823,9 @@ export default function OutsideScreen() {
     setLossSummary(
       `射精を1回奪われた。\nLv.${absorbedLevel} / MP100 / Pt50を吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1`,
     );
-    setSuccubusAbsorbBonus(nextAbsorbBonus);
+    setSuccubusAbsorbBonus(nextSuccubusLevel);
     saveSetting(succubusAbsorbDateKey, today);
-    saveSetting(succubusAbsorbKey, String(nextAbsorbBonus));
+    saveSetting(succubusAbsorbKey, String(nextSuccubusLevel));
     pointRepository.award(
       `outside-gameover:${toDateTimeKey()}`,
       -50,
@@ -836,7 +866,25 @@ export default function OutsideScreen() {
     if (command === "run") {
       playEffect("outsideEscape");
       if (charmTurns > 0) {
-        setMessage("魅了モード中で逃げられない。\n左の水辺で浄化するまで、足が言うことを聞かない。");
+        const enemyKind = randomLossKind();
+        const damage = enemyAttackDamage[succubus.stage];
+        const nextHp = clamp(battle.hp - damage);
+        const nextMp = clamp(battle.mp - 6);
+        setBattleEnemyImage(enemyKind);
+        setTemptationEffect(null);
+        setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
+        setPlayerHp(Math.max(1, nextHp));
+        setPlayerMp(Math.max(1, nextMp));
+        saveSetting(hpKey, String(Math.max(1, nextHp)));
+        saveSetting(mpKey, String(Math.max(1, nextMp)));
+        if (nextHp <= 0) {
+          applyGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind]);
+          return;
+        }
+        const effectLabel = playRandomTemptationEffect();
+        setMessage(
+          `魅了モード中で逃げられない。\n逃げようとした隙に${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`,
+        );
         return;
       }
       setPhase("explore");
@@ -1043,13 +1091,6 @@ export default function OutsideScreen() {
                     contentFit="contain"
                   />
                 </View>
-                {temptationEffect ? (
-                  <Image
-                    source={temptationEffect === "kiss" ? pixelSprites.kissMark : pixelSprites.heartMark}
-                    style={styles.temptationEffectMark}
-                    contentFit="contain"
-                  />
-                ) : null}
                 {battleAwaitingChoice ? (
                   <View style={styles.battleChoiceOverlay}>
                     <View style={styles.commandPanel}>
@@ -1084,6 +1125,18 @@ export default function OutsideScreen() {
                       <AppText style={charmTurns > 0 ? styles.charmedMark : styles.normalMark}>
                         {charmTurns > 0 ? "魅了中" : "正常"}
                       </AppText>
+                      {temptationEffect ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image
+                            source={temptationEffect === "kiss" ? pixelSprites.kissMark : pixelSprites.heartMark}
+                            style={styles.statusEffectMark}
+                            contentFit="contain"
+                          />
+                          <AppText style={styles.statusEffectLabel}>
+                            {temptationEffect === "kiss" ? "耳舐め" : "乳首責め"}
+                          </AppText>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 ) : (
@@ -1132,7 +1185,7 @@ export default function OutsideScreen() {
               <Pressable style={styles.mapForwardTap} onPress={advanceMap} />
               <Pressable style={styles.mapDoorTap} onPress={() => router.replace("/(tabs)")} />
               <Pressable hitSlop={18} style={styles.mapCrystalTap} onPress={openCrystalSettings}>
-                <View style={[styles.mapCrystal, { transform: [{ rotateZ: `${crystalRotation}deg` }] }]}>
+                <View style={[styles.mapCrystal, { transform: [{ scaleX: crystalSpinScaleX }] }]}>
                   <Image source={pixelSprites.crystal} style={styles.mapCrystalImage} contentFit="contain" />
                 </View>
               </Pressable>
@@ -1162,7 +1215,7 @@ export default function OutsideScreen() {
                     <AppText style={styles.mapChoiceText}>誘惑に耐える</AppText>
                   </Pressable>
                   <Pressable style={[styles.mapChoiceButton, styles.mapChoiceSelected]} onPress={() => chooseEncounter("listen")}>
-                    <AppText style={styles.mapChoiceText}>少し話を聞く</AppText>
+                    <AppText style={styles.mapChoiceText}>サキュバスと目が合う</AppText>
                   </Pressable>
                   <Pressable style={styles.mapChoiceButton} onPress={() => chooseEncounter("run")}>
                     <AppText style={styles.mapChoiceText}>すぐ逃げる</AppText>
@@ -1179,10 +1232,12 @@ export default function OutsideScreen() {
             mapStep === 0 && { left: `${mapPosition.x}%`, top: `${mapPosition.y}%` },
           ]}>
             <Image
-              source={mapArea === "top" || (mapArea === "center" && mapStep > 0)
-                ? pixelSprites.playerBack
-                : pixelSprites.playerFront}
-              style={styles.mapSpriteImage}
+              source={displayedPlayerFacing === "up" ? pixelSprites.playerBack : pixelSprites.playerFront}
+              style={[
+                styles.mapSpriteImage,
+                displayedPlayerFacing === "left" && styles.mapSpriteLeft,
+                displayedPlayerFacing === "right" && styles.mapSpriteRight,
+              ]}
               contentFit="contain"
             />
           </View>
@@ -1197,7 +1252,7 @@ export default function OutsideScreen() {
             : null}
           {!crystalOpen && message ? (
             <Pressable style={styles.mapMessageBox} onPress={handleMapMessagePress}>
-              <AppText style={styles.mapMessage}>{message}</AppText>
+              <AppText style={[styles.mapMessage, /回復|全回復|浄化/.test(message) && styles.recoveryMessage]}>{message}</AppText>
               <AppText style={styles.mapTapGuide}>タップ ▼</AppText>
             </Pressable>
           ) : null}
@@ -1210,6 +1265,9 @@ export default function OutsideScreen() {
               HP {playerHp}　MP {playerMp}
             </AppText>
             <AppText style={styles.statusText}>本日獲得 {dailyOutsidePoints}/100pt</AppText>
+            <AppText style={charmTurns > 0 ? styles.charmStatusText : styles.statusSubText}>
+              {charmTurns > 0 ? "魅了中：水辺で解除" : "魅了なし"}
+            </AppText>
           </View>
           <View style={styles.operationPanel}>
             <AppText style={styles.mapHintTitle}>操作</AppText>
@@ -1235,7 +1293,7 @@ export default function OutsideScreen() {
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setCrystalOpen(false)}
+        onRequestClose={closeCrystalSettings}
       >
         <View style={styles.crystalModalBackdrop}>
           <View style={styles.crystalModal}>
@@ -1286,7 +1344,7 @@ export default function OutsideScreen() {
               ※魅了モードになると、戦闘時に逃げられなくなります。左の水辺に移動すると解除されます。
             </AppText>
 
-            <Pressable style={styles.crystalCloseButton} onPress={() => setCrystalOpen(false)}>
+            <Pressable style={styles.crystalCloseButton} onPress={closeCrystalSettings}>
               <AppText style={styles.crystalCloseButtonText}>閉じる</AppText>
             </Pressable>
           </View>
@@ -1301,52 +1359,53 @@ const styles = StyleSheet.create({
   mapScreen: {
     flex: 1,
     padding: 8,
+    paddingBottom: 28,
     backgroundColor: "#050505",
-    gap: 8,
+    gap: 6,
   },
   dpad: {
     alignSelf: "center",
-    marginTop: 4,
-    width: 112,
-    height: 112,
-    borderRadius: 56,
+    marginTop: 0,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
     borderWidth: 2,
     borderColor: "rgba(255, 255, 255, 0.22)",
     backgroundColor: "rgba(0, 0, 0, 0.12)",
   },
   dpadButton: {
     position: "absolute",
-    width: 36,
-    height: 36,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },
   dpadUp: {
-    top: 6,
-    left: 38,
+    top: 3,
+    left: 27,
   },
   dpadLeft: {
-    top: 38,
-    left: 6,
+    top: 27,
+    left: 3,
   },
   dpadRight: {
-    top: 38,
-    right: 6,
+    top: 27,
+    right: 3,
   },
   dpadDown: {
-    bottom: 6,
-    left: 38,
+    bottom: 3,
+    left: 27,
   },
   dpadText: {
     color: "#fff",
-    fontSize: 24,
-    lineHeight: 28,
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: "900",
   },
   fullMap: {
-    flex: 8,
+    flex: 8.4,
     width: "100%",
-    minHeight: 360,
+    minHeight: 320,
     overflow: "hidden",
     borderWidth: 2,
     borderColor: "#fff",
@@ -1524,6 +1583,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   mapSpriteImage: { width: "100%", height: "100%" },
+  mapSpriteLeft: { transform: [{ rotate: "-90deg" }] },
+  mapSpriteRight: { transform: [{ rotate: "90deg" }] },
   mapSlime: {
     position: "absolute",
     width: 38,
@@ -1548,6 +1609,10 @@ const styles = StyleSheet.create({
     height: 54,
     alignItems: "center",
     justifyContent: "center",
+    backfaceVisibility: "visible",
+    shadowColor: "#d17aff",
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
   },
   mapCrystalImage: { width: "100%", height: "100%" },
   crystalModalBackdrop: {
@@ -1677,43 +1742,55 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   outsideBottomRow: {
-    flex: 2,
-    minHeight: 168,
+    flex: 1,
+    minHeight: 96,
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   statusPanel: {
     flex: 1,
     borderWidth: 2,
     borderColor: "#fff",
     backgroundColor: "#111",
-    padding: 10,
-    gap: 4,
+    padding: 7,
+    gap: 1,
   },
   operationPanel: {
     flex: 1,
     borderWidth: 2,
     borderColor: "#fff",
     backgroundColor: "#111",
-    padding: 10,
-    gap: 4,
+    padding: 7,
+    gap: 1,
   },
   statusBig: {
     color: "#fff",
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 22,
+    lineHeight: 26,
     fontWeight: "900",
   },
   statusText: {
     color: "#fff",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: "900",
   },
   dangerStatus: {
     color: "#d9202a",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "900",
+  },
+  statusSubText: {
+    color: "#aaa",
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "900",
+  },
+  charmStatusText: {
+    color: "#ff69b4",
+    fontSize: 8,
+    lineHeight: 11,
     fontWeight: "900",
   },
   mapMessageBox: {
@@ -1735,6 +1812,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: "900",
   },
+  recoveryMessage: {
+    color: "#7CFF8B",
+  },
   mapTapGuide: {
     alignSelf: "flex-end",
     color: "#aaa",
@@ -1744,8 +1824,9 @@ const styles = StyleSheet.create({
   },
   battleScreen: {
     flex: 1,
-    gap: 8,
-    padding: 12,
+    gap: 6,
+    padding: 10,
+    paddingBottom: 30,
     backgroundColor: "#050505",
   },
   kicker: {
@@ -1759,8 +1840,8 @@ const styles = StyleSheet.create({
   },
   battleTitle: {
     color: "#fff",
-    fontSize: 22,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 28,
     fontWeight: "900",
   },
   gameOverTitle: {
@@ -1769,14 +1850,14 @@ const styles = StyleSheet.create({
   },
   battleStage: {
     flex: 1,
-    minHeight: 620,
+    minHeight: 500,
     overflow: "hidden",
     borderWidth: 0,
     backgroundColor: "#140914",
   },
   lossBattleStage: {
     flex: 1,
-    minHeight: 540,
+    minHeight: 480,
     gap: 8,
     borderWidth: 0,
     backgroundColor: "#050505",
@@ -1894,14 +1975,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-  temptationEffectMark: {
-    position: "absolute",
-    top: 72,
-    right: 18,
-    zIndex: 5,
-    width: 82,
-    height: 82,
-  },
   lossMessageBox: {
     minHeight: 150,
     borderWidth: 2,
@@ -1926,61 +1999,82 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   battleBottomRow: {
-    flex: 0.75,
-    minHeight: 210,
+    flex: 0.42,
+    minHeight: 126,
     flexDirection: "row",
-    gap: 10,
+    gap: 6,
   },
   commandPanel: {
     flex: 1.1,
     borderWidth: 2,
     borderColor: "#fff",
     backgroundColor: "rgba(17, 17, 17, 0.92)",
-    padding: 10,
-    gap: 8,
+    padding: 7,
+    gap: 5,
   },
   playerStatusPanel: {
     flex: 0.9,
     borderWidth: 2,
     borderColor: "#fff",
     backgroundColor: "rgba(17, 17, 17, 0.92)",
-    padding: 10,
-    gap: 10,
+    padding: 7,
+    gap: 5,
   },
   panelTitle: {
     color: "#ff69b4",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "900",
     letterSpacing: 3,
   },
   statusBattleBig: {
     color: "#fff",
-    fontSize: 22,
-    lineHeight: 30,
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: "900",
   },
   charmedMark: {
     alignSelf: "flex-start",
     color: "#ff69b4",
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "900",
     borderWidth: 1,
     borderColor: "#ff69b4",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
   normalMark: {
     alignSelf: "flex-start",
     color: "#aaa",
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "900",
     borderWidth: 1,
     borderColor: "#555",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  statusEffectRow: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#ff69b4",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    backgroundColor: "rgba(255, 105, 180, 0.1)",
+  },
+  statusEffectMark: {
+    width: 22,
+    height: 22,
+  },
+  statusEffectLabel: {
+    color: "#ff69b4",
+    fontSize: 8,
+    lineHeight: 12,
+    fontWeight: "900",
   },
   rowBetween: {
     flexDirection: "row",
