@@ -41,7 +41,7 @@ export default function HomeScreen() {
                     : href.includes("section=management")
                       ? "secondary"
                       : href === "/(tabs)/outside"
-                        ? "training"
+                        ? "collection"
                       : href === "/(tabs)/nino-room"
                       ? "defeat"
                       : "contract"

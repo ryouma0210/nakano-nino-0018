@@ -10,11 +10,11 @@ import { roomMessages } from "@/constants/messages";
 import { contractService } from "@/services/gameRoomService";
 
 const recordExchangeItems = [
+  ["週間報告", "/(tabs)/report"],
+  ["調教日記", "/(tabs)/records"],
   ["ご褒美", "/(tabs)/rewards"],
   ["コレクション", "/(tabs)/collection"],
   ["お貢ぎ履歴", "/(tabs)/tribute"],
-  ["週間報告", "/(tabs)/report"],
-  ["調教日記", "/(tabs)/records"],
 ] as const;
 
 const managementSettingItems = [
@@ -22,6 +22,7 @@ const managementSettingItems = [
   ["ファイル格納", "/(tabs)/files"],
   ["マイページ", "/(tabs)/mypage"],
   ["設定", "/(tabs)/settings"],
+  ["外部リンク", "/(tabs)/external-links"],
 ] as const;
 
 type MenuTitle =
@@ -29,7 +30,7 @@ type MenuTitle =
   | (typeof managementSettingItems)[number][0];
 
 function menuTone(title: MenuTitle) {
-  if (title === "設定") return "secondary";
+  if (title === "設定" || title === "外部リンク") return "secondary";
   if (title === "ご褒美") return "defeat";
   if (title === "マイページ") return "record";
   if (title === "ファイル格納") return "preparation";
