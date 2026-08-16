@@ -1,20 +1,19 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { useAppModal } from "@/components/AppModalProvider";
 import { settingsService } from "@/services/settingsService";
+import { slaveContractService } from "@/services/slaveContractService";
 import { lightTheme } from "@/constants/theme";
 import { toDateKey } from "@/utils/date";
 
 const ownerName = "中野二乃";
-const CONTRACT_STORAGE_KEY = "nino-room:real-slave-contract";
 
 const articles = [
   {
@@ -98,12 +97,6 @@ function formatContractDate(dateKey: string) {
   if (!date) return "　年　月　日";
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
-
-type StoredRealContract = {
-  contractorName?: string;
-  contractDate?: string;
-  releaseMonths?: number;
-};
 
 function createContractHtml(contractorName: string, contractDate: string, releaseDate: string) {
   const safeName = escapeHtml(contractorName);
@@ -216,6 +209,31 @@ function createContractHtml(contractorName: string, contractDate: string, releas
 </html>`;
 }
 
+async function savePdfToDevice(uri: string) {
+  const fileName = `nino-slave-contract-${toDateKey()}.pdf`;
+  if (Platform.OS === "android") {
+    const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error("保存先フォルダが選択されませんでした。");
+    }
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const targetUri = await FileSystem.StorageAccessFramework.createFileAsync(
+      permission.directoryUri,
+      fileName,
+      "application/pdf",
+    );
+    await FileSystem.writeAsStringAsync(targetUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return targetUri;
+  }
+  const targetUri = `${FileSystem.documentDirectory}${fileName}`;
+  await FileSystem.copyAsync({ from: uri, to: targetUri });
+  return targetUri;
+}
+
 export default function SlaveContractScreen() {
   const [contractorName, setContractorName] = useState("マゾ");
   const [contractDate, setContractDate] = useState(() => toDateKey());
@@ -227,12 +245,11 @@ export default function SlaveContractScreen() {
     let mounted = true;
     Promise.all([
       settingsService.load(),
-      AsyncStorage.getItem(CONTRACT_STORAGE_KEY),
+      slaveContractService.load(),
     ])
-      .then(([settings, raw]) => {
+      .then(([settings, stored]) => {
         if (!mounted) return;
-        const stored = raw ? JSON.parse(raw) as StoredRealContract : {};
-        setContractorName(stored.contractorName || settings.playerName || "マゾ");
+        setContractorName(stored.contractorName !== undefined ? stored.contractorName : settings.playerName || "マゾ");
         setContractDate(parseDateKey(stored.contractDate || "") ? stored.contractDate! : toDateKey());
         setReleaseMonths(Math.max(1, Math.floor(stored.releaseMonths || 1)));
       })
@@ -251,19 +268,18 @@ export default function SlaveContractScreen() {
   useEffect(() => {
     if (!hydrated) return;
     const name = contractorName.trim();
-    if (!name) return;
-    AsyncStorage.setItem(CONTRACT_STORAGE_KEY, JSON.stringify({
+    slaveContractService.save({
       contractorName: name,
-      contractDate: parseDateKey(contractDate) ? contractDate : toDateKey(),
+      contractDate: contractDate.trim() ? contractDate : "",
       releaseMonths,
-    })).catch(() => {
+    }).catch(() => {
       // PDF表示の邪魔をしないため、保存失敗は出力時の表示に任せる。
     });
   }, [contractDate, contractorName, hydrated, releaseMonths]);
 
   const contractCompleted = contractorName.trim().length > 0;
   const displayName = useMemo(() => contractorName.trim() || "＿＿＿＿＿＿", [contractorName]);
-  const contractDateError = parseDateKey(contractDate) ? "" : "YYYY-MM-DD形式で入力してください。";
+  const contractDateError = contractDate.trim() && !parseDateKey(contractDate) ? "YYYY-MM-DD形式で入力してください。" : "";
   const effectiveContractDate = parseDateKey(contractDate) ? contractDate : toDateKey();
   const releaseDate = useMemo(
     () => addMonths(effectiveContractDate, releaseMonths),
@@ -305,15 +321,8 @@ export default function SlaveContractScreen() {
       }
 
       const { uri } = await Print.printToFileAsync({ html });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: "application/pdf",
-          dialogTitle: "奴隷契約書を出力",
-          UTI: "com.adobe.pdf",
-        });
-      } else {
-        showNotice("PDFを作成しました", `出力先：${uri}`);
-      }
+      const savedUri = await savePdfToDevice(uri);
+      showNotice("PDFを保存しました", `端末内に保存しました。\n${savedUri}`);
     } catch (error) {
       showError("PDF出力に失敗しました", error, "契約書PDFの出力中にエラーが発生しました。");
     }
