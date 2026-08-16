@@ -98,6 +98,21 @@ function formatContractDate(dateKey: string) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+function sanitizeFileNamePart(value: string, fallback: string) {
+  const sanitized = value
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, "");
+  return sanitized || fallback;
+}
+
+function createPdfFileName(contractDate: string, releaseDate: string, contractorName: string) {
+  const contract = sanitizeFileNamePart(contractDate, "契約日未設定");
+  const release = sanitizeFileNamePart(releaseDate, "解約日未設定");
+  const name = sanitizeFileNamePart(contractorName, "契約者名未設定");
+  return `奴隷契約書_${contract}_${release}_${name}.pdf`;
+}
+
 function createContractHtml(contractorName: string, contractDate: string, releaseDate: string) {
   const safeName = escapeHtml(contractorName);
   const safeContractDate = escapeHtml(formatContractDate(contractDate));
@@ -180,9 +195,10 @@ function createContractHtml(contractorName: string, contractDate: string, releas
       }
       .signature-line {
         display: inline-block;
-        min-width: 34mm;
+        min-width: 110px;
         border-bottom: 1px solid #111111;
-        padding: 0 6px 1px;
+        padding: 0 8px 1px;
+        text-align: center;
       }
     </style>
   </head>
@@ -209,8 +225,7 @@ function createContractHtml(contractorName: string, contractDate: string, releas
 </html>`;
 }
 
-async function savePdfToDevice(uri: string) {
-  const fileName = `nino-slave-contract-${toDateKey()}.pdf`;
+async function savePdfToDevice(uri: string, fileName: string) {
   if (Platform.OS === "android") {
     const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
     if (!permission.granted) {
@@ -285,9 +300,13 @@ export default function SlaveContractScreen() {
     () => addMonths(effectiveContractDate, releaseMonths),
     [effectiveContractDate, releaseMonths],
   );
-  const outputName = contractCompleted ? displayName : "＿＿＿＿＿＿";
+  const outputName = contractCompleted ? displayName : "";
   const outputContractDate = contractCompleted ? effectiveContractDate : "";
   const outputReleaseDate = contractCompleted ? releaseDate : "";
+  const pdfFileName = useMemo(
+    () => createPdfFileName(outputContractDate, outputReleaseDate, outputName),
+    [outputContractDate, outputName, outputReleaseDate],
+  );
   const html = useMemo(
     () => createContractHtml(outputName, outputContractDate, outputReleaseDate),
     [outputContractDate, outputName, outputReleaseDate],
@@ -314,14 +333,15 @@ export default function SlaveContractScreen() {
         printWindow.document.open();
         printWindow.document.write(html);
         printWindow.document.close();
+        printWindow.document.title = pdfFileName.replace(/\.pdf$/i, "");
         printWindow.focus();
         printWindow.setTimeout(() => printWindow.print(), 300);
-        showNotice("PDF出力を開きました", "印刷画面で「PDFに保存」を選択してください。");
+        showNotice("PDF出力を開きました", `印刷画面で「PDFに保存」を選択してください。\n推奨ファイル名：${pdfFileName}`);
         return;
       }
 
       const { uri } = await Print.printToFileAsync({ html });
-      const savedUri = await savePdfToDevice(uri);
+      const savedUri = await savePdfToDevice(uri, pdfFileName);
       showNotice("PDFを保存しました", `端末内に保存しました。\n${savedUri}`);
     } catch (error) {
       showError("PDF出力に失敗しました", error, "契約書PDFの出力中にエラーが発生しました。");

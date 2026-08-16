@@ -13,23 +13,18 @@ import {
 } from "@/repositories/reportRepository";
 
 type Reports = {
-  today: ActivityReport;
   week: ActivityReport;
   month: ActivityReport;
 };
 
 function loadReports(): Reports {
   return {
-    today: reportRepository.today(),
     week: reportRepository.recentSevenDays(),
     month: reportRepository.currentMonth(),
   };
 }
 
-function evaluation(
-  report: ActivityReport,
-  period: "today" | "week" | "month",
-) {
+function evaluation(report: ActivityReport, period: "week" | "month") {
   const score =
     report.trainingCount * 3 +
     report.managementDays * 2 +
@@ -38,11 +33,9 @@ function evaluation(
   const active =
     report.trainingCount + report.managementDays + report.orderCount;
   if (active === 0) {
-    return period === "today"
-      ? "今日はまだ何も報告できないようね。最初の命令から始めなさい。"
-      : "この期間は記録がないわ。次の報告では、私を退屈させないでね。";
+    return "この期間は記録がないわ。次の報告では、私を退屈させないでね。";
   }
-  if (score >= (period === "month" ? 30 : period === "week" ? 12 : 5)) {
+  if (score >= (period === "month" ? 30 : 12)) {
     return "よく続けたわね♡記録にも成果がしっかり表れているわ。この調子で積み重ねなさい。";
   }
   if (report.managementDays > 0 && report.trainingCount > 0) {
@@ -70,11 +63,6 @@ export default function ReportScreen() {
         contractLines={roomMessages.report.contractLines}
       />
 
-      <ReportCard
-        title="本日の報告"
-        report={reports.today}
-        evaluation={evaluation(reports.today, "today")}
-      />
       <ReportCard
         title="直近7日間"
         report={reports.week}

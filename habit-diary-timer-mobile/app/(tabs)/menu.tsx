@@ -10,6 +10,7 @@ import { roomMessages } from "@/constants/messages";
 import { contractService } from "@/services/gameRoomService";
 
 const recordExchangeItems = [
+  ["本日の記録", "/(tabs)/today"],
   ["週間報告", "/(tabs)/report"],
   ["調教日記", "/(tabs)/records"],
   ["ご褒美", "/(tabs)/rewards"],
@@ -36,7 +37,8 @@ function menuTone(title: MenuTitle) {
   if (title === "ファイル格納") return "preparation";
   if (title === "お貢ぎ履歴") return "tribute";
   if (title === "ループ音声" || title === "コレクション") return "collection";
-  if (title === "週間報告" || title === "調教日記") return "record";
+  if (title === "本日の記録" || title === "週間報告" || title === "調教日記")
+    return "record";
   return "primary";
 }
 
