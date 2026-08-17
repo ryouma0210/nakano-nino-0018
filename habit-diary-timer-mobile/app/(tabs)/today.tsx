@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -7,6 +7,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
 import {
   loginBonusRepository,
+  type LoginBonusStamp,
   type LoginBonusStatus,
 } from "@/repositories/loginBonusRepository";
 import {
@@ -16,12 +17,19 @@ import {
 
 type TodayData = {
   bonus: LoginBonusStatus;
+  monthLabel: string;
+  stamps: LoginBonusStamp[];
   report: ActivityReport;
 };
 
 function loadTodayData(): TodayData {
+  const bonus = loginBonusRepository.status();
+  const month = bonus.today.slice(0, 7);
+
   return {
-    bonus: loginBonusRepository.status(),
+    bonus,
+    monthLabel: `${month.replace("-", "年")}月`,
+    stamps: loginBonusRepository.monthlyStamps(month),
     report: reportRepository.today(),
   };
 }
@@ -59,8 +67,33 @@ export default function TodayScreen() {
           </View>
         </View>
         <AppText variant="muted">
-          1日目は1pt、2〜6日目は10pt、7日目は50pt。1日1回だけ受け取れます。
+          1日目:1pt、2〜6日目:10pt、7日目以降:50pt。
         </AppText>
+        <View style={styles.todayPointRow}>
+          <AppText variant="muted">本日の獲得Pt</AppText>
+          <AppText style={styles.todayPoints}>
+            {data.report.earnedPoints.toLocaleString()}pt
+          </AppText>
+        </View>
+        <View style={styles.monthHeader}>
+          <AppText variant="subtitle">{data.monthLabel}のスタンプ</AppText>
+          <AppText style={styles.claimStatus}>
+            {data.bonus.alreadyClaimed ? "本日は受取済み" : "本日は未受取"}
+          </AppText>
+        </View>
+        <ScrollView
+          style={styles.stampScroll}
+          contentContainerStyle={styles.stampGrid}
+          nestedScrollEnabled
+        >
+          {data.stamps.map((stamp) => (
+            <StampCell
+              key={stamp.date}
+              stamp={stamp}
+              isToday={stamp.date === data.bonus.today}
+            />
+          ))}
+        </ScrollView>
         <PrimaryButton
           title={
             data.bonus.alreadyClaimed
@@ -96,6 +129,24 @@ export default function TodayScreen() {
         onPress={() => router.replace("/(tabs)")}
       />
     </Screen>
+  );
+}
+
+function StampCell({ stamp, isToday }: { stamp: LoginBonusStamp; isToday: boolean }) {
+  return (
+    <View
+      style={[
+        styles.stampCell,
+        stamp.claimed && styles.stampCellClaimed,
+        isToday && styles.stampCellToday,
+      ]}
+    >
+      <AppText style={styles.stampDay}>{stamp.day}</AppText>
+      <AppText style={[styles.stampMark, stamp.claimed && styles.stampMarkClaimed]}>
+        {stamp.claimed ? "♡" : "—"}
+      </AppText>
+      {stamp.claimed ? <AppText style={styles.stampPoint}>{stamp.points}pt</AppText> : null}
+    </View>
   );
 }
 
@@ -140,6 +191,73 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   points: { color: "#f6d15f", fontSize: 28, lineHeight: 36, fontWeight: "900" },
+  todayPointRow: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    backgroundColor: "#121212",
+    gap: 4,
+  },
+  todayPoints: {
+    color: "#f6d15f",
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: "900",
+  },
+  monthHeader: {
+    gap: 6,
+    marginTop: 4,
+  },
+  claimStatus: {
+    color: "#ff5fb3",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+  stampScroll: { maxHeight: 300 },
+  stampGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingVertical: 2,
+  },
+  stampCell: {
+    width: "13.2%",
+    minHeight: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#444",
+    borderRadius: 6,
+    backgroundColor: "#111",
+    paddingVertical: 4,
+  },
+  stampCellClaimed: {
+    borderColor: "#ff5fb3",
+    backgroundColor: "#2a071a",
+  },
+  stampCellToday: {
+    borderColor: "#f2c94c",
+  },
+  stampDay: {
+    color: "#fff",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "900",
+  },
+  stampMark: {
+    color: "#555",
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
+  stampMarkClaimed: { color: "#ff5fb3" },
+  stampPoint: {
+    color: "#aaa",
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "800",
+  },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metric: {
     minWidth: "46%",

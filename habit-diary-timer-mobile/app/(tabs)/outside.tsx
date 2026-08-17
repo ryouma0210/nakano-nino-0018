@@ -45,7 +45,7 @@ const startPositions: Record<MapArea, MapPosition> = {
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
 const pixelSprites = {
-  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad.png"),
+  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
   mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
@@ -475,22 +475,26 @@ export default function OutsideScreen() {
     lastLossKind: "tail",
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      setPhase("explore");
-      setMapArea("center");
-      setMapStep(0);
-      setMapPosition(startPositions.center);
-      setPlayerFacing("down");
-      setCrystalOpen(false);
-      setBattleMenu("root");
-      setBattleAwaitingChoice(false);
-      setPendingGameOver(null);
-      setTemptationEffect(null);
-      setBattleEnemyImage("battle");
-      setMessage("館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。");
-    }, []),
-  );
+  const resetToCrossroad = useCallback(() => {
+    setPhase("explore");
+    setMapArea("center");
+    setMapStep(0);
+    setMapPosition(startPositions.center);
+    setPlayerFacing("down");
+    setCrystalOpen(false);
+    setBattleMenu("root");
+    setBattleAwaitingChoice(false);
+    setPendingGameOver(null);
+    setTemptationEffect(null);
+    setBattleEnemyImage("battle");
+    setMessage("館の外へ出た。家に帰るには、外にいるサキュバスの誘惑を切り抜ける必要がある。");
+  }, []);
+
+  useEffect(() => {
+    resetToCrossroad();
+  }, [resetToCrossroad]);
+
+  useFocusEffect(resetToCrossroad);
 
   const succubus = useMemo(
     () => succubusForLevel(level, succubusAbsorbBonus),

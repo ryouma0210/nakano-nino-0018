@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   BackHandler,
   Image,
@@ -36,14 +36,33 @@ export default function Index() {
     ? `${loginBonusStatus.today.slice(0, 7).replace("-", "年")}月`
     : "";
 
+  const refreshLoginBonusInfo = useCallback(() => {
+    const status = loginBonusRepository.status();
+    setLoginBonusStatus(status);
+    setLoginBonusStamps(loginBonusRepository.monthlyStamps(status.today.slice(0, 7)));
+    setTodayEarnedPoints(reportRepository.today().earnedPoints);
+    return status;
+  }, []);
+
+  const claimStartupLoginBonus = useCallback(() => {
+    try {
+      const status = loginBonusRepository.claim();
+      setLoginBonusStatus(status);
+      setLoginBonusStamps(loginBonusRepository.monthlyStamps(status.today.slice(0, 7)));
+      setTodayEarnedPoints(reportRepository.today().earnedPoints);
+    } catch {
+      showNotice(
+        "ログインボーナスを受け取れません",
+        "本日の記録画面から再度お試しください。",
+      );
+    }
+  }, [showNotice]);
+
   useEffect(() => {
     if (startupLoginBonusModalShown) return;
     startupLoginBonusModalShown = true;
     try {
-      const status = loginBonusRepository.status();
-      setLoginBonusStatus(status);
-      setLoginBonusStamps(loginBonusRepository.monthlyStamps(status.today.slice(0, 7)));
-      setTodayEarnedPoints(reportRepository.today().earnedPoints);
+      refreshLoginBonusInfo();
       setLoginBonusVisible(true);
     } catch {
       showNotice(
@@ -51,7 +70,7 @@ export default function Index() {
         "本日の記録画面からログインボーナスを確認してください。",
       );
     }
-  }, [showNotice]);
+  }, [refreshLoginBonusInfo, showNotice]);
 
   function exitGame() {
     if (Platform.OS === "android") BackHandler.exitApp();
@@ -146,11 +165,18 @@ export default function Index() {
                 );
               })}
             </ScrollView>
-            <PrimaryButton
-              title="閉じる"
-              tone="secondary"
-              onPress={() => setLoginBonusVisible(false)}
-            />
+            {loginBonusStatus?.alreadyClaimed ? (
+              <PrimaryButton
+                title="閉じる"
+                tone="secondary"
+                onPress={() => setLoginBonusVisible(false)}
+              />
+            ) : (
+              <PrimaryButton
+                title={`受け取る（${loginBonusStatus?.claimPoints ?? 0}pt）`}
+                onPress={claimStartupLoginBonus}
+              />
+            )}
           </View>
         </View>
       </Modal>
