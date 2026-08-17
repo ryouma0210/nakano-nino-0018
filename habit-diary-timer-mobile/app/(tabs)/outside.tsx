@@ -44,8 +44,21 @@ const startPositions: Record<MapArea, MapPosition> = {
 };
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
+const crossroadTrees = [
+  { left: "7%", top: "12%", size: 44 },
+  { left: "16%", top: "30%", size: 36 },
+  { left: "10%", top: "62%", size: 42 },
+  { left: "77%", top: "13%", size: 46 },
+  { left: "84%", top: "35%", size: 34 },
+  { left: "75%", top: "65%", size: 40 },
+] as const;
+const crossroadRocks = [
+  { left: "24%", top: "22%" },
+  { left: "68%", top: "27%" },
+  { left: "20%", top: "72%" },
+  { left: "71%", top: "74%" },
+] as const;
 const pixelSprites = {
-  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
   mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
@@ -152,6 +165,42 @@ const pixelSprites = {
     },
   },
 };
+
+function CenterCrossroadBackdrop() {
+  return (
+    <View pointerEvents="none" style={styles.crossroadBackdrop}>
+      <View style={styles.crossroadMistTop} />
+      <View style={styles.crossroadMistBottom} />
+      <View style={styles.crossroadVerticalPath} />
+      <View style={styles.crossroadHorizontalPath} />
+      <View style={styles.crossroadVerticalLight} />
+      <View style={styles.crossroadHorizontalLight} />
+      <View style={styles.crossroadIntersection} />
+      <View style={styles.crossroadTopGate} />
+      <View style={styles.crossroadBottomGate} />
+      {crossroadTrees.map((tree, index) => (
+        <View
+          key={`crossroad-tree-${index}`}
+          style={[
+            styles.crossroadTree,
+            {
+              left: tree.left,
+              top: tree.top,
+              width: tree.size,
+              height: tree.size,
+            },
+          ]}
+        >
+          <View style={styles.crossroadTreeTop} />
+          <View style={styles.crossroadTreeTrunk} />
+        </View>
+      ))}
+      {crossroadRocks.map((rock, index) => (
+        <View key={`crossroad-rock-${index}`} style={[styles.crossroadRock, { left: rock.left, top: rock.top }]} />
+      ))}
+    </View>
+  );
+}
 
 const battleLines: Record<SuccubusStage, {
   appear: string;
@@ -466,6 +515,7 @@ export default function OutsideScreen() {
   const [pendingGameOver, setPendingGameOver] = useState<{ kind: LossEventKind; reason: string } | null>(null);
   const [temptationEffect, setTemptationEffect] = useState<TemptationEffect>(null);
   const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
+  const [encounterStage, setEncounterStage] = useState<SuccubusStage>("beginner");
   const [lossEventIndex, setLossEventIndex] = useState(0);
   const [lossSummary, setLossSummary] = useState("");
   const [battle, setBattle] = useState<BattleStatus>({
@@ -500,14 +550,16 @@ export default function OutsideScreen() {
     () => succubusForLevel(level, succubusAbsorbBonus),
     [level, succubusAbsorbBonus],
   );
+  const activeSuccubusStage =
+    phase === "battle" || phase === "loss" || phase === "result" ? encounterStage : succubus.stage;
   const crystalSpinScaleX = 0.28 + 0.72 * Math.abs(Math.cos((crystalRotation * Math.PI) / 180));
   const lossEventImages = useMemo(() => {
-    return pixelSprites.eventStages[succubus.stage][battle.lastLossKind];
-  }, [battle.lastLossKind, succubus.stage]);
+    return pixelSprites.eventStages[activeSuccubusStage][battle.lastLossKind];
+  }, [activeSuccubusStage, battle.lastLossKind]);
   const battleEnemyImageSource = useMemo(() => {
-    if (battleEnemyImage === "battle") return pixelSprites.succubus[succubus.stage];
-    return pixelSprites.events[succubus.stage][battleEnemyImage];
-  }, [battleEnemyImage, succubus.stage]);
+    if (battleEnemyImage === "battle") return pixelSprites.succubus[activeSuccubusStage];
+    return pixelSprites.events[activeSuccubusStage][battleEnemyImage];
+  }, [activeSuccubusStage, battleEnemyImage]);
   const lossImageIndex = lossEventIndex < 5 ? 0 : lossEventIndex < 15 ? 1 : 2;
   const lossMessage = phase === "loss"
     ? [
@@ -522,7 +574,7 @@ export default function OutsideScreen() {
         ? pixelSprites.mapRight
         : mapArea === "top"
           ? pixelSprites.mapTop
-          : pixelSprites.mapCenter;
+          : null;
   const displayedPlayerFacing: Direction = mapStep > 0 ? "up" : playerFacing;
 
   useEffect(() => {
@@ -588,6 +640,7 @@ export default function OutsideScreen() {
   }
 
   function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
+    setEncounterStage(succubus.stage);
     setPhase("battle");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
@@ -845,6 +898,7 @@ export default function OutsideScreen() {
     const today = toDateKey();
     const absorbedLevel = Math.max(0, level - 1);
     const nextSuccubusLevel = Math.min(100, succubus.level + absorbedLevel);
+    setEncounterStage(succubus.stage);
     setLossEventIndex(0);
     setBattleMenu("root");
     setTemptationEffect(null);
@@ -853,7 +907,7 @@ export default function OutsideScreen() {
     setCharmTurns(0);
     setBattle((current) => ({ ...current, hp: 0, mp: Math.max(0, current.mp - 100), lastLossKind: kind }));
     setLossSummary(
-      `射精を1回奪われた。\nLv.${absorbedLevel} / MP100 / Pt50を吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1`,
+      `レベルドレインにより、全て吸い尽くされた。\nLv.${absorbedLevel} / MP100 / Pt50を吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1`,
     );
     setSuccubusAbsorbBonus(nextSuccubusLevel);
     saveSetting(succubusAbsorbDateKey, today);
@@ -1054,8 +1108,9 @@ export default function OutsideScreen() {
         stopEffect("outsideNipple");
         playEffect("outsideLossRhythm");
       }
-      if (next === 15) {
+      if (next >= 14) {
         stopEffect("outsideLossRhythm");
+        stopEffect("ejaculation");
         playEffect("ejaculation");
       }
       return next;
@@ -1203,7 +1258,9 @@ export default function OutsideScreen() {
                   {charmTurns > 0 ? (
                     <AppText style={styles.charmText}>CHARM：逃亡不可 / 左の水辺で解除</AppText>
                   ) : null}
-                  <AppText style={styles.message}>{message}</AppText>
+                  <AppText style={[styles.message, pendingGameOver ? styles.pendingGameOverMessage : null]}>
+                    {message}
+                  </AppText>
                   <AppText style={styles.tapGuide}>タップ ▼</AppText>
                 </Pressable>
                 )}
@@ -1216,11 +1273,13 @@ export default function OutsideScreen() {
               {phase === "result" ? (
                 <PrimaryButton title="マップへ戻る" tone="contract" onPress={resetBattle} />
               ) : null}
-              <PrimaryButton
-                title="ホーム画面へ戻る"
-                tone="secondary"
-                onPress={() => router.replace("/(tabs)")}
-              />
+              {phase !== "loss" || lossEventIndex >= 19 ? (
+                <PrimaryButton
+                  title={phase === "loss" ? "力尽きたため、館に戻る" : "ホーム画面へ戻る"}
+                  tone="secondary"
+                  onPress={() => router.replace("/(tabs)")}
+                />
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -1232,7 +1291,11 @@ export default function OutsideScreen() {
     <View style={styles.root}>
       <View style={styles.mapScreen}>
         <View style={styles.fullMap}>
-          <Image source={mapSource} style={styles.mapBackground} contentFit="cover" />
+          {mapSource ? (
+            <Image source={mapSource} style={styles.mapBackground} contentFit="cover" />
+          ) : (
+            <CenterCrossroadBackdrop />
+          )}
           {mapArea === "center" ? (
             <>
               <Pressable style={styles.mapLeftTap} onPress={() => moveMap("left")} />
@@ -1470,6 +1533,114 @@ const styles = StyleSheet.create({
     left: 0,
     width: "100%",
     height: "100%",
+  },
+  crossroadBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+    backgroundColor: "#0a1f16",
+  },
+  crossroadMistTop: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    height: "24%",
+    backgroundColor: "rgba(53, 16, 64, 0.34)",
+  },
+  crossroadMistBottom: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    height: "24%",
+    backgroundColor: "rgba(53, 16, 64, 0.24)",
+  },
+  crossroadVerticalPath: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: "38%",
+    width: "24%",
+    backgroundColor: "#5d554b",
+  },
+  crossroadHorizontalPath: {
+    position: "absolute",
+    top: "45%",
+    right: 0,
+    left: 0,
+    height: "14%",
+    backgroundColor: "#5d554b",
+  },
+  crossroadVerticalLight: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: "45%",
+    width: "10%",
+    backgroundColor: "rgba(205, 188, 156, 0.28)",
+  },
+  crossroadHorizontalLight: {
+    position: "absolute",
+    top: "48%",
+    right: 0,
+    left: 0,
+    height: "7%",
+    backgroundColor: "rgba(205, 188, 156, 0.24)",
+  },
+  crossroadIntersection: {
+    position: "absolute",
+    top: "43%",
+    left: "37%",
+    width: "26%",
+    height: "18%",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: "rgba(128, 107, 84, 0.46)",
+  },
+  crossroadTopGate: {
+    position: "absolute",
+    top: "4%",
+    left: "30%",
+    width: "40%",
+    height: 8,
+    borderWidth: 1,
+    borderColor: "#6f536f",
+    backgroundColor: "#171014",
+  },
+  crossroadBottomGate: {
+    position: "absolute",
+    bottom: "1%",
+    left: "30%",
+    width: "40%",
+    height: 14,
+    borderWidth: 1,
+    borderColor: "#7b5a73",
+    backgroundColor: "#120c10",
+  },
+  crossroadTree: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  crossroadTreeTop: {
+    width: "74%",
+    height: "74%",
+    borderRadius: 8,
+    backgroundColor: "#123c29",
+    transform: [{ rotate: "45deg" }],
+  },
+  crossroadTreeTrunk: {
+    width: 8,
+    height: 12,
+    marginTop: -6,
+    backgroundColor: "#56351e",
+  },
+  crossroadRock: {
+    position: "absolute",
+    width: 18,
+    height: 10,
+    borderRadius: 6,
+    backgroundColor: "#32423e",
   },
   mapForwardTap: {
     position: "absolute",
@@ -2166,6 +2337,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   gameOverMessage: {
+    color: "#d9202a",
+    fontWeight: "900",
+  },
+  pendingGameOverMessage: {
     color: "#d9202a",
     fontWeight: "900",
   },
