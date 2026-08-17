@@ -1535,7 +1535,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   crossroadBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: "hidden",
     backgroundColor: "#0a1f16",
   },
