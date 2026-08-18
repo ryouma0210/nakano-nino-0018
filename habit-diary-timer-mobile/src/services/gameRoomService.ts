@@ -3,6 +3,8 @@ import { toDateKey } from "@/utils/date";
 import { pointRepository } from "@/repositories/rewardRepository";
 import { dailyOrderMessages } from "@/constants/messages";
 import { journalRepository } from "@/repositories/journalRepository";
+import { contractSettingsSchema, dailyOrderSchema } from "@/schemas/storage";
+import { parseStoredJson } from "@/utils/storageValidation";
 
 const CONTRACT_KEY = "nino-room:contract";
 const ORDER_PREFIX = "nino-room:daily-order:";
@@ -33,7 +35,7 @@ export const contractService = {
   async load() {
     const raw = await AsyncStorage.getItem(CONTRACT_KEY);
     if (!raw) return defaultContract;
-    try { return { ...defaultContract, ...JSON.parse(raw) } as ContractSettings; } catch { return defaultContract; }
+    return parseStoredJson(raw, contractSettingsSchema, defaultContract);
   },
   async save(value: ContractSettings) {
     await AsyncStorage.setItem(CONTRACT_KEY, JSON.stringify(value));
@@ -61,7 +63,7 @@ export const dailyOrderService = {
     const raw = await AsyncStorage.getItem(`${ORDER_PREFIX}${date}`);
     if (!raw) return null;
     try {
-      const order = JSON.parse(raw) as DailyOrder;
+      const order = dailyOrderSchema.parse(JSON.parse(raw));
       if (order.completed) this.saveJournal(order);
       return order;
     } catch { return null; }
@@ -96,7 +98,7 @@ export const dailyOrderService = {
     entries.forEach(([, raw]) => {
       if (!raw) return;
       try {
-        const order = JSON.parse(raw) as DailyOrder;
+        const order = dailyOrderSchema.parse(JSON.parse(raw));
         if (order.completed) this.saveJournal(order);
       } catch {
         // 壊れた旧データは日記へ同期しない。

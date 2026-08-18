@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { realContractSchema } from "@/schemas/storage";
+import { parseStoredJson } from "@/utils/storageValidation";
 
 const CONTRACT_STORAGE_KEY = "nino-room:real-slave-contract";
 
@@ -12,12 +14,7 @@ export const slaveContractService = {
   async load(): Promise<StoredRealContract> {
     const raw = await AsyncStorage.getItem(CONTRACT_STORAGE_KEY);
     if (!raw) return {};
-    try {
-      return JSON.parse(raw) as StoredRealContract;
-    } catch {
-      await AsyncStorage.removeItem(CONTRACT_STORAGE_KEY);
-      return {};
-    }
+    return parseStoredJson(raw, realContractSchema, {});
   },
 
   async save(value: StoredRealContract) {
