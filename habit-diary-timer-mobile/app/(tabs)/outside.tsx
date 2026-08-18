@@ -19,6 +19,7 @@ import {
   levelDateKey, levelKey, mpKey, saveSetting,
   succubusAbsorbDateKey, succubusAbsorbKey,
 } from "@/features/outside/gameState";
+import { lossStageComments } from "@/features/outside/lossDialogue";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
@@ -284,29 +285,7 @@ const lossLabels: Record<LossEventKind, string> = {
   foot: "足裏",
 };
 
-const lossEventComments: Record<LossEventKind, string[]> = {
-  tail: [
-    "尻尾がゆらりと近づき、甘い魔力が足元から絡みついた。",
-    "避けようとしても、尻尾の動きに視線を奪われる。",
-    "先端が目の前で揺れるたび、抵抗する意思が薄れていく。",
-    "サキュバスは楽しそうに笑い、逃げ道を塞いだ。",
-    "尻尾がさらに近づき、心拍だけが大きく聞こえる。",
-    "体が動かない。誘惑のリズムに飲まれていく。",
-    "踏みとどまろうとしても、力が少しずつ抜ける。",
-    "甘い声が耳に残り、判断が鈍っていく。",
-    "もう少しで振り払えそうなのに、尻尾は離れない。",
-    "最後の抵抗まで、柔らかく絡め取られた。",
-    "尻尾の誘惑が深く入り込み、意識がふわりと沈む。",
-    "サキュバスの笑みが近い。勝てると思った油断を見透かされた。",
-    "一度崩れた姿勢を、もう立て直せない。",
-    "尻尾の動きに合わせて、呼吸まで支配されていく。",
-    "逃げる命令を出しても、体が応えてくれない。",
-    "甘い魔力が全身に回り、戦闘意思が折れていく。",
-    "サキュバスは勝利を確信したように、さらに近づいた。",
-    "視界が揺れる。敗北の気配だけが濃くなる。",
-    "最後の一線を越え、もう抗えない。",
-    "尻尾の誘惑に完全敗北した。",
-  ],
+const lossEventComments: Record<Exclude<LossEventKind, "tail">, string[]> = {
   chest: [
     "胸元が近づき、甘い香りで思考がぼやけていく。",
     "視線を逸らそうとしても、誘惑の気配が離してくれない。",
@@ -457,7 +436,10 @@ export default function OutsideScreen() {
   const lossImageIndex = lossEventIndex < 5 ? 0 : lossEventIndex < 15 ? 1 : 2;
   const lossMessage = phase === "loss"
     ? [
-        lossEventComments[battle.lastLossKind][lossEventIndex] ?? lossEventComments[battle.lastLossKind][0],
+        lossEventComments[battle.lastLossKind === "tail" ? "chest" : battle.lastLossKind][lossEventIndex]
+          ?? lossEventComments.chest[0],
+        lossStageComments[activeSuccubusStage][battle.lastLossKind === "tail" ? "chest" : battle.lastLossKind][lossEventIndex]
+          ?? lossStageComments[activeSuccubusStage].chest[0],
         lossEventIndex >= 19 ? lossSummary : "",
       ].filter(Boolean).join("\n")
     : message;
@@ -1126,7 +1108,7 @@ const mapSource =
                   <Image
                     source={lossEventImages[lossImageIndex] ?? lossEventImages[0]}
                     style={styles.lossImage}
-                    contentFit="contain"
+                    contentFit="cover"
                   />
                   <AppText style={styles.lossImageLabel}>
                     {lossEventIndex + 1} / 20
@@ -1156,7 +1138,7 @@ const mapSource =
                       styles.enemyLargeImage,
                       battleEnemyImage !== "battle" && styles.enemyLargeEventImage,
                     ]}
-                    contentFit={battleEnemyImage === "battle" ? "contain" : "cover"}
+                    contentFit="cover"
                   />
                 </View>
                 {battleAwaitingChoice ? (
@@ -2185,9 +2167,7 @@ const styles = StyleSheet.create({
   },
   battleScreen: {
     flex: 1,
-    gap: 6,
-    padding: 10,
-    paddingBottom: 30,
+    padding: 0,
     backgroundColor: "#050505",
   },
   kicker: {
@@ -2197,7 +2177,15 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
   },
   battleHeader: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    left: 10,
+    zIndex: 20,
     gap: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.58)",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   battleTitle: {
     color: "#fff",
@@ -2211,21 +2199,21 @@ const styles = StyleSheet.create({
   },
   battleStage: {
     flex: 1,
-    minHeight: 500,
+    minHeight: 0,
     overflow: "hidden",
     borderWidth: 0,
     backgroundColor: "#140914",
   },
   lossBattleStage: {
     flex: 1,
-    minHeight: 480,
-    gap: 8,
+    minHeight: 0,
+    gap: 0,
     borderWidth: 0,
     backgroundColor: "#050505",
   },
   enemyOverlay: {
     position: "absolute",
-    top: 12,
+    top: 82,
     right: 12,
     left: 12,
     zIndex: 4,
@@ -2253,15 +2241,15 @@ const styles = StyleSheet.create({
   },
   enemyLarge: {
     position: "absolute",
-    top: 58,
-    right: 8,
-    bottom: 8,
-    left: 8,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   enemyLargeImage: {
-    width: "88%",
+    width: "100%",
     height: "100%",
   },
   enemyLargeEventImage: {
