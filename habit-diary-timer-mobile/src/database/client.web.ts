@@ -9,6 +9,8 @@ type ExecuteResult = {
 };
 
 const STORAGE_KEY = "nino-room-web-db-v1";
+const STORAGE_PREFIX = "nino-room-web-db-v2:";
+const TABLE_INDEX_KEY = `${STORAGE_PREFIX}tables`;
 const ID_COLUMNS = new Set([
   "habits",
   "habit_schedules",
@@ -43,7 +45,16 @@ function storage() {
 function loadStore(): Store {
   if (cache) return cache;
   try {
-    cache = JSON.parse(storage().getItem(STORAGE_KEY) ?? "{}") as Store;
+    const names = JSON.parse(storage().getItem(TABLE_INDEX_KEY) ?? "[]") as string[];
+    if (names.length) {
+      cache = Object.fromEntries(names.map((name) => [
+        name,
+        JSON.parse(storage().getItem(`${STORAGE_PREFIX}${name}`) ?? "[]") as Row[],
+      ]));
+    } else {
+      cache = JSON.parse(storage().getItem(STORAGE_KEY) ?? "{}") as Store;
+      if (Object.keys(cache).length) saveStore();
+    }
   } catch {
     cache = {};
   }
@@ -52,7 +63,13 @@ function loadStore(): Store {
 
 function saveStore() {
   try {
-    storage().setItem(STORAGE_KEY, JSON.stringify(loadStore()));
+    const store = loadStore();
+    const names = Object.keys(store);
+    for (const name of names) {
+      storage().setItem(`${STORAGE_PREFIX}${name}`, JSON.stringify(store[name]));
+    }
+    storage().setItem(TABLE_INDEX_KEY, JSON.stringify(names));
+    storage().removeItem(STORAGE_KEY);
   } catch (error) {
     console.error("WEB DB save failed", error);
     throw error;

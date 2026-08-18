@@ -4,25 +4,19 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "sync:shared": "node scripts/sync-shared.cjs",
-    "prestart": "npm run sync:shared",
     "start": "expo start",
-    "pretunnel": "npm run sync:shared",
     "tunnel": "expo start -c --tunnel",
-    "preandroid": "npm run sync:shared",
     "android": "expo start --android",
-    "preios": "npm run sync:shared",
     "ios": "expo start --ios",
-    "preweb": "npm run sync:shared",
     "web": "expo start --web",
-    "pretypecheck": "npm run sync:shared",
     "typecheck": "tsc --noEmit",
-    "prelint": "npm run sync:shared",
     "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run",
     "build:android-apk": "eas build -p android --profile preview",
     "build:ios-testflight": "eas build -p ios --profile production"
   },
   "dependencies": {
+    "@nino/shared": "file:../shared",
     "@expo/vector-icons": "^15.0.0",
     "@hookform/resolvers": "^5.2.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -66,5 +60,6 @@
     "eslint": "^9.31.0",
     "eslint-config-expo": "~57.0.0",
     "typescript": "~6.0.3"
+    ,"vitest": "3.2.4"
   }
 }

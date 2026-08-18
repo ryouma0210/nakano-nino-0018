@@ -5,12 +5,21 @@ import { Image } from "expo-image";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { execute, queryOne } from "@/database/client";
 import { pointRepository } from "@/repositories/rewardRepository";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
+import {
+  clamp, createSlimes, entryPosition, facingForEntry, isNear, startPositions,
+  succubusForLevel, type Direction, type MapArea, type MapPosition, type MapSlime,
+  type SuccubusStage,
+} from "@/features/outside/gameLogic";
+import {
+  dailyPointDateKey, dailyPointKey, hpKey, initializeDailyOutsidePoints,
+  initializeLevel, initializePlayerStat, initializeSuccubusAbsorbBonus,
+  levelDateKey, levelKey, mpKey, saveSetting,
+  succubusAbsorbDateKey, succubusAbsorbKey,
+} from "@/features/outside/gameState";
 
 type Phase = "explore" | "battle" | "result" | "loss";
-type SuccubusStage = "beginner" | "middle" | "queen";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
 type BattleCommand = "attack" | "defend" | LossEventKind | "run";
 type BattleMenu = "root" | "fight" | "surrender";
@@ -23,25 +32,7 @@ type BattleStatus = {
   lastLossKind: LossEventKind;
 };
 type MapStep = 0 | 1 | 2;
-type MapArea = "center" | "left" | "right" | "top";
-type Direction = "up" | "down" | "left" | "right";
-type MapPosition = { x: number; y: number };
-type MapSlime = MapPosition & { id: number; active: boolean };
 
-const levelKey = "outside_game_level";
-const hpKey = "outside_game_hp";
-const mpKey = "outside_game_mp";
-const levelDateKey = "outside_game_level_date";
-const dailyPointDateKey = "outside_game_point_date";
-const dailyPointKey = "outside_game_point_today";
-const succubusAbsorbDateKey = "outside_game_succubus_absorb_date";
-const succubusAbsorbKey = "outside_game_succubus_absorb_today";
-const startPositions: Record<MapArea, MapPosition> = {
-  center: { x: 48, y: 74 },
-  left: { x: 68, y: 54 },
-  right: { x: 24, y: 54 },
-  top: { x: 48, y: 76 },
-};
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
 const crossroadTrees = [
@@ -351,139 +342,6 @@ const lossEventComments: Record<LossEventKind, string[]> = {
     "足裏の誘惑に完全敗北した。",
   ],
 };
-
-function readSetting(key: string) {
-  return queryOne<{ setting_value: string }>(
-    "SELECT setting_value FROM app_settings WHERE setting_key=?",
-    [key],
-  )?.setting_value;
-}
-
-function saveSetting(key: string, value: string) {
-  const now = toDateTimeKey();
-  execute(
-    `INSERT INTO app_settings(setting_key, setting_value, updated_at)
-     VALUES(?, ?, ?)
-     ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
-    [key, value, now],
-  );
-}
-
-function initializeLevel() {
-  const today = toDateKey();
-  const savedLevel = Number(readSetting(levelKey) ?? 0);
-  const savedDate = readSetting(levelDateKey);
-  const level =
-    savedDate === today ? savedLevel : Math.min(100, Math.max(0, savedLevel) + 10);
-  if (savedDate !== today) {
-    saveSetting(levelKey, String(level));
-    saveSetting(levelDateKey, today);
-  }
-  return level;
-}
-
-function initializeDailyOutsidePoints() {
-  const today = toDateKey();
-  const savedDate = readSetting(dailyPointDateKey);
-  if (savedDate !== today) {
-    saveSetting(dailyPointDateKey, today);
-    saveSetting(dailyPointKey, "0");
-    return 0;
-  }
-  return Math.max(0, Math.min(100, Number(readSetting(dailyPointKey) ?? 0)));
-}
-
-function initializeSuccubusAbsorbBonus() {
-  const today = toDateKey();
-  const savedDate = readSetting(succubusAbsorbDateKey);
-  if (savedDate !== today) {
-    saveSetting(succubusAbsorbDateKey, today);
-    saveSetting(succubusAbsorbKey, "0");
-    return 0;
-  }
-  return Math.max(0, Math.min(100, Number(readSetting(succubusAbsorbKey) ?? 0)));
-}
-
-function initializePlayerStat(key: string, fallback: number) {
-  const value = Number(readSetting(key) ?? fallback);
-  if (!Number.isFinite(value) || value <= 0) {
-    saveSetting(key, String(fallback));
-    return fallback;
-  }
-  return Math.max(1, Math.min(100, value));
-}
-
-function succubusForLevel(level: number, savedSuccubusLevel: number) {
-  const succubusLevel = Math.max(1, Math.min(100, savedSuccubusLevel > 0 ? savedSuccubusLevel : level));
-  if (succubusLevel < 30) {
-    return {
-      stage: "beginner" as const,
-      title: "ニノメスガキ初級サキュバス",
-      level: succubusLevel,
-      message: "Lv.1〜30。油断した相手を逆転する小悪魔。",
-      color: "#ff69b4",
-    };
-  }
-  if (succubusLevel < 80) {
-    return {
-      stage: "middle" as const,
-      title: "上級サキュバス",
-      level: succubusLevel,
-      message: "Lv.30〜79。駆け引きと選択肢で揺さぶってくる。",
-      color: "#9b5de5",
-    };
-  }
-  return {
-    stage: "queen" as const,
-    title: "女王サキュバス",
-    level: succubusLevel,
-    message: "Lv.80〜。圧倒的な格で、帰宅意思をねじ伏せにくる。",
-    color: "#d9202a",
-  };
-}
-
-function clamp(value: number) {
-  return Math.max(0, Math.min(100, value));
-}
-
-function randomSlimePosition(): MapPosition {
-  return {
-    x: 24 + Math.random() * 58,
-    y: 24 + Math.random() * 54,
-  };
-}
-
-function createSlimes() {
-  return Array.from({ length: 4 }, (_, index): MapSlime => ({
-    id: index + 1,
-    active: true,
-    ...randomSlimePosition(),
-  }));
-}
-
-function entryPosition(from: MapArea, to: MapArea): MapPosition {
-  if (from === "center" && to === "left") return { x: 82, y: 54 };
-  if (from === "left" && to === "center") return { x: 18, y: 54 };
-  if (from === "center" && to === "right") return { x: 18, y: 54 };
-  if (from === "right" && to === "center") return { x: 78, y: 54 };
-  if (from === "center" && to === "top") return { x: 48, y: 82 };
-  if (from === "top" && to === "center") return { x: 48, y: 20 };
-  return startPositions[to];
-}
-
-function facingForEntry(from: MapArea, to: MapArea): Direction {
-  if (to === "top") return "up";
-  if (to === "left") return "left";
-  if (to === "right") return "right";
-  if (from === "top") return "down";
-  if (from === "left") return "right";
-  if (from === "right") return "left";
-  return "down";
-}
-
-function isNear(a: MapPosition, b: MapPosition, range = 8) {
-  return Math.abs(a.x - b.x) <= range && Math.abs(a.y - b.y) <= range;
-}
 
 function playerSpriteForFacing(facing: Direction) {
   if (facing === "up") return pixelSprites.playerBack;

@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { profileSettingsSchema } from "@/schemas/storage";
+import { parseStoredJson } from "@/utils/storageValidation";
 
 const PROFILE_KEY = "nino-room:profile";
 
@@ -40,11 +42,7 @@ export const profileService = {
   async load() {
     const raw = await AsyncStorage.getItem(PROFILE_KEY);
     if (!raw) return defaultProfile;
-    try {
-      return { ...defaultProfile, ...JSON.parse(raw) } as ProfileSettings;
-    } catch {
-      return defaultProfile;
-    }
+    return parseStoredJson(raw, profileSettingsSchema, defaultProfile);
   },
 
   async save(value: ProfileSettings) {
