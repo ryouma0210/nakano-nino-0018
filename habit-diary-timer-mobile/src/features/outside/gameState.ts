@@ -34,8 +34,8 @@ function initializeDailyValue(dateKey: string, valueKey: string) {
 }
 export const initializeDailyOutsidePoints = () => initializeDailyValue(dailyPointDateKey, dailyPointKey);
 export const initializeSuccubusAbsorbBonus = () => initializeDailyValue(succubusAbsorbDateKey, succubusAbsorbKey);
-export function initializePlayerStat(key: string, fallback: number) {
+export function initializePlayerStat(key: string, fallback: number, minimum = 1) {
   const value = Number(readSetting(key) ?? fallback);
-  if (!Number.isFinite(value) || value <= 0) { saveSetting(key, String(fallback)); return fallback; }
-  return Math.max(1, Math.min(100, value));
+  if (!Number.isFinite(value) || value < minimum) { saveSetting(key, String(fallback)); return fallback; }
+  return Math.max(minimum, Math.min(100, value));
 }

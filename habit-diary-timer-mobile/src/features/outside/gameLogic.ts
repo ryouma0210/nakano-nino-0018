@@ -4,6 +4,9 @@ export type Direction = "up" | "down" | "left" | "right";
 export type MapPosition = { x: number; y: number };
 export type MapSlime = MapPosition & { id: number; active: boolean };
 
+export const ATTACK_MP_COST = 20;
+export const ESCAPE_MP_COST = 50;
+
 export const startPositions: Record<MapArea, MapPosition> = {
   center: { x: 48, y: 74 }, left: { x: 68, y: 54 },
   right: { x: 24, y: 54 }, top: { x: 48, y: 76 },
@@ -36,6 +39,11 @@ export function facingForEntry(from: MapArea, to: MapArea): Direction {
 }
 export function isNear(a: MapPosition, b: MapPosition, range = 8) {
   return Math.abs(a.x - b.x) <= range && Math.abs(a.y - b.y) <= range;
+}
+export function charmDefenseCount(stage: SuccubusStage) {
+  if (stage === "beginner") return 1;
+  if (stage === "middle") return 2;
+  return 3;
 }
 export function succubusForLevel(level: number, savedLevel: number) {
   const value = Math.max(1, Math.min(100, savedLevel > 0 ? savedLevel : level));
