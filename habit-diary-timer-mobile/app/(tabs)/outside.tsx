@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { AppText } from "@/components/AppText";
@@ -8,7 +8,8 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { pointRepository } from "@/repositories/rewardRepository";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import {
-  clamp, createSlimes, entryPosition, facingForEntry, isNear, startPositions,
+  ATTACK_MP_COST, charmDefenseCount, clamp, createSlimes, entryPosition, ESCAPE_MP_COST,
+  facingForEntry, isNear, startPositions,
   succubusForLevel, type Direction, type MapArea, type MapPosition, type MapSlime,
   type SuccubusStage,
 } from "@/features/outside/gameLogic";
@@ -35,6 +36,8 @@ type MapStep = 0 | 1 | 2;
 
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
+const warningSignPosition: MapPosition = { x: 66, y: 31 };
+const warningSignExitPosition: MapPosition = { x: 66, y: 43 };
 const crossroadTrees = [
   { left: "7%", top: "12%", size: 44 },
   { left: "16%", top: "30%", size: 36 },
@@ -63,6 +66,7 @@ const pixelSprites = {
   heartMark: require("../../assets/ui/outside-heart-mark.png"),
   kissMark: require("../../assets/ui/outside-kiss-mark.png"),
   crystal: require("../../assets/ui/outside-crystal.png"),
+  warningSign: require("../../assets/characters/outside-pixels/warning-sign.png"),
   succubus: {
     beginner: require("../../assets/characters/outside-events/beginner-battle.png"),
     middle: require("../../assets/characters/outside-events/middle-battle.png"),
@@ -239,6 +243,34 @@ const battleLines: Record<SuccubusStage, {
   },
 };
 
+type BattleQuipKind = "beforeTemptation" | "defended" | "escapeFailed" | "evaded";
+const battleQuips: Record<SuccubusStage, Record<BattleQuipKind, string>> = {
+  beginner: {
+    beforeTemptation: "「ねえ、ちゃんとこっち見てよ♡」",
+    defended: "「むぅ……まだ我慢するの？」",
+    escapeFailed: "「逃げ足まで遅いなんて、ざぁこ♡」",
+    evaded: "「そんな攻撃、当たるわけないでしょ♡」",
+  },
+  middle: {
+    beforeTemptation: "「次は目を逸らせない誘惑をあげる」",
+    defended: "「防いだつもり？　余裕はいつまで続くかしら」",
+    escapeFailed: "「帰り道なら、もう私が塞いだわ」",
+    evaded: "「動きが読めているの。次は私の番ね」",
+  },
+  queen: {
+    beforeTemptation: "「跪きなさい。抗う意思ごと奪ってあげる」",
+    defended: "「よく耐えたわね。では、さらに強くしてあげましょう」",
+    escapeFailed: "「私の前から逃げられると、本気で思ったの？」",
+    evaded: "「遅いわ。その程度で女王に触れられるものですか」",
+  },
+};
+
+const victoryMapQuips: Record<SuccubusStage, string> = {
+  beginner: "「うそ……負けたの？　次は絶対、誘惑してあげるんだから♡」",
+  middle: "「今回はあなたの勝ちね。でも、次も耐えられるかしら？」",
+  queen: "「見事です。今日だけは帰ることを許してあげましょう」",
+};
+
 const enemyAttackDamage: Record<SuccubusStage, number> = {
   beginner: 10,
   middle: 20,
@@ -354,7 +386,7 @@ export default function OutsideScreen() {
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
   const [level, setLevel] = useState(initializeLevel);
   const [playerHp, setPlayerHp] = useState(() => initializePlayerStat(hpKey, 100));
-  const [playerMp, setPlayerMp] = useState(() => initializePlayerStat(mpKey, 100));
+  const [playerMp, setPlayerMp] = useState(() => initializePlayerStat(mpKey, 100, 0));
   const [dailyOutsidePoints, setDailyOutsidePoints] = useState(initializeDailyOutsidePoints);
   const [succubusAbsorbBonus, setSuccubusAbsorbBonus] = useState(initializeSuccubusAbsorbBonus);
   const [phase, setPhase] = useState<Phase>("explore");
@@ -363,6 +395,7 @@ export default function OutsideScreen() {
   const [mapPosition, setMapPosition] = useState<MapPosition>(startPositions.center);
   const [playerFacing, setPlayerFacing] = useState<Direction>("down");
   const [crystalOpen, setCrystalOpen] = useState(false);
+  const [warningSignOpen, setWarningSignOpen] = useState(false);
   const [crystalRotation, setCrystalRotation] = useState(0);
   const [slimes, setSlimes] = useState<MapSlime[]>(() => createSlimes());
   const [charmTurns, setCharmTurns] = useState(0);
@@ -371,6 +404,7 @@ export default function OutsideScreen() {
   );
   const [battleMenu, setBattleMenu] = useState<BattleMenu>("root");
   const [battleAwaitingChoice, setBattleAwaitingChoice] = useState(false);
+  const [pendingBattleMessage, setPendingBattleMessage] = useState<string | null>(null);
   const [pendingGameOver, setPendingGameOver] = useState<{ kind: LossEventKind; reason: string } | null>(null);
   const [temptationEffect, setTemptationEffect] = useState<TemptationEffect>(null);
   const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
@@ -393,6 +427,7 @@ export default function OutsideScreen() {
     setCrystalOpen(false);
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
+    setPendingBattleMessage(null);
     setPendingGameOver(null);
     setTemptationEffect(null);
     setBattleEnemyImage("battle");
@@ -498,6 +533,18 @@ const mapSource =
     setMessage("クリスタルから少し離れた。");
   }
 
+  function openWarningSign() {
+    setMessage("");
+    setWarningSignOpen(true);
+  }
+
+  function closeWarningSign() {
+    setWarningSignOpen(false);
+    setMapPosition(warningSignExitPosition);
+    setPlayerFacing("down");
+    setMessage("注意事項を確認した。覚悟を決めたら、上の森へ進もう。");
+  }
+
   function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
     setEncounterStage(succubus.stage);
     setPhase("battle");
@@ -571,6 +618,11 @@ const mapSource =
         openCrystalSettings();
         return;
       }
+      if (isNear(next, warningSignPosition, 8)) {
+        setMapPosition(warningSignPosition);
+        openWarningSign();
+        return;
+      }
       if (next.y <= 18) {
         moveMap("top");
         return;
@@ -641,7 +693,7 @@ const mapSource =
       return;
     }
     if (choice === "listen") {
-      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了モードになった。", 1);
+      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了モードになった。", charmDefenseCount(succubus.stage));
       setTemptationEffect("kiss");
       playEffect("outsideEarLick");
       return;
@@ -681,8 +733,8 @@ const mapSource =
   }
 
   function activateCrystalCharm() {
-    setCharmTurns(1);
-    setMessage("設定で魅了モードになりました。\n左の水辺で浄化するまで、戦闘時は逃げられません。");
+    setCharmTurns(charmDefenseCount(succubus.stage));
+    setMessage("設定で魅了モードになりました。\n戦闘中に防御を重ねるか、左の水辺で浄化できます。");
   }
 
   const defeatSlime = useCallback((slimeId: number) => {
@@ -787,6 +839,21 @@ const mapSource =
     setMessage(`${finalAttackMessage}\nHPが尽きた……タップして敗北シーンへ。`);
   }
 
+  function showEnemyTurn(
+    quip: string,
+    outcome: string,
+    nextHp: number,
+    kind: LossEventKind,
+  ) {
+    if (nextHp <= 0) {
+      setPendingGameOver({ kind, reason: battleLines[succubus.stage].lose[kind] });
+    }
+    setMessage(quip);
+    setPendingBattleMessage(
+      nextHp <= 0 ? `${outcome}\nHPが尽きた……タップして敗北シーンへ。` : outcome,
+    );
+  }
+
   function randomLossKind(): LossEventKind {
     const events: LossEventKind[] = ["chest", "back", "foot"];
     return events[Math.floor(Math.random() * events.length)] ?? "chest";
@@ -799,15 +866,19 @@ const mapSource =
   function playRandomTemptationEffect() {
     stopEffect("outsideEarLick");
     stopEffect("outsideNipple");
+    setCharmTurns(charmDefenseCount(succubus.stage));
     if (Math.random() < 0.5) {
       setTemptationEffect("kiss");
-      setCharmTurns(1);
       playEffect("outsideEarLick");
       return "耳舐め";
     }
     setTemptationEffect("heart");
     playEffect("outsideNipple");
     return "乳首責め";
+  }
+
+  function battleQuip(kind: BattleQuipKind) {
+    return battleQuips[succubus.stage][kind];
   }
 
   function resolveCommand(command: BattleCommand) {
@@ -818,32 +889,45 @@ const mapSource =
     setBattleEnemyImage("battle");
     if (command === "run") {
       playEffect("outsideEscape");
-      if (charmTurns > 0) {
-        const enemyKind = randomLossKind();
-        const damage = enemyAttackDamage[succubus.stage];
+      const escapeBlockedByCharm = charmTurns > 0;
+      const escapeBlockedByMp = battle.mp < ESCAPE_MP_COST;
+      if (escapeBlockedByCharm || escapeBlockedByMp) {
+        const normalAttack = shouldUseNormalAttack();
+        const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
+        const damage = normalAttack
+          ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7)
+          : enemyAttackDamage[succubus.stage];
         const nextHp = clamp(battle.hp - damage);
-        const nextMp = clamp(battle.mp - 6);
+        const nextMp = clamp(battle.mp + (normalAttack ? 0 : -6));
         setBattleEnemyImage(enemyKind);
-        setTemptationEffect(null);
         setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
         setPlayerHp(Math.max(1, nextHp));
-        setPlayerMp(Math.max(1, nextMp));
+        setPlayerMp(nextMp);
         saveSetting(hpKey, String(Math.max(1, nextHp)));
-        saveSetting(mpKey, String(Math.max(1, nextMp)));
-        const effectLabel = playRandomTemptationEffect();
-        const finalAttackMessage = `魅了モード中で逃げられない。\n逃げようとした隙に${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
-        if (nextHp <= 0) {
-          queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
-          return;
+        saveSetting(mpKey, String(nextMp));
+        const failureReason = escapeBlockedByCharm
+          ? "魅了モード中で逃げられない。"
+          : `逃走に必要なMP${ESCAPE_MP_COST}が足りない。（現在MP：${Math.round(battle.mp)}）`;
+        let finalAttackMessage: string;
+        if (normalAttack) {
+          if (!escapeBlockedByCharm) setTemptationEffect(null);
+          finalAttackMessage = `${failureReason}\n逃げようとした隙に尻尾の通常攻撃：-${damage}HP`;
+        } else {
+          const effectLabel = playRandomTemptationEffect();
+          finalAttackMessage = `${failureReason}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が絡みつく。`;
         }
-        setMessage(finalAttackMessage);
+        showEnemyTurn(battleQuip("escapeFailed"), finalAttackMessage, nextHp, enemyKind);
         return;
       }
+      const escapedMp = clamp(battle.mp - ESCAPE_MP_COST);
+      setBattle((current) => ({ ...current, mp: escapedMp }));
+      setPlayerMp(escapedMp);
+      saveSetting(mpKey, String(escapedMp));
       setPhase("explore");
       setMapArea("center");
       setMapStep(0);
       setMapPosition(startPositions.center);
-      setMessage(battleLines[succubus.stage].escape);
+      setMessage(`${battleLines[succubus.stage].escape}\n逃走でMPを${ESCAPE_MP_COST}消費した。`);
       return;
     }
 
@@ -857,26 +941,46 @@ const mapSource =
       const enemyKind = randomLossKind();
       const damage = enemyAttackDamage[succubus.stage];
       const nextHp = clamp(battle.hp - damage);
-      const nextMp = clamp(battle.mp - 6);
+      const nextMp = clamp(battle.mp - ATTACK_MP_COST - 6);
       setBattleEnemyImage(enemyKind);
       setTemptationEffect(null);
       setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
       setPlayerHp(Math.max(1, nextHp));
-      setPlayerMp(Math.max(1, nextMp));
+      setPlayerMp(nextMp);
       saveSetting(hpKey, String(Math.max(1, nextHp)));
-      saveSetting(mpKey, String(Math.max(1, nextMp)));
+      saveSetting(mpKey, String(nextMp));
       const effectLabel = playRandomTemptationEffect();
-      const finalAttackMessage = `魅了モード中で攻撃が当たらない。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
-      if (nextHp <= 0) {
-        queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
-        return;
-      }
-      setMessage(finalAttackMessage);
+      const finalAttackMessage = `魅了モード中で攻撃が当たらない。MP-${ATTACK_MP_COST}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
+      showEnemyTurn(battleQuip("evaded"), finalAttackMessage, nextHp, enemyKind);
       return;
     }
 
     if (command === "defend") {
       playEffect("outsideEvade");
+      if (charmTurns > 0) {
+        const enemyKind = randomLossKind();
+        const damage = Math.ceil(enemyAttackDamage[succubus.stage] * 0.5);
+        const nextHp = clamp(battle.hp - damage);
+        const nextMp = clamp(battle.mp + 8);
+        const remainingCharm = Math.max(0, charmTurns - 1);
+        setCharmTurns(remainingCharm);
+        setBattleEnemyImage(enemyKind);
+        setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
+        setPlayerHp(Math.max(1, nextHp));
+        setPlayerMp(nextMp);
+        saveSetting(hpKey, String(Math.max(1, nextHp)));
+        saveSetting(mpKey, String(nextMp));
+        if (remainingCharm === 0) {
+          setTemptationEffect(null);
+          stopEffect("outsideEarLick");
+          stopEffect("outsideNipple");
+        }
+        const defenseMessage = remainingCharm === 0
+          ? `誘惑を防御で受け止めた：-${damage}HP / MP+8\n誘惑を振り払った。次の攻撃は命中する。`
+          : `誘惑を防御で受け止めた：-${damage}HP / MP+8\n解除まであと${remainingCharm}回、防御が必要。`;
+        showEnemyTurn(battleQuip("defended"), defenseMessage, nextHp, enemyKind);
+        return;
+      }
       const normalAttack = shouldUseNormalAttack();
       const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
       const damage = Math.ceil(enemyAttackDamage[succubus.stage] * (normalAttack ? 0.35 : 0.5));
@@ -886,34 +990,27 @@ const mapSource =
       setTemptationEffect(null);
       setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
       setPlayerHp(Math.max(1, nextHp));
-      setPlayerMp(Math.max(1, nextMp));
+      setPlayerMp(nextMp);
       saveSetting(hpKey, String(Math.max(1, nextHp)));
-      saveSetting(mpKey, String(Math.max(1, nextMp)));
+      saveSetting(mpKey, String(nextMp));
       if (normalAttack) {
         const lossKind = randomLossKind();
         const finalAttackMessage = `身構えて通常攻撃を受け流した。\n尻尾の通常攻撃：-${damage}HP / MP+8\n誘惑ではない。ただの攻撃でも油断できない。`;
-        if (nextHp <= 0) {
-          queueGameOver(lossKind, battleLines[succubus.stage].lose[lossKind], finalAttackMessage);
-          return;
-        }
-        setMessage(finalAttackMessage);
+        showEnemyTurn(battleQuip("defended"), finalAttackMessage, nextHp, lossKind);
         return;
       }
       const effectLabel = playRandomTemptationEffect();
       const finalAttackMessage = `身構えて誘惑を受け流した。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP / MP+8\n${effectLabel}の誘惑が残っている。`;
-      if (nextHp <= 0) {
-        queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
-        return;
-      }
-      setMessage(finalAttackMessage);
+      showEnemyTurn(battleQuip("defended"), finalAttackMessage, nextHp, enemyKind);
       return;
     }
 
     playEffect("outsideAttack");
     const attackDamage = Math.max(18, 34 - Math.max(0, succubus.level - level) * 0.25);
     const nextEnemyHp = clamp(battle.enemyHp - attackDamage);
+    const attackMp = clamp(battle.mp - ATTACK_MP_COST);
     if (nextEnemyHp <= 0) {
-      const nextBattle = { ...battle, enemyHp: 0 };
+      const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
       setBattle(nextBattle);
       setPlayerHp(nextBattle.hp);
       setPlayerMp(nextBattle.mp);
@@ -928,18 +1025,18 @@ const mapSource =
     const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
     const damage = normalAttack ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7) : enemyAttackDamage[succubus.stage];
     const nextHp = clamp(battle.hp - damage);
-    const nextMp = clamp(battle.mp + (normalAttack ? 0 : -6));
+    const nextMp = clamp(attackMp + (normalAttack ? 0 : -6));
     setBattleEnemyImage(enemyKind);
     setTemptationEffect(null);
     setBattle({ ...battle, hp: nextHp, mp: nextMp, enemyHp: nextEnemyHp, lastLossKind: enemyKind });
     setPlayerHp(Math.max(1, nextHp));
-    setPlayerMp(Math.max(1, nextMp));
+    setPlayerMp(nextMp);
     saveSetting(hpKey, String(Math.max(1, nextHp)));
-    saveSetting(mpKey, String(Math.max(1, nextMp)));
+    saveSetting(mpKey, String(nextMp));
 
     if (normalAttack) {
       const lossKind = randomLossKind();
-      const finalAttackMessage = `${battleLines[succubus.stage].attack}\n尻尾の通常攻撃：-${damage}HP\n誘惑ではなく、鋭い尻尾で反撃してきた。`;
+      const finalAttackMessage = `${battleLines[succubus.stage].attack}\nMP-${ATTACK_MP_COST} / 尻尾の通常攻撃：-${damage}HP\n誘惑ではなく、鋭い尻尾で反撃してきた。`;
       if (nextHp <= 0) {
         queueGameOver(lossKind, battleLines[succubus.stage].lose[lossKind], finalAttackMessage);
         return;
@@ -949,12 +1046,8 @@ const mapSource =
     }
 
     const effectLabel = playRandomTemptationEffect();
-    const finalAttackMessage = `${battleLines[succubus.stage].attack}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が襲いかかる。`;
-    if (nextHp <= 0) {
-      queueGameOver(enemyKind, battleLines[succubus.stage].lose[enemyKind], finalAttackMessage);
-      return;
-    }
-    setMessage(finalAttackMessage);
+    const finalAttackMessage = `${battleLines[succubus.stage].attack}\nMP-${ATTACK_MP_COST} / ${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が襲いかかる。`;
+    showEnemyTurn(battleQuip("beforeTemptation"), finalAttackMessage, nextHp, enemyKind);
   }
 
   function advanceLossScene() {
@@ -976,10 +1069,11 @@ const mapSource =
     });
   }
 
-  function resetBattle() {
+  function resetBattle(mapMessage = "もう一度、帰り道を探す。油断しないように進もう。") {
     setPhase("explore");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
+    setPendingBattleMessage(null);
     setPendingGameOver(null);
     setTemptationEffect(null);
     setBattleEnemyImage("battle");
@@ -987,7 +1081,7 @@ const mapSource =
     setMapStep(0);
     setMapPosition(startPositions.center);
     setCharmTurns(0);
-    setMessage("もう一度、帰り道を探す。油断しないように進もう。");
+    setMessage(mapMessage);
     setBattle({
       hp: playerHp,
       mp: playerMp,
@@ -998,6 +1092,11 @@ const mapSource =
 
   function handleBattleMessagePress() {
     if (phase !== "battle") return;
+    if (pendingBattleMessage) {
+      setMessage(pendingBattleMessage);
+      setPendingBattleMessage(null);
+      return;
+    }
     if (pendingGameOver) {
       const next = pendingGameOver;
       setPendingGameOver(null);
@@ -1069,11 +1168,11 @@ const mapSource =
                           <>
                             <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} />
                             <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
-                            <PrimaryButton title="逃げる" tone="secondary" onPress={() => resolveCommand("run")} />
+                            <PrimaryButton title={`逃げる（MP${ESCAPE_MP_COST}）`} tone="secondary" onPress={() => resolveCommand("run")} />
                           </>
                         ) : battleMenu === "fight" ? (
                           <>
-                            <PrimaryButton title="攻撃" onPress={() => resolveCommand("attack")} />
+                            <PrimaryButton title={`攻撃（MP${ATTACK_MP_COST}）`} onPress={() => resolveCommand("attack")} />
                             <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
                             <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
                           </>
@@ -1092,7 +1191,7 @@ const mapSource =
                       <AppText style={styles.statusBattleBig}>HP {Math.round(battle.hp)}</AppText>
                       <AppText style={styles.statusBattleBig}>MP {Math.round(battle.mp)}</AppText>
                       <AppText style={charmTurns > 0 ? styles.charmedMark : styles.normalMark}>
-                        {charmTurns > 0 ? "魅了中" : "正常"}
+                        {charmTurns > 0 ? `魅了中（防御あと${charmTurns}回）` : "正常"}
                       </AppText>
                       {temptationEffect ? (
                         <View style={styles.statusEffectRow}>
@@ -1115,7 +1214,7 @@ const mapSource =
                     <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
                   </View>
                   {charmTurns > 0 ? (
-                    <AppText style={styles.charmText}>CHARM：逃亡不可 / 左の水辺で解除</AppText>
+                    <AppText style={styles.charmText}>CHARM：逃亡不可 / 防御あと{charmTurns}回で解除</AppText>
                   ) : null}
                   <AppText style={[styles.message, pendingGameOver ? styles.pendingGameOverMessage : null]}>
                     {message}
@@ -1130,7 +1229,11 @@ const mapSource =
           {phase !== "battle" ? (
             <View style={styles.battleCommands}>
               {phase === "result" ? (
-                <PrimaryButton title="マップへ戻る" tone="contract" onPress={resetBattle} />
+                <PrimaryButton
+                  title="マップへ戻る"
+                  tone="contract"
+                  onPress={() => resetBattle(victoryMapQuips[succubus.stage])}
+                />
               ) : null}
               {phase !== "loss" || lossEventIndex >= 19 ? (
                 <PrimaryButton
@@ -1165,6 +1268,9 @@ const mapSource =
                 <View style={[styles.mapCrystal, { transform: [{ scaleX: crystalSpinScaleX }] }]}>
                   <Image source={pixelSprites.crystal} style={styles.mapCrystalImage} contentFit="contain" />
                 </View>
+              </Pressable>
+              <Pressable hitSlop={16} style={styles.mapWarningSignTap} onPress={openWarningSign}>
+                <Image source={pixelSprites.warningSign} style={styles.mapWarningSignImage} contentFit="contain" />
               </Pressable>
             </>
           ) : mapArea === "left" ? (
@@ -1223,7 +1329,7 @@ const mapSource =
                   </View>
                 ))
             : null}
-          {!crystalOpen && message ? (
+          {!crystalOpen && !warningSignOpen && message ? (
             <Pressable style={styles.mapMessageBox} onPress={handleMapMessagePress}>
               <AppText style={[styles.mapMessage, /回復|全回復|浄化/.test(message) && styles.recoveryMessage]}>{message}</AppText>
               <AppText style={styles.mapTapGuide}>タップ ▼</AppText>
@@ -1321,6 +1427,63 @@ const mapSource =
               <AppText style={styles.crystalCloseButtonText}>閉じる</AppText>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={warningSignOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeWarningSign}
+      >
+        <View style={styles.crystalModalBackdrop}>
+          <ScrollView style={styles.warningModal} contentContainerStyle={styles.warningModalContent}>
+            <AppText style={styles.warningModalKicker}>WARNING SIGN</AppText>
+            <AppText style={styles.warningModalTitle}>この先、サキュバス出没注意</AppText>
+
+            <View style={styles.warningSection}>
+              <AppText style={styles.warningSectionTitle}>奥へ進む前の注意事項</AppText>
+              <AppText style={styles.warningBody}>
+                上の森ではサキュバスと遭遇します。HPとMPを確認し、必要なら左の水辺で回復してから進んでください。魅了中は逃げられません。
+              </AppText>
+            </View>
+
+            <View style={styles.succubusInfoSection}>
+              <AppText style={styles.succubusInfoTitle}>サキュバスについて</AppText>
+              <AppText style={styles.warningBody}>
+                サキュバスはレベルを吸収するほど、体格と魔力が成長します。現在は「{succubus.title}」Lv.{succubus.level}です。
+              </AppText>
+              <AppText style={styles.succubusGrowthText}>
+                ・Lv.1〜29：小柄な初級段階。誘惑は防御1回で解除。{"\n"}
+                ・Lv.30〜79：成長した上級段階。体格と誘惑が強まり、防御2回で解除。{"\n"}
+                ・Lv.80〜100：完成した女王段階。最も大きく強い姿となり、防御3回で解除。
+              </AppText>
+            </View>
+
+            <View style={styles.warningSection}>
+              <AppText style={styles.warningSectionTitle}>戦い方</AppText>
+              <AppText style={styles.warningBody}>
+                ・攻撃：サキュバスのHPを減らし、毎回MPを20消費。魅了中は命中しませんが、MPは消費します。{"\n"}
+                ・防御：被害を抑えてMPを8回復。魅了中は防御するたび解除へ近づきます。{"\n"}
+                ・魅了解除：初級1回／上級2回／女王3回の防御が必要です。{"\n"}
+                ・降参する：発情した場合、そのまま降参することができます♡{"\n"}
+                ・逃げる：MP50を消費。魅了されておらず、MPが50以上ある時だけ成功。失敗すると敵の攻撃を受けます。
+              </AppText>
+            </View>
+
+            <View style={styles.defeatWarningSection}>
+              <AppText style={styles.defeatWarningTitle}>敗北した場合</AppText>
+              <AppText style={styles.defeatWarningText}>
+                HPが0になるか降参すると敗北シーンへ移行します。{"\n"}
+                レベルは1、HPとMPも1になり、ポイントも50Ptを失います。{"\n"}
+                奪われたレベルはサキュバスに吸収されます。
+              </AppText>
+            </View>
+
+            <Pressable style={styles.warningCloseButton} onPress={closeWarningSign}>
+              <AppText style={styles.warningCloseButtonText}>確認して閉じる</AppText>
+            </Pressable>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -1708,6 +1871,18 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   mapCrystalImage: { width: "100%", height: "100%" },
+  mapWarningSignTap: {
+    position: "absolute",
+    left: "58%",
+    top: "18%",
+    width: 82,
+    height: 82,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 29,
+    elevation: 29,
+  },
+  mapWarningSignImage: { width: "100%", height: "100%" },
   crystalModalBackdrop: {
     flex: 1,
     alignItems: "center",
@@ -1818,6 +1993,99 @@ const styles = StyleSheet.create({
   },
   crystalCloseButtonText: {
     color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
+  warningModal: {
+    width: "100%",
+    maxWidth: 460,
+    maxHeight: "90%",
+    borderWidth: 2,
+    borderColor: "#d99a45",
+    backgroundColor: "#100a05",
+  },
+  warningModalContent: {
+    gap: 12,
+    padding: 18,
+  },
+  warningModalKicker: {
+    color: "#e9bd72",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
+  warningModalTitle: {
+    color: "#ffe0a3",
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: "900",
+  },
+  warningSection: {
+    gap: 5,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(217, 154, 69, 0.45)",
+    paddingTop: 10,
+  },
+  succubusInfoSection: {
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#b967ff",
+    backgroundColor: "rgba(83, 25, 116, 0.22)",
+    padding: 10,
+  },
+  succubusInfoTitle: {
+    color: "#e0a7ff",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+  succubusGrowthText: {
+    color: "#e9d7f3",
+    fontSize: 12,
+    lineHeight: 19,
+  },
+  warningSectionTitle: {
+    color: "#ffd08a",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+  warningBody: {
+    color: "#f5ead7",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  defeatWarningSection: {
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#e53945",
+    backgroundColor: "rgba(130, 0, 12, 0.24)",
+    padding: 10,
+  },
+  defeatWarningTitle: {
+    color: "#ff5360",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+  defeatWarningText: {
+    color: "#ff6670",
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "800",
+  },
+  warningCloseButton: {
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d99a45",
+    backgroundColor: "#3a230e",
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  warningCloseButtonText: {
+    color: "#ffe0a3",
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "900",
