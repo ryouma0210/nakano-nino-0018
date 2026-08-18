@@ -1,0 +1,193 @@
+
+> nino-room-windows@0.1.0 build:windows
+> npm run build:web && electron-builder --win nsis --publish never
+
+
+> nino-room-windows@0.1.0 build:web
+> node scripts/build-mobile-web.cjs
+
+
+> habit-diary-timer-mobile@0.1.0 sync:shared
+> node scripts/sync-shared.cjs
+
+共通ソースを同期しました: C:\Users\ryoum\nakanoNino0018\shared -> C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile\src\shared
+Starting Metro Bundler
+
+Web Bundled 50354ms node_modules\expo-router\entry.js (1672 modules)
+
+› Assets (149):
+assets\audio\button.f2cb0668de1678656749513e609c84ae.wav (5.3KB)
+assets\audio\dialogue-next.c2022899afd9d29894e7d526882968fe.wav (8KB)
+assets\audio\kyouhunomori.604265c0b42fa5f415e596764451b308.m4a (581KB)
+assets\audio\miminame.07be382deafaa9d914c47fbb7a1ea24a.m4a (389KB)
+assets\audio\ninosukiboisu.1e47628dd5e04419f844e600644f9950.m4a (83KB)
+assets\audio\punishment-hit.b47459869e097c7e25e93bcd34f56d05.wav (11KB)
+assets\audio\syasei.04a0cda155f10f85dd9edb946b29a5c2.m4a (43KB)
+assets\audio\tekoki.ffa9bcfac5a7d6c9edf41e62140c2c52.m4a (69KB)
+assets\audio\tikubikarikariseme.fb7a76c78015ce231cfc275903b3f8af.m4a (140KB)
+assets\audio\toiki.11f5cb76346a03504056d160aab8dfa3.m4a (212KB)
+assets\audio\training-complete.0ce11fe13ce513d7f5daf8714d72a481.wav (35KB)
+assets\audio\voice-samples\voice_whisper.ac0c07f3750a16d088e0c45ad76e6b3a.wav (341KB)
+assets\audio\yuuwakubgm.616e5b1331de7904b658e854b4611644.m4a (737KB)
+assets\backgrounds\rooms-corridor.9976c32e1eaca66ef06b0b583f72f7d7.png (2.1MB)
+assets\characters\chastity-nino.8eaf36b6d6ddab81bd396d322f036e5f.png (975KB)
+assets\characters\defeat-nino.3d84f15ed1ee816e686628f180482d0a.png (1.1MB)
+assets\characters\diary-nino.0455169bfb4212f4d8ebf0b98a187af0.png (966KB)
+assets\characters\files-nino.2e477ebd78a631285b3727336bed7e10.png (1MB)
+assets\characters\home-nino.5524cfa6b169e2072f7da2d385e6b968.png (884KB)
+assets\characters\nino-outfit-bikini.cda0a5f9de824a7cf1ba9d8ef3c71a11.png (930KB)
+assets\characters\nino-outfit-black-dress.9cca649e7d495cd8a6da76ec2ce53d45.png (1MB)
+assets\characters\nino-outfit-bunny.03614e75ee79021e174c7bbda87fa7ad.png (1MB)
+assets\characters\nino-outfit-china-dress.e952213965cff5a13eb6e727874c1ad5.png (871KB)
+assets\characters\nino-outfit-halloween.46e12feb8e859120de819aa68e4f0d55.png (982KB)
+assets\characters\nino-outfit-maid.99446046771c73b9471cba1bddb195a1.png (1.1MB)
+assets\characters\nino-outfit-new-year-kimono.879a923dc854fcede774d36577759b51.png (974KB)
+assets\characters\nino-outfit-nurse.3c27bb21a3d71896952a2a309cf627f2.png (794KB)
+assets\characters\nino-outfit-oiran.996f45a696bf567cfc36fcfad1495ea5.png (997KB)
+assets\characters\nino-outfit-pink-gothic.3663fb3889dcff9d371692a39047c9c9.png (1MB)
+assets\characters\nino-outfit-rubber.973bc000da728cb51b59088f78d14cd5.png (1MB)
+assets\characters\nino-outfit-santa.416f9846a4f3413cbdea77166f9ac31a.png (910KB)
+assets\characters\nino-outfit-school-swimsuit.8943788ff24764cecf9749b8df7c8f6b.png (865KB)
+assets\characters\nino-outfit-school.c8fb679f45c1dbd947fa8ab0b443d613.png (969KB)
+assets\characters\nino-outfit-succubus.2f015482b83b3ced7448a542cdb8162c.png (996KB)
+assets\characters\nino-outfit-valentine.4875aa7dcd747374a0d2866f3a784449.png (911KB)
+assets\characters\nino-outfit-white-dress.147a39ebb16c8adf2989e53fd84ebb51.png (919KB)
+assets\characters\nino-outfit-yukata.4b56c5333342f891a920d6a16e03616d.png (1.1MB)
+assets\characters\orders-nino.20db3daa75121c83696622a6b3774e9e.png (906KB)
+assets\characters\outside-events\beginner-battle.769bf66370eefea72edb165f4e6952fd.png (298KB)
+assets\characters\outside-events\beginner-chest_01.802eb4d5ff00ebaf37c0c391f7b29bc2.jpg (205KB)
+assets\characters\outside-events\beginner-chest_02.823334723d999c47f44d40a3c0ff147e.jpg (146KB)
+assets\characters\outside-events\beginner-chest_03.7a14710df9adf9274e48a3a32e7bbf5f.jpg (229KB)
+assets\characters\outside-events\beginner-chest.1262b01f6963ac569624416aa0175781.png (70KB)
+assets\characters\outside-events\beginner-foot_01.a12fd5214a7b5b520786170fde573fb0.jpg (150KB)
+assets\characters\outside-events\beginner-foot_02.c894e2199a9f7a3806bfbbddeedbd7ed.jpg (158KB)
+assets\characters\outside-events\beginner-foot_03.ac0080f0fd50875feba547939fea43c8.jpg (134KB)
+assets\characters\outside-events\beginner-foot.d3378a0e6a62f5a26c4b68761e47f40f.png (653KB)
+assets\characters\outside-events\beginner-overlook_01.09dbef7f4b2d1e4d3a4f5da929a67e03.jpg (185KB)
+assets\characters\outside-events\beginner-overlook_02.a6d79bfadb88c95a650adb2a4f7c20c1.jpg (194KB)
+assets\characters\outside-events\beginner-overlook_03.5e583c308075c05d4491566dbb0be5b5.jpg (204KB)
+assets\characters\outside-events\beginner-overlook.94d9870552edbeed258f42bd1a637ebc.png (62KB)
+assets\characters\outside-events\beginner-tail.c931cfcd852fddddcac40b74d17f1afe.png (342KB)
+assets\characters\outside-events\middle-battle.88b0b1c30d327b9153bb840aa4de165b.png (384KB)
+assets\characters\outside-events\middle-chest_01.dca2740006abd5f7957ba683ee1504ad.jpg (234KB)
+assets\characters\outside-events\middle-chest_02.4367f76eecfb5d4852081015486f8e0b.jpg (176KB)
+assets\characters\outside-events\middle-chest_03.5af375ec268774fe70dfa057fcacf38e.jpg (219KB)
+assets\characters\outside-events\middle-chest.326a40202e14433f0b610014f2667412.png (90KB)
+assets\characters\outside-events\middle-foot_01.8b92aa14f3b4f7c479d02cec11d41f91.jpg (179KB)
+assets\characters\outside-events\middle-foot_02.2f92f5f9e1ae4d07426d93003761733a.jpg (196KB)
+assets\characters\outside-events\middle-foot_03.0de153dbe6e0766371f3d2e3579d28c8.jpg (220KB)
+assets\characters\outside-events\middle-foot.609fc41e2d11dfab1018479c575c7e09.png (492KB)
+assets\characters\outside-events\middle-overlook_01.de74ebe6067a0e0a6ad778fc07a8f169.jpg (206KB)
+assets\characters\outside-events\middle-overlook_02.f1ef09c1c2467c47adf7f28d305fb65f.jpg (140KB)
+assets\characters\outside-events\middle-overlook_03.cbacb82548461729d8cf570c6f0aa385.jpg (228KB)
+assets\characters\outside-events\middle-overlook.3f6a35d8a6b2cc4f5854af5b4073387d.png (73KB)
+assets\characters\outside-events\middle-tail.4a4e489799cdd99e4107a06295dbb2b1.png (408KB)
+assets\characters\outside-events\queen-battle.ca504108851f187b269fe8b596098f0a.png (530KB)
+assets\characters\outside-events\queen-chest_01.9f1e7c83729a6d26ced6374f96461e50.jpg (234KB)
+assets\characters\outside-events\queen-chest_02.2c929d7f3477dcb63c54d7cbd8b025c8.jpg (157KB)
+assets\characters\outside-events\queen-chest_03.3cdb27037dc26103de9baee34e344388.jpg (255KB)
+assets\characters\outside-events\queen-chest.5a9c343c2a24327ceebd53e8f032316f.png (123KB)
+assets\characters\outside-events\queen-foot_01.8bece2357a60c316bc7e00a426c03676.jpg (188KB)
+assets\characters\outside-events\queen-foot_02.f1fb3f3ba9bf3d99181d45991b67e19b.jpg (171KB)
+assets\characters\outside-events\queen-foot_03.fb9e977a86db102dd83e864723410dd4.jpg (226KB)
+assets\characters\outside-events\queen-foot.e60aa0c39619e707e6e21462cddb198d.png (518KB)
+assets\characters\outside-events\queen-overlook_01.4be8655f89d960aca2de92015b29ba8f.jpg (219KB)
+assets\characters\outside-events\queen-overlook_02.ba915e30f8f023322207f0044cdf3202.jpg (150KB)
+assets\characters\outside-events\queen-overlook_03.6618146a2a864c7a33869670de42e4d3.jpg (226KB)
+assets\characters\outside-events\queen-overlook.6c406b6f4bf9849b86f0e6d9a1213f91.png (110KB)
+assets\characters\outside-events\queen-tail.bfda3f7208be53eda07c693693e070dd.png (572KB)
+assets\characters\outside-pixels\door-dot.a36ac7013636e601e4335a40b3df75d5.png (250B)
+assets\characters\outside-pixels\outside-map-left.46afdb18eab2731d759b4a9e0757573a.png (1.1MB)
+assets\characters\outside-pixels\outside-map-right.1aaa2aa57be74321265e3dd47fc2b099.png (1.2MB)
+assets\characters\outside-pixels\outside-map-top.44b4a7755596f1df9beddd6ce9f4b3f6.png (1.2MB)
+assets\characters\outside-pixels\player-back-dot.248a2fb793ab8e617b3a1fc8545ed22a.png (936B)
+assets\characters\outside-pixels\player-front-dot.0d6a8f15934fcf71ddc4442560d1486f.png (808B)
+assets\characters\outside-pixels\player-left-dot.dcb427eadc4ed52ca222b5e688927067.png (481B)
+assets\characters\outside-pixels\player-right-dot.bec95119736657f6625104a4a39c2257.png (472B)
+assets\characters\outside-pixels\slime-dot.0a8b3d32c1f22e03cb6727cf454da3bc.png (357B)
+assets\characters\preparation-nino.c9d43cd66f520bbf4b507da16d1ba109.png (1.1MB)
+assets\characters\punishment-nino.32e9468ba6ca7708a6a9894f31284ddf.png (632KB)
+assets\characters\release-nino.033e6705d91d046bcfbee8a70d6d1414.png (1MB)
+assets\characters\settings-nino.2d0f8eae1efd744ad6a6b178ce4c6208.png (884KB)
+assets\characters\training-nino-v3.614302e576eccd662a232a7598d4f12d.png (845KB)
+assets\ui\outside-crystal.999890e2ddfda487d3e94fe37f9afe53.png (755KB)
+assets\ui\outside-heart-mark.ef27cde9224fa4225238b7cba6f03359.png (274KB)
+assets\ui\outside-kiss-mark.6866c857f4b1e19760fde445f4dc86bc.png (302KB)
+assets\ui\rhythm-heart.bec6923a43fc5b676807cefbd1584ca4.png (5.4KB)
+assets\ui\rhythm-spade-q.29d49031799af394b2fdf7edbe53054a.png (3.7KB)
+assets\videos\brainwash_01.4bae9a723def741c90f9f8347e667171.mp4 (2MB)
+assets\videos\contract_1.e1d101612668f614da03fc9f890019a5.mp4 (995KB)
+assets\videos\defeat_01.f7669f92fb5741d13a351708079bd6f6.mp4 (2.9MB)
+assets\videos\habits_1.8aaa36a3a58c75a59b7aa4b9c700e45d.mp4 (935KB)
+assets\videos\habits_2.3ac79335e4c984b07a7ebc74fe772b77.mp4 (650KB)
+assets\videos\habits_3.34ee7551851d6bdf62591514eb749d05.mp4 (901KB)
+assets\videos\habits_4.baff07cd1fbbd3ffd8d13c9c7c16e374.mp4 (975KB)
+assets\videos\habits_5.ac2955438182647537d1fe6d7bc88d76.mp4 (589KB)
+assets\videos\habits_6.20175baacabd1ebb1d16f51315342f90.mp4 (956KB)
+assets\videos\nino-room\home-nino_01.516e825222b846f64a3275c9cc20a121.mp4 (508KB)
+assets\videos\nino-room\nino-outfit-bikini.8dbbd70e7efbb6f2e801fc637b97f5b3.mp4 (485KB)
+assets\videos\nino-room\nino-outfit-black-dress_01.51922f1d388a9233b140aa8b9ba29e31.mp4 (594KB)
+assets\videos\nino-room\nino-outfit-bunny_01.3018d3097819a7782122d1bbfcad1c48.mp4 (564KB)
+assets\videos\nino-room\nino-outfit-china-dress.b29b47a0efbe129884ef91a7d61fa043.mp4 (688KB)
+assets\videos\nino-room\nino-outfit-halloween.7d65472964ad96c959a86d413e9affab.mp4 (721KB)
+assets\videos\nino-room\nino-outfit-maid_01.61bef3247d501e6e7e253cfccf4766c8.mp4 (739KB)
+assets\videos\nino-room\nino-outfit-new-year-kimono.c9aab40ec16563c4a664ec23da21ebbd.mp4 (776KB)
+assets\videos\nino-room\nino-outfit-nurse_01.fd1e85eb7d6700d5e6f8ca708a77b56a.mp4 (516KB)
+assets\videos\nino-room\nino-outfit-oiran.18205a04daafdede2b9039e7878e0d79.mp4 (842KB)
+assets\videos\nino-room\nino-outfit-pink-gothic_01.7cc72e33ce32afbcff8deda6ab2e43ff.mp4 (702KB)
+assets\videos\nino-room\nino-outfit-rubber_01.9bc2eaa2be434cf34549c66760084ad4.mp4 (609KB)
+assets\videos\nino-room\nino-outfit-santa.2f3cf5e13387094de212a42501547f36.mp4 (687KB)
+assets\videos\nino-room\nino-outfit-school_01.5dc73ca4eb9cdb2c8d806f1a6dd47f6d.mp4 (650KB)
+assets\videos\nino-room\nino-outfit-school-swimsuit.1544f8ea74a1e92deb5e6a45d02e8c29.mp4 (683KB)
+assets\videos\nino-room\nino-outfit-succubus.5c8900f3da63f9dfc21eef22d1c55660.mp4 (780KB)
+assets\videos\nino-room\nino-outfit-valentine.4bd1ac126b31f5edea026ef147a83b01.mp4 (582KB)
+assets\videos\nino-room\nino-outfit-white-dress.53c7c408d22ddf5a036a6131e6a4af4f.mp4 (675KB)
+assets\videos\nino-room\nino-outfit-yukata.54ec14a74b5289b4bb1dcf843ecb0c23.mp4 (643KB)
+assets\videos\preparation_1.c440c3c61db544b563e95b272f1b5eab.mp4 (925KB)
+assets\videos\sennou.a0d2e7ec6c2061dc264b3e99077c4ab2.mp4 (1MB)
+assets\videos\timer_1.a121cc157101575e52814d0b268bdb1c.mp4 (978KB)
+assets\videos\timer_2.5865c6e2bf3b2e86715a2013958f8916.mp4 (1.2MB)
+node_modules\expo-router\assets\arrow_down.017bc6ba3fc25503e5eb5e53826d48a8.png (9.5KB)
+node_modules\expo-router\assets\error.d1ea1496f9057eb392d5bbf3732a61b7.png (469B)
+node_modules\expo-router\assets\file.19eeb73b9593a38f8e9f418337fc7d10.png (138B)
+node_modules\expo-router\assets\forward.d8b800c443b8972542883e0b9de2bdc6.png (188B)
+node_modules\expo-router\assets\pkg.ab19f4cbc543357183a20571f68380a3.png (364B)
+node_modules\expo-router\assets\react-navigation\elements\back-icon-mask.0a328cd9c1afd0afe8e3b1ec5165b1b4.png (653B)
+node_modules\expo-router\assets\react-navigation\elements\back-icon.35ba0eaec5a4f5ed12ca16fabeae451d.png (207B)
+node_modules\expo-router\assets\react-navigation\elements\clear-icon.c94f6478e7ae0cdd9f15de1fcb9e5e55.png (4 variations | 425B)
+node_modules\expo-router\assets\react-navigation\elements\close-icon.808e1b1b9b53114ec2838071a7e6daa7.png (4 variations | 235B)
+node_modules\expo-router\assets\react-navigation\elements\search-icon.286d67d3f74808a60a78d3ebf1a5fb57.png (928B)
+node_modules\expo-router\assets\sitemap.412dd9275b6b48ad28f5e3d81bb1f626.png (465B)
+node_modules\expo-router\assets\unmatched.20e71bdf79e3a97bf55fd9e164041578.png (4.8KB)
+
+› web bundles (1):
+_expo/static/js/web/entry-8876bf8f8d662a505ae4616f505c26ff.js (3.3MB)
+
+› Files (2):
+index.html (1.2KB)
+metadata.json (49B)
+
+Exported: C:\Users\ryoum\nakanoNino0018\nino-room-windows\dist-web
+(node:20688) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • electron-builder  version=26.15.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\Users\ryoum\nakanoNino0018\nino-room-windows\package.json
+  • author is missed in the package.json  appPackageFile=C:\Users\ryoum\nakanoNino0018\nino-room-windows\package.json
+  • executing @electron/rebuild  electronVersion=43.2.0 arch=x64 buildFromSource=false workspaceRoot=C:\Users\ryoum\nakanoNino0018\nino-room-windows projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=43.2.0 appOutDir=release\win-unpacked
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=C:\Users\ryoum\nakanoNino0018\nino-room-windows\release\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\Users\ryoum\nakanoNino0018\nino-room-windows
+  • searching for node modules  pm=traversal searchDir=C:\Users\ryoum\nakanoNino0018\nino-room-windows
+  • using manual traversal of node_modules to build dependency tree
+  • no node modules returned while searching directories  searchDirectories=[""]
+  • updating asar integrity executable resource  executablePath=release\win-unpacked\Nino Room.exe
+  • signing with signtool.exe  path=release\win-unpacked\Nino Room.exe
+  • building        target=nsis file=release\Nino Room Setup 0.1.0.exe archs=x64 oneClick=false perMachine=false
+  • signing with signtool.exe  path=release\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=release\Nino Room Setup 0.1.0.__uninstaller.exe
+  • signing with signtool.exe  path=release\Nino Room Setup 0.1.0.exe
+  • building block map  blockMapFile=release\Nino Room Setup 0.1.0.exe.blockmap

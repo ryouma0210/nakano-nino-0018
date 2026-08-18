@@ -1,0 +1,13 @@
+
+> habit-diary-timer-mobile@0.1.0 pretypecheck
+> npm run sync:shared
+
+
+> habit-diary-timer-mobile@0.1.0 sync:shared
+> node scripts/sync-shared.cjs
+
+共通ソースを同期しました: C:\Users\ryoum\nakanoNino0018\shared -> C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile\src\shared
+
+> habit-diary-timer-mobile@0.1.0 typecheck
+> tsc --noEmit
+
