@@ -59,6 +59,7 @@ const crossroadRocks = [
   { left: "71%", top: "74%" },
 ] as const;
 const pixelSprites = {
+  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
   mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
@@ -567,14 +568,14 @@ export default function OutsideScreen() {
         lossEventIndex >= 19 ? lossSummary : "",
       ].filter(Boolean).join("\n")
     : message;
-  const mapSource =
-    mapArea === "left"
-      ? pixelSprites.mapLeft
-      : mapArea === "right"
-        ? pixelSprites.mapRight
-        : mapArea === "top"
-          ? pixelSprites.mapTop
-          : null;
+const mapSource =
+  mapArea === "left"
+    ? pixelSprites.mapLeft
+    : mapArea === "right"
+      ? pixelSprites.mapRight
+      : mapArea === "top"
+        ? pixelSprites.mapTop
+        : pixelSprites.mapCenter;
   const displayedPlayerFacing: Direction = mapStep > 0 ? "up" : playerFacing;
 
   useEffect(() => {
