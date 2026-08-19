@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { slaveContractService } from "@/services/slaveContractService";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { pointRepository } from "@/repositories/rewardRepository";
+import { pointRepository, rewardRepository } from "@/repositories/rewardRepository";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import {
   ATTACK_MP_COST, charmDefenseCount, clamp, createSlimes, entryPosition, ESCAPE_MP_COST,
@@ -15,10 +16,11 @@ import {
   type SuccubusStage,
 } from "@/features/outside/gameLogic";
 import {
-  dailyPointDateKey, dailyPointKey, hpKey, initializeDailyOutsidePoints,
-  initializeLevel, initializePlayerStat, initializeSuccubusAbsorbBonus,
+  dailyPointDateKey, dailyPointKey, deepSuccubusMarkKey, hpKey, initializeDailyOutsidePoints,
+  initializeDeepSuccubusMark,
+  initializeLevel, initializePlayerStat, initializeSuccubusAbsorbBonus, initializeSuccubusMark,
   levelDateKey, levelKey, mpKey, saveSetting,
-  succubusAbsorbDateKey, succubusAbsorbKey,
+  succubusAbsorbDateKey, succubusAbsorbKey, succubusMarkKey,
 } from "@/features/outside/gameState";
 import { lossStageComments } from "@/features/outside/lossDialogue";
 
@@ -35,6 +37,8 @@ type BattleStatus = {
   lastLossKind: LossEventKind;
 };
 type MapStep = 0 | 1 | 2;
+type BattleAilments = { bound: boolean; weakened: boolean; illusion: boolean; feared: boolean };
+const noBattleAilments: BattleAilments = { bound: false, weakened: false, illusion: false, feared: false };
 
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
@@ -55,7 +59,6 @@ const crossroadRocks = [
   { left: "71%", top: "74%" },
 ] as const;
 const pixelSprites = {
-  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
   mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
@@ -68,6 +71,12 @@ const pixelSprites = {
   heartMark: require("../../assets/ui/outside-heart-mark.png"),
   kissMark: require("../../assets/ui/outside-kiss-mark.png"),
   crystal: require("../../assets/ui/outside-crystal.png"),
+  succubusMark: require("../../assets/ui/outside-succubus-mark.png"),
+  statusFear: require("../../assets/ui/outside-status-fear.png"),
+  statusWeakness: require("../../assets/ui/outside-status-weakness.png"),
+  statusIllusion: require("../../assets/ui/outside-status-illusion.png"),
+  statusObedience: require("../../assets/ui/outside-status-obedience.png"),
+  statusDeepMark: require("../../assets/ui/outside-status-deep-mark.png"),
   warningSign: require("../../assets/characters/outside-pixels/warning-sign.png"),
   succubus: {
     beginner: require("../../assets/characters/outside-events/beginner-battle.png"),
@@ -273,11 +282,18 @@ const victoryMapQuips: Record<SuccubusStage, string> = {
   queen: "「見事です。今日だけは帰ることを許してあげましょう」",
 };
 
+const defeatMapQuips: Record<SuccubusStage, string> = {
+  beginner: "「沢山レベルありがとう♡　そんなに弱くなって、次はもっと簡単に負けちゃうね♡」",
+  middle: "「たっぷり吸わせてくれてありがとう♡　その情けない姿で、また私に挑みに来るのかしら？」",
+  queen: "「力を捧げてくれたこと、感謝します。弱くなったあなたが再び敗北しに来る日を楽しみにしています」",
+};
+
 const enemyAttackDamage: Record<SuccubusStage, number> = {
   beginner: 10,
   middle: 20,
   queen: 50,
 };
+const enemyMaxHp: Record<SuccubusStage, number> = { beginner: 100, middle: 300, queen: 500 };
 
 const lossLabels: Record<LossEventKind, string> = {
   tail: "尻尾",
@@ -365,11 +381,18 @@ function playerSpriteForFacing(facing: Direction) {
 export default function OutsideScreen() {
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
   const insets = useSafeAreaInsets();
+  const fadeOpacity = useRef(new Animated.Value(0)).current;
   const [level, setLevel] = useState(initializeLevel);
   const [playerHp, setPlayerHp] = useState(() => initializePlayerStat(hpKey, 100));
   const [playerMp, setPlayerMp] = useState(() => initializePlayerStat(mpKey, 100, 0));
   const [dailyOutsidePoints, setDailyOutsidePoints] = useState(initializeDailyOutsidePoints);
+  const [availablePoints, setAvailablePoints] = useState(() => rewardRepository.balance().available);
   const [succubusAbsorbBonus, setSuccubusAbsorbBonus] = useState(initializeSuccubusAbsorbBonus);
+  const [hasSuccubusMark, setHasSuccubusMark] = useState(initializeSuccubusMark);
+  const [deepSuccubusMark, setDeepSuccubusMark] = useState(initializeDeepSuccubusMark);
+  const [slaveContractSigned, setSlaveContractSigned] = useState(false);
+  const [battleAilments, setBattleAilments] = useState<BattleAilments>(noBattleAilments);
+  const [returnCharmTurns, setReturnCharmTurns] = useState(0);
   const [phase, setPhase] = useState<Phase>("explore");
   const [mapArea, setMapArea] = useState<MapArea>("center");
   const [mapStep, setMapStep] = useState<MapStep>(0);
@@ -386,8 +409,12 @@ export default function OutsideScreen() {
   const [battleMenu, setBattleMenu] = useState<BattleMenu>("root");
   const [battleAwaitingChoice, setBattleAwaitingChoice] = useState(false);
   const [pendingBattleMessage, setPendingBattleMessage] = useState<string | null>(null);
-  const [pendingGameOver, setPendingGameOver] = useState<{ kind: LossEventKind; reason: string } | null>(null);
-  const [temptationEffect, setTemptationEffect] = useState<TemptationEffect>(null);
+  const [pendingGameOver, setPendingGameOver] = useState<{
+    kind: LossEventKind;
+    reason: string;
+    surrendered: boolean;
+  } | null>(null);
+  const [, setTemptationEffect] = useState<TemptationEffect>(null);
   const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
   const [encounterStage, setEncounterStage] = useState<SuccubusStage>("beginner");
   const [lossEventIndex, setLossEventIndex] = useState(0);
@@ -421,6 +448,18 @@ export default function OutsideScreen() {
 
   useFocusEffect(resetToCrossroad);
 
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    slaveContractService.load().then((contract) => {
+      if (active) setSlaveContractSigned(Boolean(contract.contractorName?.trim()));
+    });
+    return () => { active = false; };
+  }, []));
+
+  useEffect(() => pointRepository.subscribe(() => {
+    setAvailablePoints(rewardRepository.balance().available);
+  }), []);
+
   const succubus = useMemo(
     () => succubusForLevel(level, succubusAbsorbBonus),
     [level, succubusAbsorbBonus],
@@ -445,6 +484,10 @@ export default function OutsideScreen() {
         lossEventIndex >= 19 ? lossSummary : "",
       ].filter(Boolean).join("\n")
     : message;
+  const isSuccubusMapQuip = [
+    ...Object.values(victoryMapQuips),
+    ...Object.values(defeatMapQuips),
+  ].includes(message);
 const mapSource =
   mapArea === "left"
     ? pixelSprites.mapLeft
@@ -452,7 +495,7 @@ const mapSource =
       ? pixelSprites.mapRight
       : mapArea === "top"
         ? pixelSprites.mapTop
-        : pixelSprites.mapCenter;
+        : null;
   const displayedPlayerFacing: Direction = mapStep > 0 ? "up" : playerFacing;
 
   useEffect(() => {
@@ -539,13 +582,14 @@ const mapSource =
     setTemptationEffect(null);
     setMapArea("center");
     setMapStep(2);
-    setCharmTurns(initialCharmTurns ?? (charmTurns > 0 ? charmTurns : 0));
+    setCharmTurns(initialCharmTurns ?? charmTurns);
     setBattle({
       hp: playerHp,
       mp: playerMp,
-      enemyHp: 100,
+      enemyHp: enemyMaxHp[succubus.stage],
       lastLossKind: "tail",
     });
+    setBattleAilments(noBattleAilments);
     setMessage(`${openingMessage ?? "サキュバスがこちらに近づいてきた。"}\n${battleLines[succubus.stage].appear}`);
   }
 
@@ -564,6 +608,11 @@ const mapSource =
     setPlayerFacing(facingForEntry(fromArea, nextArea));
     if (nextArea === "left") {
       setCharmTurns(0);
+      setBattleAilments(noBattleAilments);
+      setHasSuccubusMark(false);
+      setDeepSuccubusMark(false);
+      saveSetting(succubusMarkKey, "0");
+      saveSetting(deepSuccubusMarkKey, "0");
       setPlayerHp(100);
       setPlayerMp(100);
       saveSetting(hpKey, "100");
@@ -573,7 +622,7 @@ const mapSource =
         hp: 100,
         mp: 100,
       }));
-      setMessage("浄化の水辺に入った。\nHPとMPを全回復しました。");
+      setMessage(`浄化の水辺に入った。\nHPとMPが全回復し、状態異常も解除されました。${slaveContractSigned ? "\n※奴隷契約による服従は解除されません。" : ""}`);
     } else if (nextArea === "right") {
       if (dailyOutsidePoints < 100) {
         setSlimes(createSlimes());
@@ -677,7 +726,7 @@ const mapSource =
       return;
     }
     if (choice === "listen") {
-      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了モードになった。", charmDefenseCount(succubus.stage));
+      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了モードで戦闘が始まった。", charmDefenseCount(succubus.stage));
       setTemptationEffect("kiss");
       playEffect("outsideEarLick");
       return;
@@ -689,6 +738,11 @@ const mapSource =
     if (phase !== "explore" || mapArea !== "left") return;
     setMapStep(0);
     setCharmTurns(0);
+    setBattleAilments(noBattleAilments);
+    setHasSuccubusMark(false);
+    setDeepSuccubusMark(false);
+    saveSetting(succubusMarkKey, "0");
+    saveSetting(deepSuccubusMarkKey, "0");
     setPlayerHp(100);
     setPlayerMp(100);
     saveSetting(hpKey, "100");
@@ -698,7 +752,7 @@ const mapSource =
       hp: 100,
       mp: 100,
     }));
-    setMessage("浄化の水辺に触れた。HPとMPが回復し、魅了の気配も薄れていく。");
+    setMessage(`浄化の水辺に触れた。\nHPとMPが全回復し、状態異常も解除されました。${slaveContractSigned ? "\n※奴隷契約による服従は解除されません。" : ""}`);
   }
 
   function adjustPlayerLevel(delta: number) {
@@ -789,10 +843,17 @@ const mapSource =
     saveSetting(mpKey, String(nextMp));
   }
 
-  function applyGameOver(kind: LossEventKind, reason: string) {
+  function applyGameOver(kind: LossEventKind, reason: string, surrendered = false) {
     const today = toDateKey();
-    const absorbedLevel = Math.max(0, level - 1);
+    const grantsSuccubusMark = surrendered || level === 1;
+    const deepensMark = hasSuccubusMark && grantsSuccubusMark;
+    const absorptionTarget = deepSuccubusMark || deepensMark ? 100 : 50;
+    const absorbedLevel = surrendered ? level : level <= 1 ? 0 : Math.min(absorptionTarget, level);
+    const nextPlayerLevel = surrendered ? 1 : Math.max(1, level - absorptionTarget);
+    const missingLevel = surrendered ? 0 : absorptionTarget - absorbedLevel;
     const nextSuccubusLevel = Math.min(100, succubus.level + absorbedLevel);
+    const pointsBeforeDefeat = rewardRepository.balance().available;
+    const absorbedPoints = surrendered ? (deepensMark ? 100 : 50) : missingLevel;
     setEncounterStage(succubus.stage);
     setLossEventIndex(0);
     setBattleMenu("root");
@@ -800,27 +861,61 @@ const mapSource =
     setBattleEnemyImage(kind);
     setPhase("loss");
     setCharmTurns(0);
+    setReturnCharmTurns(surrendered ? charmDefenseCount(succubus.stage) : 0);
+    if (grantsSuccubusMark) {
+      setHasSuccubusMark(true);
+      saveSetting(succubusMarkKey, "1");
+    }
+    if (deepensMark) {
+      setDeepSuccubusMark(true);
+      saveSetting(deepSuccubusMarkKey, "1");
+    }
     setBattle((current) => ({ ...current, hp: 0, mp: Math.max(0, current.mp - 100), lastLossKind: kind }));
-    setLossSummary(
-      `レベルドレインにより、全て吸い尽くされた。\nLv.${absorbedLevel} / MP100 / Pt50を吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1`,
-    );
     setSuccubusAbsorbBonus(nextSuccubusLevel);
     saveSetting(succubusAbsorbDateKey, today);
     saveSetting(succubusAbsorbKey, String(nextSuccubusLevel));
-    pointRepository.award(
-      `outside-gameover:${toDateTimeKey()}`,
-      -50,
-      "外RPGでサキュバスにポイントを吸収された",
+    if (absorbedPoints > 0) {
+      pointRepository.award(
+        `outside-gameover:${toDateTimeKey()}`,
+        -absorbedPoints,
+        surrendered
+          ? "外RPGで降参し50ポイントをサキュバスに吸収された"
+          : "外RPGでレベル不足分のポイントをサキュバスに吸収された",
+      );
+    }
+    const pointsAfterDefeat = rewardRepository.balance().available;
+    setLossSummary(
+      surrendered
+        ? `自ら降参したため、全レベルとなるLv.${absorbedLevel}と50Ptを吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1 / 魅了中\n所持${pointsBeforeDefeat}Pt → ${pointsAfterDefeat}Ptになりました。\n淫紋を刻まれました。淫紋と魅了を解除できるのは左の水辺だけです。`
+        : `レベルドレインにより、Lv.${absorbedLevel}を吸収された。\n${missingLevel > 0 ? `不足分${missingLevel}の代わりに、所持Ptから${absorbedPoints}Ptを吸収された。` : `${absorptionTarget}レベル吸収されたため、所持Ptの吸収はありません。`}\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.${nextPlayerLevel} / HP1 / MP1\n所持${pointsBeforeDefeat}Pt → ${pointsAfterDefeat}Ptになりました。${deepensMark ? "\n淫紋が再び刻まれ、刻印深化しました。次回の吸収基準は100です。" : grantsSuccubusMark ? "\n吸収できるレベルがないため、淫紋を刻まれました。解除できるのは左の水辺だけです。" : ""}`,
     );
-    savePlayerStats(1, 1, 1);
+    savePlayerStats(nextPlayerLevel, 1, 1);
     setMessage(reason);
   }
 
-  function queueGameOver(kind: LossEventKind, reason: string, finalAttackMessage: string) {
-    setPendingGameOver({ kind, reason });
+  function specialDefeatQuip() {
+    if (deepSuccubusMark) {
+      return "「刻印を深められても、まだ負けに来るなんて救いようがありませんね。今度こそ何も残らないほど吸い尽くしてあげます」";
+    }
+    if (hasSuccubusMark) {
+      return "「淫紋を刻まれたまま、また負けたの？　もう自分が誰のものか、体のほうがよく分かっているみたいですね♡」";
+    }
+    if (level === 1) {
+      return "「もう奪えるレベルすら残っていないの？　そこまで弱いのに挑んでくるなんて、本当に学習できないんですね♡」";
+    }
+    return "「これで終わりです。あなたの負けを、その体にしっかり覚えさせてあげます」";
+  }
+
+  function queueGameOver(
+    kind: LossEventKind,
+    reason: string,
+    finalAttackMessage: string,
+    surrendered = false,
+  ) {
+    setPendingGameOver({ kind, reason, surrendered });
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
-    setMessage(`${finalAttackMessage}\nHPが尽きた……タップして敗北シーンへ。`);
+    setMessage(`${finalAttackMessage}\n\n${specialDefeatQuip()}\nタップして敗北シーンへ。`);
   }
 
   function showEnemyTurn(
@@ -830,11 +925,13 @@ const mapSource =
     kind: LossEventKind,
   ) {
     if (nextHp <= 0) {
-      setPendingGameOver({ kind, reason: battleLines[succubus.stage].lose[kind] });
+      setPendingGameOver({ kind, reason: battleLines[succubus.stage].lose[kind], surrendered: false });
     }
     setMessage(quip);
     setPendingBattleMessage(
-      nextHp <= 0 ? `${outcome}\nHPが尽きた……タップして敗北シーンへ。` : outcome,
+      nextHp <= 0
+        ? `${outcome}\n\n${specialDefeatQuip()}\nタップして敗北シーンへ。`
+        : outcome,
     );
   }
 
@@ -847,18 +944,14 @@ const mapSource =
     return Math.random() < 0.35;
   }
 
-  function playRandomTemptationEffect() {
+  function applyEnemyAilment(kind: LossEventKind) {
     stopEffect("outsideEarLick");
     stopEffect("outsideNipple");
-    setCharmTurns(charmDefenseCount(succubus.stage));
-    if (Math.random() < 0.5) {
-      setTemptationEffect("kiss");
-      playEffect("outsideEarLick");
-      return "耳舐め";
-    }
-    setTemptationEffect("heart");
-    playEffect("outsideNipple");
-    return "乳首責め";
+    if (kind === "chest") { setBattleAilments((v) => ({ ...v, illusion: true })); setTemptationEffect("heart"); playEffect("outsideNipple"); return "幻惑"; }
+    if (kind === "back") { setBattleAilments((v) => ({ ...v, weakened: true })); setCharmTurns(charmDefenseCount(succubus.stage)); setTemptationEffect("kiss"); playEffect("outsideEarLick"); return "魅了＆衰弱"; }
+    if (kind === "foot") { setBattleAilments((v) => ({ ...v, feared: true })); setTemptationEffect("heart"); return "恐怖"; }
+    setBattleAilments((v) => ({ ...v, bound: true }));
+    return "束縛";
   }
 
   function battleQuip(kind: BattleQuipKind) {
@@ -871,12 +964,22 @@ const mapSource =
     setBattleAwaitingChoice(false);
     setPendingGameOver(null);
     setBattleEnemyImage("battle");
+
+    if (hasSuccubusMark && !["chest", "back", "foot"].includes(command)) {
+      setMessage("淫紋に支配され、戦うことも逃げることもできない。降参するしかありません。");
+      return;
+    }
+    if (slaveContractSigned && (command === "attack" || command === "run")) {
+      setMessage("奴隷契約による服従状態のため、戦うことも逃げることもできない。");
+      return;
+    }
     if (command === "run") {
       playEffect("outsideEscape");
-      const escapeBlockedByCharm = charmTurns > 0;
+      const escapeBlockedByCharm = charmTurns > 0 || battleAilments.bound;
       const escapeBlockedByMp = battle.mp < ESCAPE_MP_COST;
       if (escapeBlockedByCharm || escapeBlockedByMp) {
         const normalAttack = shouldUseNormalAttack();
+        if (normalAttack) applyEnemyAilment("tail");
         const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
         const damage = normalAttack
           ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7)
@@ -897,7 +1000,7 @@ const mapSource =
           if (!escapeBlockedByCharm) setTemptationEffect(null);
           finalAttackMessage = `${failureReason}\n逃げようとした隙に尻尾の通常攻撃：-${damage}HP`;
         } else {
-          const effectLabel = playRandomTemptationEffect();
+          const effectLabel = applyEnemyAilment(enemyKind);
           finalAttackMessage = `${failureReason}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が絡みつく。`;
         }
         showEnemyTurn(battleQuip("escapeFailed"), finalAttackMessage, nextHp, enemyKind);
@@ -916,11 +1019,16 @@ const mapSource =
     }
 
     if (command !== "attack" && command !== "defend") {
-      applyGameOver(command, battleLines[succubus.stage].lose[command]);
+      queueGameOver(
+        command,
+        battleLines[succubus.stage].lose[command],
+        "自ら武器を捨て、サキュバスへ降参した。",
+        true,
+      );
       return;
     }
 
-    if (command === "attack" && charmTurns > 0) {
+    if (command === "attack" && (charmTurns > 0 || slaveContractSigned)) {
       playEffect("outsideEvade");
       const enemyKind = randomLossKind();
       const damage = enemyAttackDamage[succubus.stage];
@@ -933,7 +1041,7 @@ const mapSource =
       setPlayerMp(nextMp);
       saveSetting(hpKey, String(Math.max(1, nextHp)));
       saveSetting(mpKey, String(nextMp));
-      const effectLabel = playRandomTemptationEffect();
+      const effectLabel = applyEnemyAilment(enemyKind);
       const finalAttackMessage = `魅了モード中で攻撃が当たらない。MP-${ATTACK_MP_COST}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
       showEnemyTurn(battleQuip("evaded"), finalAttackMessage, nextHp, enemyKind);
       return;
@@ -960,12 +1068,13 @@ const mapSource =
           stopEffect("outsideNipple");
         }
         const defenseMessage = remainingCharm === 0
-          ? `誘惑を防御で受け止めた：-${damage}HP / MP+8\n誘惑を振り払った。次の攻撃は命中する。`
-          : `誘惑を防御で受け止めた：-${damage}HP / MP+8\n解除まであと${remainingCharm}回、防御が必要。`;
+          ? `魅了を防御で振り払った：-${damage}HP / MP+8\n次の攻撃は命中する。`
+          : `魅了を防御で受け止めた：-${damage}HP / MP+8\n解除まであと${remainingCharm}回、防御が必要。`;
         showEnemyTurn(battleQuip("defended"), defenseMessage, nextHp, enemyKind);
         return;
       }
       const normalAttack = shouldUseNormalAttack();
+      if (normalAttack) applyEnemyAilment("tail");
       const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
       const damage = Math.ceil(enemyAttackDamage[succubus.stage] * (normalAttack ? 0.35 : 0.5));
       const nextHp = clamp(battle.hp - damage);
@@ -983,29 +1092,33 @@ const mapSource =
         showEnemyTurn(battleQuip("defended"), finalAttackMessage, nextHp, lossKind);
         return;
       }
-      const effectLabel = playRandomTemptationEffect();
+        const effectLabel = applyEnemyAilment(enemyKind);
       const finalAttackMessage = `身構えて誘惑を受け流した。\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP / MP+8\n${effectLabel}の誘惑が残っている。`;
       showEnemyTurn(battleQuip("defended"), finalAttackMessage, nextHp, enemyKind);
       return;
     }
 
     playEffect("outsideAttack");
-    const attackDamage = Math.max(18, 34 - Math.max(0, succubus.level - level) * 0.25);
+    if (command === "attack" && battleAilments.feared && Math.random() < 0.5) {
+      setMessage("恐怖で体がすくみ、攻撃できなかった。");
+      return;
+    }
+    const baseAttackDamage = Math.max(18, 34 - Math.max(0, succubus.level - level) * 0.25);
+    const attackDamage = battleAilments.weakened ? baseAttackDamage * 0.5 : baseAttackDamage;
     const nextEnemyHp = clamp(battle.enemyHp - attackDamage);
     const attackMp = clamp(battle.mp - ATTACK_MP_COST);
     if (nextEnemyHp <= 0) {
       const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
+      const victoryLevel = Math.min(100, level + 20);
       setBattle(nextBattle);
-      setPlayerHp(nextBattle.hp);
-      setPlayerMp(nextBattle.mp);
-      saveSetting(hpKey, String(nextBattle.hp));
-      saveSetting(mpKey, String(nextBattle.mp));
+      savePlayerStats(victoryLevel, nextBattle.hp, nextBattle.mp);
       setPhase("result");
-      setMessage(battleLines[succubus.stage].win);
+      setMessage(`${battleLines[succubus.stage].win}\n勝利経験値を獲得：Lv.${level} → Lv.${victoryLevel}（+${victoryLevel - level}）\n※サキュバス戦ではPtを獲得しません。`);
       return;
     }
 
     const normalAttack = shouldUseNormalAttack();
+    if (normalAttack) applyEnemyAilment("tail");
     const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
     const damage = normalAttack ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7) : enemyAttackDamage[succubus.stage];
     const nextHp = clamp(battle.hp - damage);
@@ -1029,7 +1142,7 @@ const mapSource =
       return;
     }
 
-    const effectLabel = playRandomTemptationEffect();
+    const effectLabel = applyEnemyAilment(enemyKind);
     const finalAttackMessage = `${battleLines[succubus.stage].attack}\nMP-${ATTACK_MP_COST} / ${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑が襲いかかる。`;
     showEnemyTurn(battleQuip("beforeTemptation"), finalAttackMessage, nextHp, enemyKind);
   }
@@ -1053,7 +1166,7 @@ const mapSource =
     });
   }
 
-  function resetBattle(mapMessage = "もう一度、帰り道を探す。油断しないように進もう。") {
+  const resetBattle = useCallback((mapMessage = "もう一度、帰り道を探す。油断しないように進もう。") => {
     setPhase("explore");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
@@ -1064,15 +1177,37 @@ const mapSource =
     setMapArea("center");
     setMapStep(0);
     setMapPosition(startPositions.center);
-    setCharmTurns(0);
+    setCharmTurns(returnCharmTurns);
+    setReturnCharmTurns(0);
     setMessage(mapMessage);
     setBattle({
       hp: playerHp,
       mp: playerMp,
-      enemyHp: 100,
+      enemyHp: enemyMaxHp[encounterStage],
       lastLossKind: "tail",
     });
-  }
+  }, [encounterStage, playerHp, playerMp, returnCharmTurns]);
+
+  useEffect(() => {
+    const finishedVictory = phase === "result";
+    const finishedDefeat = phase === "loss" && lossEventIndex >= 19;
+    if (!finishedVictory && !finishedDefeat) {
+      fadeOpacity.setValue(0);
+      return undefined;
+    }
+
+    fadeOpacity.setValue(0);
+    const animation = Animated.timing(fadeOpacity, {
+      toValue: 1,
+      duration: 5000,
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => {
+      if (!finished) return;
+      resetBattle(finishedVictory ? victoryMapQuips[encounterStage] : defeatMapQuips[encounterStage]);
+    });
+    return () => animation.stop();
+  }, [encounterStage, fadeOpacity, lossEventIndex, phase, resetBattle]);
 
   function handleBattleMessagePress() {
     if (phase !== "battle") return;
@@ -1084,7 +1219,7 @@ const mapSource =
     if (pendingGameOver) {
       const next = pendingGameOver;
       setPendingGameOver(null);
-      applyGameOver(next.kind, next.reason);
+      applyGameOver(next.kind, next.reason, next.surrendered);
       return;
     }
     setBattleAwaitingChoice(true);
@@ -1094,12 +1229,6 @@ const mapSource =
     return (
       <View style={styles.root}>
         <View style={[styles.battleScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          {phase === "loss" ? (
-            <View pointerEvents="none" style={[styles.battleHeader, { top: insets.top + 10 }]}>
-              <AppText style={[styles.battleTitle, styles.gameOverTitle]}>誘惑に敗北しました</AppText>
-            </View>
-          ) : null}
-
           <View style={[styles.battleStage, phase === "loss" && styles.lossBattleStage]}>
             {phase === "loss" ? (
               <>
@@ -1128,7 +1257,7 @@ const mapSource =
                   <AppText style={[styles.enemyOverlayName, { color: succubus.color }]}>
                     {succubus.title} Lv.{succubus.level}
                   </AppText>
-                  <AppText style={styles.enemyOverlayHp}>HP {Math.round(battle.enemyHp)}</AppText>
+                  <AppText style={styles.enemyOverlayHp}>HP {battleAilments.illusion ? "???" : Math.round(battle.enemyHp)}</AppText>
                 </View>
                 <View style={styles.enemyLarge}>
                   {battleEnemyImage === "battle" ? (
@@ -1162,9 +1291,17 @@ const mapSource =
                       <View style={styles.battleCommands}>
                         {battleMenu === "root" ? (
                           <>
-                            <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} />
+                            {!hasSuccubusMark && !slaveContractSigned ? <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} /> : null}
+                            {!hasSuccubusMark && slaveContractSigned ? <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} /> : null}
                             <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
-                            <PrimaryButton title={`逃げる（MP${ESCAPE_MP_COST}）`} tone="secondary" onPress={() => resolveCommand("run")} />
+                            {!hasSuccubusMark && !slaveContractSigned ? (
+                              <PrimaryButton title={`逃げる（MP${ESCAPE_MP_COST}）`} tone="secondary" onPress={() => resolveCommand("run")} />
+                            ) : (
+                              <View style={styles.succubusMarkBattleNotice}>
+                                <Image source={hasSuccubusMark ? pixelSprites.succubusMark : pixelSprites.statusObedience} style={styles.succubusMarkBattleIcon} contentFit="contain" />
+                                <AppText style={styles.succubusMarkBattleText}>{hasSuccubusMark ? "淫紋：戦闘・逃亡不可" : "服従：戦闘・逃亡不可"}</AppText>
+                              </View>
+                            )}
                           </>
                         ) : battleMenu === "fight" ? (
                           <>
@@ -1187,18 +1324,52 @@ const mapSource =
                       <AppText style={styles.statusBattleBig}>HP {Math.round(battle.hp)}</AppText>
                       <AppText style={styles.statusBattleBig}>MP {Math.round(battle.mp)}</AppText>
                       <AppText style={charmTurns > 0 ? styles.charmedMark : styles.normalMark}>
-                        {charmTurns > 0 ? `魅了中（防御あと${charmTurns}回）` : "正常"}
+                        {charmTurns > 0 ? `魅了モード（防御あと${charmTurns}回）` : "正常"}
                       </AppText>
-                      {temptationEffect ? (
+                      {charmTurns > 0 ? (
                         <View style={styles.statusEffectRow}>
                           <Image
-                            source={temptationEffect === "kiss" ? pixelSprites.kissMark : pixelSprites.heartMark}
+                            source={pixelSprites.heartMark}
                             style={styles.statusEffectMark}
                             contentFit="contain"
                           />
-                          <AppText style={styles.statusEffectLabel}>
-                            {temptationEffect === "kiss" ? "耳舐め" : "乳首責め"}
-                          </AppText>
+                          <AppText style={styles.statusEffectLabel}>魅了</AppText>
+                        </View>
+                      ) : null}
+                      {battleAilments.weakened ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image source={pixelSprites.statusWeakness} style={styles.statusEffectMark} contentFit="contain" />
+                          <AppText style={styles.statusEffectLabel}>衰弱</AppText>
+                        </View>
+                      ) : null}
+                      {battleAilments.illusion ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image source={pixelSprites.statusIllusion} style={styles.statusEffectMark} contentFit="contain" />
+                          <AppText style={styles.statusEffectLabel}>幻惑</AppText>
+                        </View>
+                      ) : null}
+                      {battleAilments.feared ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image source={pixelSprites.statusFear} style={styles.statusEffectMark} contentFit="contain" />
+                          <AppText style={styles.statusEffectLabel}>恐怖</AppText>
+                        </View>
+                      ) : null}
+                      {battleAilments.bound ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image source={pixelSprites.statusObedience} style={styles.statusEffectMark} contentFit="contain" />
+                          <AppText style={styles.statusEffectLabel}>束縛</AppText>
+                        </View>
+                      ) : null}
+                      {hasSuccubusMark ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image source={pixelSprites.succubusMark} style={styles.statusEffectMark} contentFit="contain" />
+                          <AppText style={styles.statusEffectLabel}>淫紋</AppText>
+                        </View>
+                      ) : null}
+                      {slaveContractSigned ? (
+                        <View style={styles.statusEffectRow}>
+                          <Image source={pixelSprites.statusObedience} style={styles.statusEffectMark} contentFit="contain" />
+                          <AppText style={styles.statusEffectLabel}>服従</AppText>
                         </View>
                       ) : null}
                     </View>
@@ -1210,7 +1381,7 @@ const mapSource =
                     <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
                   </View>
                   {charmTurns > 0 ? (
-                    <AppText style={styles.charmText}>CHARM：逃亡不可 / 防御あと{charmTurns}回で解除</AppText>
+                    <AppText style={styles.charmText}>魅了モード：逃亡不可 / 防御あと{charmTurns}回で解除</AppText>
                   ) : null}
                   <AppText style={[styles.message, pendingGameOver ? styles.pendingGameOverMessage : null]}>
                     {message}
@@ -1222,24 +1393,10 @@ const mapSource =
             )}
           </View>
 
-          {phase !== "battle" ? (
-            <View style={styles.battleCommands}>
-              {phase === "result" ? (
-                <PrimaryButton
-                  title="マップへ戻る"
-                  tone="contract"
-                  onPress={() => resetBattle(victoryMapQuips[succubus.stage])}
-                />
-              ) : null}
-              {phase !== "loss" || lossEventIndex >= 19 ? (
-                <PrimaryButton
-                  title={phase === "loss" ? "力尽きたため、館に戻る" : "ホーム画面へ戻る"}
-                  tone={phase === "loss" ? "danger" : "secondary"}
-                  onPress={() => router.replace("/(tabs)")}
-                />
-              ) : null}
-            </View>
-          ) : null}
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.fadeOverlay, { opacity: fadeOpacity }]}
+          />
         </View>
       </View>
     );
@@ -1256,10 +1413,7 @@ const mapSource =
       ]}>
         <View style={styles.fullMap}>
           {mapArea === "center" ? (
-            <>
-              <Image source={mapSource} style={styles.mapBackgroundBackdrop} contentFit="cover" />
-              <Image source={mapSource} style={styles.mapBackground} contentFit="contain" />
-            </>
+            <CenterCrossroadBackdrop />
           ) : mapSource ? (
             <Image source={mapSource} style={styles.mapBackground} contentFit="cover" />
           ) : (
@@ -1338,6 +1492,9 @@ const mapSource =
             : null}
           {!crystalOpen && !warningSignOpen && message ? (
             <Pressable style={styles.mapMessageBox} onPress={handleMapMessagePress}>
+              {isSuccubusMapQuip ? (
+                <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
+              ) : null}
               <AppText style={[styles.mapMessage, /回復|全回復|浄化/.test(message) && styles.recoveryMessage]}>{message}</AppText>
               <AppText style={styles.mapTapGuide}>タップ ▼</AppText>
             </Pressable>
@@ -1351,8 +1508,17 @@ const mapSource =
               HP {playerHp}　MP {playerMp}
             </AppText>
             <AppText style={styles.statusText}>本日獲得 {dailyOutsidePoints}/100pt</AppText>
+            <AppText style={styles.statusText}>所持Pt {availablePoints}pt</AppText>
+            {hasSuccubusMark ? (
+              <View style={styles.mapSuccubusMarkRow}>
+                <Image source={pixelSprites.succubusMark} style={styles.mapSuccubusMarkIcon} contentFit="contain" />
+                <AppText style={styles.succubusMarkStatusText}>淫紋：水辺のみ解除</AppText>
+              </View>
+            ) : null}
+            {deepSuccubusMark ? <AppText style={styles.succubusMarkStatusText}>刻印深化：吸収基準100</AppText> : null}
+            {slaveContractSigned ? <AppText style={styles.succubusMarkStatusText}>服従：契約により強制付与</AppText> : null}
             <AppText style={charmTurns > 0 ? styles.charmStatusText : styles.statusSubText}>
-              {charmTurns > 0 ? "魅了中：水辺で解除" : "魅了なし"}
+              {charmTurns > 0 ? "魅了モード：防御または水辺で解除" : "状態良好"}
             </AppText>
           </View>
           <View style={styles.operationPanel}>
@@ -1427,7 +1593,7 @@ const mapSource =
               </AppText>
             </Pressable>
             <AppText style={styles.crystalModalNote}>
-              ※魅了モードになると、戦闘時に逃げられなくなります。左の水辺に移動すると解除されます。
+              ※魅了モードになると、戦闘時に攻撃が当たらず逃げられません。防御または左の水辺で解除できます。
             </AppText>
 
             <Pressable style={styles.crystalCloseButton} onPress={closeCrystalSettings}>
@@ -1478,12 +1644,49 @@ const mapSource =
               </AppText>
             </View>
 
+            <View style={styles.warningSection}>
+              <AppText style={styles.warningSectionTitle}>状態異常について</AppText>
+              {[
+                { name: "魅了モード", image: pixelSprites.heartMark, text: "サキュバスと目を合わせる、または誘惑攻撃で付与。攻撃が当たらず、逃亡もできません。" },
+                { name: "束縛", image: pixelSprites.statusObedience, text: "尻尾の通常攻撃で付与。逃亡できません。" },
+                { name: "幻惑", image: pixelSprites.statusIllusion, text: "おっぱいの誘惑攻撃で付与。敵のHPが見えなくなります。" },
+                { name: "衰弱", image: pixelSprites.statusWeakness, text: "お尻の誘惑攻撃で魅了と同時に付与。攻撃力が半減します。" },
+                { name: "恐怖", image: pixelSprites.statusFear, text: "足裏の誘惑攻撃で付与。攻撃が50%の確率で失敗します。" },
+                { name: "服従", image: pixelSprites.statusObedience, text: "奴隷契約済みの場合に強制付与。戦闘と逃亡ができず、防御か降参のみ選べます。水辺では解除できません。通常の戦闘で遊びたい場合は、設定画面から「契約書・契約ルール」を初期化してください。" },
+                { name: "淫紋", image: pixelSprites.succubusMark, text: "Lv.1敗北または降参で付与。降参しか選べず、左の水辺でのみ解除できます。" },
+                { name: "刻印深化", image: pixelSprites.statusDeepMark, text: "淫紋中に再び淫紋を受けると付与。レベルとPtの吸収基準が50から100になります。" },
+              ].map((status) => (
+                <View key={status.name} style={styles.statusGuideRow}>
+                  <Image source={status.image} style={styles.statusGuideIcon} contentFit="contain" />
+                  <View style={styles.statusGuideText}>
+                    <AppText style={styles.statusGuideName}>{status.name}</AppText>
+                    <AppText style={styles.warningBody}>{status.text}</AppText>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.warningSection}>
+              <AppText style={styles.warningSectionTitle}>勝利した場合</AppText>
+              <AppText style={styles.warningBody}>
+                ・スライム勝利：1体につきレベルが1上がり、10Ptを獲得します（本日最大100Pt）。{"\n"}
+                ・サキュバス勝利：経験値としてレベルが20上がります。Ptは付与されません。
+              </AppText>
+            </View>
+
             <View style={styles.defeatWarningSection}>
               <AppText style={styles.defeatWarningTitle}>敗北した場合</AppText>
               <AppText style={styles.defeatWarningText}>
                 HPが0になるか降参すると敗北シーンへ移行します。{"\n"}
-                レベルは1、HPとMPも1になり、ポイントも50Ptを失います。{"\n"}
-                奪われたレベルはサキュバスに吸収されます。
+                最大50レベルを吸収され、HPとMPは1になります。{"\n"}
+                50レベルに足りない分は、1レベルにつき1Ptとして所持Ptから吸収されます。{"\n"}
+                例：Lv.45ならLv.1になり5Pt吸収、Lv.1なら50Pt吸収されます。{"\n"}
+                所持Ptが不足していても不足分は全額吸収され、所持Ptは【マイナス】となります。{"\n"}
+                {"\n"}
+                Lv.1で敗北すると淫紋を刻まれ、戦闘と逃亡ができず、降参しか選べなくなります。{"\n"}
+                淫紋は左の水辺でのみ解除できます。{"\n"}
+                {"\n"}
+                自ら降参した場合は【全レベル】と【50Pt】を吸収され、魅了状態と淫紋を付与されます。
               </AppText>
             </View>
 
@@ -1562,12 +1765,6 @@ const styles = StyleSheet.create({
     left: 0,
     width: "100%",
     height: "100%",
-  },
-  mapBackgroundBackdrop: {
-    ...StyleSheet.absoluteFill,
-    width: "100%",
-    height: "100%",
-    opacity: 0.32,
   },
   crossroadBackdrop: {
     ...StyleSheet.absoluteFill,
@@ -2070,6 +2267,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  statusGuideRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 105, 180, 0.34)",
+    backgroundColor: "rgba(66, 9, 62, 0.3)",
+    padding: 9,
+  },
+  statusGuideIcon: {
+    width: 58,
+    height: 58,
+  },
+  statusGuideText: {
+    flex: 1,
+    gap: 2,
+  },
+  statusGuideName: {
+    color: "#ff69b4",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
   defeatWarningSection: {
     gap: 5,
     borderWidth: 1,
@@ -2167,6 +2387,21 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     fontWeight: "900",
   },
+  mapSuccubusMarkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  mapSuccubusMarkIcon: {
+    width: 18,
+    height: 18,
+  },
+  succubusMarkStatusText: {
+    color: "#ff45e6",
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "900",
+  },
   mapMessageBox: {
     position: "absolute",
     right: 12,
@@ -2200,6 +2435,12 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 0,
     backgroundColor: "#050505",
+  },
+  fadeOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 100,
+    elevation: 100,
+    backgroundColor: "#000",
   },
   kicker: {
     color: "#ff69b4",
@@ -2391,6 +2632,26 @@ const styles = StyleSheet.create({
   },
   battleCommands: {
     gap: 8,
+  },
+  succubusMarkBattleNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#ff45e6",
+    backgroundColor: "rgba(87, 0, 92, 0.68)",
+    padding: 8,
+  },
+  succubusMarkBattleIcon: {
+    width: 30,
+    height: 30,
+  },
+  succubusMarkBattleText: {
+    color: "#ff8cf0",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "900",
   },
   battleBottomRow: {
     flex: 0.42,
