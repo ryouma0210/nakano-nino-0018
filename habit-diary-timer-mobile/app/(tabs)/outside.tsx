@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -363,6 +364,7 @@ function playerSpriteForFacing(facing: Direction) {
 
 export default function OutsideScreen() {
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
+  const insets = useSafeAreaInsets();
   const [level, setLevel] = useState(initializeLevel);
   const [playerHp, setPlayerHp] = useState(() => initializePlayerStat(hpKey, 100));
   const [playerMp, setPlayerMp] = useState(() => initializePlayerStat(mpKey, 100, 0));
@@ -1091,15 +1093,12 @@ const mapSource =
   if (phase === "battle" || phase === "result" || phase === "loss") {
     return (
       <View style={styles.root}>
-        <View style={styles.battleScreen}>
-          <View style={styles.battleHeader}>
-            <AppText style={styles.kicker}>
-              {phase === "loss" ? "GAME OVER" : "SUCCUBUS BATTLE"}
-            </AppText>
-            <AppText style={[styles.battleTitle, phase === "loss" && styles.gameOverTitle]}>
-              {phase === "loss" ? "誘惑に敗北しました" : succubus.title}
-            </AppText>
-          </View>
+        <View style={[styles.battleScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          {phase === "loss" ? (
+            <View pointerEvents="none" style={[styles.battleHeader, { top: insets.top + 10 }]}>
+              <AppText style={[styles.battleTitle, styles.gameOverTitle]}>誘惑に敗北しました</AppText>
+            </View>
+          ) : null}
 
           <View style={[styles.battleStage, phase === "loss" && styles.lossBattleStage]}>
             {phase === "loss" ? (
@@ -1132,14 +1131,29 @@ const mapSource =
                   <AppText style={styles.enemyOverlayHp}>HP {Math.round(battle.enemyHp)}</AppText>
                 </View>
                 <View style={styles.enemyLarge}>
-                  <Image
-                    source={battleEnemyImageSource}
-                    style={[
-                      styles.enemyLargeImage,
-                      battleEnemyImage !== "battle" && styles.enemyLargeEventImage,
-                    ]}
-                    contentFit="cover"
-                  />
+                  {battleEnemyImage === "battle" ? (
+                    <>
+                      <Image
+                        source={battleEnemyImageSource}
+                        style={styles.enemyBattleBackdrop}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                      />
+                      <Image
+                        source={battleEnemyImageSource}
+                        style={styles.enemyLargeImage}
+                        contentFit="contain"
+                        cachePolicy="memory-disk"
+                      />
+                    </>
+                  ) : (
+                    <Image
+                      source={battleEnemyImageSource}
+                      style={styles.enemyLargeEventImage}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                    />
+                  )}
                 </View>
                 {battleAwaitingChoice ? (
                   <View style={styles.battleChoiceOverlay}>
@@ -1220,7 +1234,7 @@ const mapSource =
               {phase !== "loss" || lossEventIndex >= 19 ? (
                 <PrimaryButton
                   title={phase === "loss" ? "力尽きたため、館に戻る" : "ホーム画面へ戻る"}
-                  tone="secondary"
+                  tone={phase === "loss" ? "danger" : "secondary"}
                   onPress={() => router.replace("/(tabs)")}
                 />
               ) : null}
@@ -1233,9 +1247,20 @@ const mapSource =
 
   return (
     <View style={styles.root}>
-      <View style={styles.mapScreen}>
+      <View style={[
+        styles.mapScreen,
+        {
+          paddingTop: Math.max(8, insets.top),
+          paddingBottom: Math.max(8, insets.bottom),
+        },
+      ]}>
         <View style={styles.fullMap}>
-          {mapSource ? (
+          {mapArea === "center" ? (
+            <>
+              <Image source={mapSource} style={styles.mapBackgroundBackdrop} contentFit="cover" />
+              <Image source={mapSource} style={styles.mapBackground} contentFit="contain" />
+            </>
+          ) : mapSource ? (
             <Image source={mapSource} style={styles.mapBackground} contentFit="cover" />
           ) : (
             <CenterCrossroadBackdrop />
@@ -1537,6 +1562,12 @@ const styles = StyleSheet.create({
     left: 0,
     width: "100%",
     height: "100%",
+  },
+  mapBackgroundBackdrop: {
+    ...StyleSheet.absoluteFill,
+    width: "100%",
+    height: "100%",
+    opacity: 0.32,
   },
   crossroadBackdrop: {
     ...StyleSheet.absoluteFill,
@@ -2181,7 +2212,7 @@ const styles = StyleSheet.create({
     top: 10,
     right: 10,
     left: 10,
-    zIndex: 20,
+    zIndex: 1,
     gap: 4,
     backgroundColor: "rgba(0, 0, 0, 0.58)",
     paddingHorizontal: 10,
@@ -2213,10 +2244,10 @@ const styles = StyleSheet.create({
   },
   enemyOverlay: {
     position: "absolute",
-    top: 82,
+    top: 10,
     right: 12,
     left: 12,
-    zIndex: 4,
+    zIndex: 5,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2247,10 +2278,18 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 2,
   },
   enemyLargeImage: {
     width: "100%",
     height: "100%",
+    zIndex: 2,
+  },
+  enemyBattleBackdrop: {
+    ...StyleSheet.absoluteFill,
+    width: "100%",
+    height: "100%",
+    opacity: 0.24,
   },
   enemyLargeEventImage: {
     width: "100%",
@@ -2311,7 +2350,8 @@ const styles = StyleSheet.create({
     right: 12,
     bottom: 12,
     left: 12,
-    zIndex: 4,
+    zIndex: 20,
+    elevation: 20,
     minHeight: 98,
     borderWidth: 2,
     borderColor: "#fff",
@@ -2324,7 +2364,8 @@ const styles = StyleSheet.create({
     right: 12,
     bottom: 12,
     left: 12,
-    zIndex: 5,
+    zIndex: 20,
+    elevation: 20,
     flexDirection: "row",
     gap: 10,
   },
