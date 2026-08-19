@@ -9,7 +9,14 @@ export function Screen({
 }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.root, style, { paddingTop: Math.max(12, insets.top) }]}>
+    <View style={[
+      styles.root,
+      style,
+      {
+        paddingTop: Math.max(12, insets.top),
+        paddingBottom: insets.bottom,
+      },
+    ]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
