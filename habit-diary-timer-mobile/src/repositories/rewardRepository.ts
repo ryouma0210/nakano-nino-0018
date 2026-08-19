@@ -131,7 +131,7 @@ export const rewardRepository = {
         "SELECT COALESCE(SUM(points_spent), 0) AS total FROM reward_redemptions",
       )?.total ?? 0;
     const earned = activityPoints + stgBonus;
-    return { earned, spent, available: Math.max(0, earned - spent), stgBonus };
+    return { earned, spent, available: earned - spent, stgBonus };
   },
 
   acquired() {

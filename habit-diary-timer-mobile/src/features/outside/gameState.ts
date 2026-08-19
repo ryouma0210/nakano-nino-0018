@@ -9,6 +9,8 @@ export const dailyPointDateKey = "outside_game_point_date";
 export const dailyPointKey = "outside_game_point_today";
 export const succubusAbsorbDateKey = "outside_game_succubus_absorb_date";
 export const succubusAbsorbKey = "outside_game_succubus_absorb_today";
+export const succubusMarkKey = "outside_game_succubus_mark";
+export const deepSuccubusMarkKey = "outside_game_deep_succubus_mark";
 
 export function readSetting(key: string) {
   return queryOne<{ setting_value: string }>("SELECT setting_value FROM app_settings WHERE setting_key=?", [key])?.setting_value;
@@ -34,6 +36,8 @@ function initializeDailyValue(dateKey: string, valueKey: string) {
 }
 export const initializeDailyOutsidePoints = () => initializeDailyValue(dailyPointDateKey, dailyPointKey);
 export const initializeSuccubusAbsorbBonus = () => initializeDailyValue(succubusAbsorbDateKey, succubusAbsorbKey);
+export const initializeSuccubusMark = () => readSetting(succubusMarkKey) === "1";
+export const initializeDeepSuccubusMark = () => readSetting(deepSuccubusMarkKey) === "1";
 export function initializePlayerStat(key: string, fallback: number, minimum = 1) {
   const value = Number(readSetting(key) ?? fallback);
   if (!Number.isFinite(value) || value < minimum) { saveSetting(key, String(fallback)); return fallback; }
