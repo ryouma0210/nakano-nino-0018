@@ -37,6 +37,7 @@ import {
   requiredContractRuleTexts,
 } from "@/utils/contract";
 import { secondsToClock } from "@/utils/date";
+import { unlockedOutsideTitles } from "@/features/outside/achievements";
 import { downloadUriOnWeb } from "@/utils/webDownload";
 
 const rewardVideos = [
@@ -107,6 +108,7 @@ function unlockedTitles(contract: ContractSettings | null) {
       progress: `${days}日 / ${achievement.days}日`,
       unlocked: days >= achievement.days,
     })),
+    ...unlockedOutsideTitles(),
   ].filter((title) => title.unlocked);
 }
 
