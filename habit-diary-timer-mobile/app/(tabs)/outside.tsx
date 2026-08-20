@@ -168,11 +168,27 @@ const pixelSprites = {
   },
 };
 
+function CenterMapBackdrop() {
+  return <Image source={pixelSprites.mapCenter} style={styles.mapBackground} contentFit="cover" transition={0} />;
+}
+
+function LeftMapBackdrop() {
+  return <Image source={pixelSprites.mapLeft} style={styles.mapBackground} contentFit="cover" transition={0} />;
+}
+
+function RightMapBackdrop() {
+  return <Image source={pixelSprites.mapRight} style={styles.mapBackground} contentFit="cover" transition={0} />;
+}
+
+function TopMapBackdrop() {
+  return <Image source={pixelSprites.mapTop} style={styles.mapBackground} contentFit="cover" transition={0} />;
+}
+
 function MapBackdrop({ area }: { area: MapArea }) {
-  if (area === "center") return <Image source={pixelSprites.mapCenter} recyclingKey="outside-center-map" style={styles.mapBackground} contentFit="cover" />;
-  if (area === "left") return <Image source={pixelSprites.mapLeft} recyclingKey="outside-left-map" style={styles.mapBackground} contentFit="cover" />;
-  if (area === "right") return <Image source={pixelSprites.mapRight} recyclingKey="outside-right-map" style={styles.mapBackground} contentFit="cover" />;
-  return <Image source={pixelSprites.mapTop} recyclingKey="outside-top-map" style={styles.mapBackground} contentFit="cover" />;
+  if (area === "center") return <CenterMapBackdrop key="outside-map-center" />;
+  if (area === "left") return <LeftMapBackdrop key="outside-map-left" />;
+  if (area === "right") return <RightMapBackdrop key="outside-map-right" />;
+  return <TopMapBackdrop key="outside-map-top" />;
 }
 
 function StatGauge({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
@@ -442,6 +458,10 @@ export default function OutsideScreen() {
     enemyHp: 100,
     lastLossKind: "tail",
   });
+  const [displayedBattle, setDisplayedBattle] = useState<BattleStatus>({ hp: playerHp, mp: playerMp, enemyHp: 100, lastLossKind: "tail" });
+  const [displayedCharmTurns, setDisplayedCharmTurns] = useState(0);
+  const [displayedTemptationGauge, setDisplayedTemptationGauge] = useState(0);
+  const [displayedBattleAilments, setDisplayedBattleAilments] = useState<BattleAilments>(noBattleAilments);
 
   const resetToCrossroad = useCallback(() => {
     setPhase("explore");
@@ -505,6 +525,14 @@ export default function OutsideScreen() {
     ...Object.values(victoryMapQuips),
     ...Object.values(defeatMapQuips),
   ].includes(message);
+  const hasMapStatus = charmTurns > 0
+    || battleAilments.bound
+    || battleAilments.weakened
+    || battleAilments.illusion
+    || battleAilments.feared
+    || hasSuccubusMark
+    || deepSuccubusMark
+    || slaveContractSigned;
   const displayedPlayerFacing: Direction = mapStep > 0 ? "up" : playerFacing;
 
   useEffect(() => () => {
@@ -616,12 +644,17 @@ export default function OutsideScreen() {
     setMapStep(2);
     setCharmTurns(initialCharmTurns ?? charmTurns);
     setTemptationGauge((initialCharmTurns ?? charmTurns) > 0 ? 100 : temptationGauge);
-    setBattle({
+    const initialBattle = {
       hp: playerHp,
       mp: playerMp,
       enemyHp: enemyMaxHp[succubus.stage],
       lastLossKind: "tail",
-    });
+    } satisfies BattleStatus;
+    setBattle(initialBattle);
+    setDisplayedBattle(initialBattle);
+    setDisplayedCharmTurns(initialCharmTurns ?? charmTurns);
+    setDisplayedTemptationGauge((initialCharmTurns ?? charmTurns) > 0 ? 100 : temptationGauge);
+    setDisplayedBattleAilments(noBattleAilments);
     setBattleAilments(noBattleAilments);
     setMessage(`${openingMessage ?? "サキュバスがこちらに近づいてきた。"}\n${battleLines[succubus.stage].appear}`);
   }
@@ -1368,6 +1401,10 @@ export default function OutsideScreen() {
 
   function handleBattleMessagePress() {
     if (phase !== "battle") return;
+    setDisplayedBattle(battle);
+    setDisplayedCharmTurns(charmTurns);
+    setDisplayedTemptationGauge(temptationGauge);
+    setDisplayedBattleAilments(battleAilments);
     if (pendingDamageQueue.length > 0) {
       const [effect, ...rest] = pendingDamageQueue;
       setPendingDamageQueue(rest);
@@ -1405,7 +1442,9 @@ export default function OutsideScreen() {
               <>
                 <Pressable style={styles.lossStage} onPress={advanceLossScene}>
                   <Image
+                    key={`${activeSuccubusStage}-${battle.lastLossKind}-${lossImageIndex}`}
                     source={lossEventImages[lossImageIndex] ?? lossEventImages[0]}
+                    recyclingKey={`${activeSuccubusStage}-${battle.lastLossKind}-${lossImageIndex}`}
                     style={styles.lossImage}
                     contentFit="cover"
                   />
@@ -1429,7 +1468,7 @@ export default function OutsideScreen() {
               <>
                 <Animated.View style={[styles.enemyOverlay, { transform: [{ translateX: enemyShake }] }]}>
                   <AppText style={[styles.enemyOverlayName, { color: succubus.color }]}>{succubus.title} Lv.{succubus.level}</AppText>
-                  <StatGauge label="HP" value={battle.enemyHp} max={enemyMaxHp[activeSuccubusStage]} color="#ff4fa3" />
+                  <StatGauge label="HP" value={displayedBattle.enemyHp} max={enemyMaxHp[activeSuccubusStage]} color="#ff4fa3" />
                 </Animated.View>
                 <View style={styles.enemyLarge}>
                   {battleEnemyImage === "battle" ? (
@@ -1460,7 +1499,7 @@ export default function OutsideScreen() {
                   <View style={styles.battleChoiceOverlay}>
                     <View style={styles.commandPanel}>
                       <AppText style={styles.panelTitle}>選択</AppText>
-                      <View style={styles.battleCommands}>
+                      <View style={[styles.battleCommands, battleMenu === "fight" && styles.battleCommandGrid]}>
                         {battleMenu === "root" ? (
                           <>
                             {!hasSuccubusMark && !slaveContractSigned ? <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} /> : null}
@@ -1476,12 +1515,12 @@ export default function OutsideScreen() {
                           </>
                         ) : battleMenu === "fight" ? (
                           <>
-                            <PrimaryButton title={`攻撃（MP${ATTACK_MP_COST}）`} disabled={battle.mp < ATTACK_MP_COST} onPress={() => resolveCommand("attack")} />
-                            <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
-                            <PrimaryButton title="おちんぽ握る♡" tone="secondary" onPress={() => resolveCommand("grip")} />
-                            <PrimaryButton title="シコシコする♡" tone="secondary" onPress={() => resolveCommand("stroke")} />
-                            <PrimaryButton title="乳首を弄る♡" tone="secondary" onPress={() => resolveCommand("nipple")} />
-                            <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
+                            <View style={styles.battleCommandGridItem}><PrimaryButton title={`攻撃（MP${ATTACK_MP_COST}）`} tone="battleAttack" disabled={battle.mp < ATTACK_MP_COST} onPress={() => resolveCommand("attack")} /></View>
+                            <View style={styles.battleCommandGridItem}><PrimaryButton title="防御" tone="battleDefense" onPress={() => resolveCommand("defend")} /></View>
+                            <View style={styles.battleCommandGridItem}><PrimaryButton title="おちんぽ握る♡" tone="battleSpecial" onPress={() => resolveCommand("grip")} /></View>
+                            <View style={styles.battleCommandGridItem}><PrimaryButton title="シコシコする♡" tone="battleSpecial" onPress={() => resolveCommand("stroke")} /></View>
+                            <View style={styles.battleCommandGridItem}><PrimaryButton title="乳首を弄る♡" tone="battleSpecial" onPress={() => resolveCommand("nipple")} /></View>
+                            <View style={styles.battleCommandGridItem}><PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} /></View>
                           </>
                         ) : (
                           <>
@@ -1495,11 +1534,12 @@ export default function OutsideScreen() {
                     </View>
                     <Animated.View style={[styles.playerStatusPanel, { transform: [{ translateX: playerShake }] }]}>
                       <AppText style={styles.panelTitle}>自分</AppText>
-                      <StatGauge label="HP" value={battle.hp} max={100} color="#e3364f" />
-                      <StatGauge label="MP" value={battle.mp} max={100} color="#3f8cff" />
-                      <StatGauge label="誘惑" value={temptationGauge} max={100} color="#ff69b4" />
-                      {charmTurns > 0 ? <AppText style={styles.charmedMark}>魅了モード（防御あと{charmTurns}回）</AppText> : null}
-                      {charmTurns > 0 ? (
+                      <StatGauge label="HP" value={displayedBattle.hp} max={100} color="#e3364f" />
+                      <StatGauge label="MP" value={displayedBattle.mp} max={100} color="#3f8cff" />
+                      <StatGauge label="誘惑" value={displayedTemptationGauge} max={100} color="#ff69b4" />
+                      {displayedCharmTurns > 0 ? <AppText style={styles.charmedMark}>魅了モード（防御あと{displayedCharmTurns}回）</AppText> : null}
+                      <View style={styles.statusGrid}>
+                      {displayedCharmTurns > 0 ? (
                         <View style={styles.statusEffectRow}>
                           <Image
                             source={pixelSprites.heartMark}
@@ -1509,25 +1549,25 @@ export default function OutsideScreen() {
                           <AppText style={styles.statusEffectLabel}>魅了</AppText>
                         </View>
                       ) : null}
-                      {battleAilments.weakened ? (
+                      {displayedBattleAilments.weakened ? (
                         <View style={styles.statusEffectRow}>
                           <Image source={pixelSprites.statusWeakness} style={styles.statusEffectMark} contentFit="contain" />
                           <AppText style={styles.statusEffectLabel}>衰弱</AppText>
                         </View>
                       ) : null}
-                      {battleAilments.illusion ? (
+                      {displayedBattleAilments.illusion ? (
                         <View style={styles.statusEffectRow}>
                           <Image source={pixelSprites.statusIllusion} style={styles.statusEffectMark} contentFit="contain" />
                           <AppText style={styles.statusEffectLabel}>幻惑</AppText>
                         </View>
                       ) : null}
-                      {battleAilments.feared ? (
+                      {displayedBattleAilments.feared ? (
                         <View style={styles.statusEffectRow}>
                           <Image source={pixelSprites.statusFear} style={styles.statusEffectMark} contentFit="contain" />
                           <AppText style={styles.statusEffectLabel}>恐怖</AppText>
                         </View>
                       ) : null}
-                      {battleAilments.bound ? (
+                      {displayedBattleAilments.bound ? (
                         <View style={styles.statusEffectRow}>
                           <Image source={pixelSprites.statusObedience} style={styles.statusEffectMark} contentFit="contain" />
                           <AppText style={styles.statusEffectLabel}>束縛</AppText>
@@ -1545,6 +1585,7 @@ export default function OutsideScreen() {
                           <AppText style={styles.statusEffectLabel}>服従</AppText>
                         </View>
                       ) : null}
+                      </View>
                     </Animated.View>
                   </View>
                 ) : (
@@ -1597,14 +1638,11 @@ export default function OutsideScreen() {
                 style={styles.crossroadRouteOverlay}
                 contentFit="fill"
               />
-              <Image
-                pointerEvents="none"
-                source={pixelSprites.crossroadReturnOverlay}
-                style={styles.crossroadReturnOverlay}
-                contentFit="fill"
-              />
             </>
           ) : null}
+          {mapArea === "left" ? <AppText pointerEvents="none" style={[styles.areaReturnArrow, styles.areaReturnArrowLeft]}>→</AppText> : null}
+          {mapArea === "right" ? <AppText pointerEvents="none" style={[styles.areaReturnArrow, styles.areaReturnArrowRight]}>←</AppText> : null}
+          {mapArea === "top" ? <AppText pointerEvents="none" style={[styles.areaReturnArrow, styles.areaReturnArrowTop]}>↓</AppText> : null}
           {isMovingArea ? (
             <View style={styles.mapMovingOverlay}>
               <AppText style={styles.mapMovingText}>移動中です…</AppText>
@@ -1703,9 +1741,11 @@ export default function OutsideScreen() {
             <StatGauge label="MP" value={playerMp} max={100} color="#3f8cff" />
             <AppText style={styles.statusText}>本日獲得 {dailyOutsidePoints}/100pt</AppText>
             <AppText style={styles.statusText}>所持Pt {availablePoints}pt</AppText>
-            <Pressable style={styles.statusCheckButton} onPress={() => setStatusModalOpen(true)}>
-              <AppText style={styles.statusCheckButtonText}>状態異常を確認</AppText>
-            </Pressable>
+            {hasMapStatus ? (
+              <Pressable style={styles.statusCheckButton} onPress={() => setStatusModalOpen(true)}>
+                <AppText numberOfLines={1} adjustsFontSizeToFit style={styles.statusCheckButtonText}>状態異常を確認</AppText>
+              </Pressable>
+            ) : null}
           </View>
           <View style={styles.operationPanel}>
             <AppText style={styles.mapHintTitle}>操作</AppText>
@@ -2023,6 +2063,19 @@ const styles = StyleSheet.create({
     opacity: 0.62,
     transform: [{ rotate: "180deg" }],
   },
+  areaReturnArrow: {
+    position: "absolute",
+    zIndex: 3,
+    color: "rgba(8, 8, 8, 0.58)",
+    fontSize: 54,
+    lineHeight: 62,
+    fontWeight: "900",
+    textShadowColor: "rgba(255,255,255,0.16)",
+    textShadowRadius: 2,
+  },
+  areaReturnArrowLeft: { right: "5%", top: "43%" },
+  areaReturnArrowRight: { left: "5%", top: "43%" },
+  areaReturnArrowTop: { bottom: "5%", left: "45%" },
   crossroadBackdrop: {
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
@@ -2734,14 +2787,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.82)",
   },
   mapMovingText: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  statGaugeWrap: { flex: 1, minWidth: 86, gap: 3 },
+  statGaugeWrap: { flexGrow: 0, flexShrink: 0, minWidth: 86, gap: 2 },
   statGaugeLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 5 },
   statGaugeLabel: { color: "#fff", fontSize: 9, fontWeight: "900" },
   statGaugeValue: { color: "#fff", fontSize: 8, fontWeight: "900" },
   statGaugeTrack: { height: 9, overflow: "hidden", borderWidth: 1, borderColor: "#fff", backgroundColor: "#242424" },
   statGaugeFill: { height: "100%" },
-  statusCheckButton: { marginTop: 3, borderWidth: 1, borderColor: "#ff69b4", paddingVertical: 6, paddingHorizontal: 8, alignItems: "center", backgroundColor: "rgba(255,105,180,0.13)" },
-  statusCheckButtonText: { color: "#ff86c5", fontSize: 9, fontWeight: "900" },
+  statusCheckButton: { width: "100%", minHeight: 25, marginTop: 2, borderWidth: 1, borderColor: "#ff69b4", paddingVertical: 3, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,105,180,0.13)", overflow: "hidden" },
+  statusCheckButtonText: { color: "#ff86c5", fontSize: 8, lineHeight: 11, fontWeight: "900", textAlign: "center" },
   statusModal: { width: "88%", maxHeight: "78%", gap: 14, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
   statusModalList: { gap: 10 },
   statusModalRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#683252", padding: 9, backgroundColor: "#1d1119" },
@@ -2968,6 +3021,14 @@ const styles = StyleSheet.create({
   battleCommands: {
     gap: 8,
   },
+  battleCommandGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  battleCommandGridItem: {
+    width: "48%",
+  },
   succubusMarkBattleNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -3046,7 +3107,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   statusEffectRow: {
-    alignSelf: "stretch",
+    width: "48%",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -3055,6 +3116,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     backgroundColor: "rgba(255, 105, 180, 0.1)",
+  },
+  statusGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
   },
   statusEffectMark: {
     width: 22,
