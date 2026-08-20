@@ -4,7 +4,7 @@ import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
-type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "punishmentHit" | "ejaculation" | "complete";
+type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
 export type LoopAudioName = "earLick" | "nippleScratch";
 export type BgmMode = "default" | "outsideBright" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
@@ -61,6 +61,7 @@ export function AudioProvider({ children }: PropsWithChildren) {
   const outsideEarLick = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
   const outsideNipple = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
   const outsideLossRhythm = useAudioPlayer(require("../../assets/audio/tekoki.m4a"));
+  const levelUp = useAudioPlayer(require("../../assets/audio/level-up.wav"));
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
   const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.m4a"));
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
@@ -106,17 +107,22 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   const playEffect = useCallback((name: EffectName) => {
     if (!settings?.soundEnabled) return;
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, punishmentHit, ejaculation, complete }[name];
-    player.loop = name === "preparationLoop" || name === "defeatLoop" || name === "trainingStart" || name === "outsideLossRhythm";
+    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
+    player.loop = name === "preparationLoop"
+      || name === "defeatLoop"
+      || name === "trainingStart"
+      || name === "outsideEarLick"
+      || name === "outsideNipple"
+      || name === "outsideLossRhythm";
     player.volume = settings.soundVolume;
     player.seekTo(0).then(() => player.play()).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
+  }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const stopEffect = useCallback((name: EffectName) => {
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, punishmentHit, ejaculation, complete }[name];
+    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
     player.pause();
     player.seekTo(0).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+  }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   const stopLoopAudio = useCallback(() => {
     earLickLoop.pause();

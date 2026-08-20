@@ -139,6 +139,12 @@ export default function Index() {
               本日のログインボーナス：
               {loginBonusStatus?.alreadyClaimed ? "受取済み♡" : "未受取"}
             </AppText>
+            <View style={styles.loginBonusDetails}>
+              <AppText style={styles.loginBonusDetailLabel}>連続ログイン日数：</AppText>
+              <AppText style={styles.loginBonusDetailValue}>{loginBonusStatus?.claimStreak ?? 0}日</AppText>
+              <AppText style={styles.loginBonusDetailLabel}>明日のPt予定：</AppText>
+              <AppText style={styles.loginBonusDetailValue}>{loginBonusStatus?.nextClaimPoints ?? 0}pt</AppText>
+            </View>
             <AppText style={styles.todayPoints}>
               本日の獲得Pt：{todayEarnedPoints.toLocaleString()}pt
             </AppText>
@@ -238,6 +244,32 @@ const styles = StyleSheet.create({
   loginStatus: {
     color: "#fff",
     fontWeight: "800",
+  },
+  loginBonusDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,95,179,0.45)",
+    borderRadius: 5,
+    backgroundColor: "rgba(255,95,179,0.08)",
+    padding: 10,
+  },
+  loginBonusDetailLabel: {
+    width: "58%",
+    color: "#ddd",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "800",
+  },
+  loginBonusDetailValue: {
+    flex: 1,
+    color: "#f2c94c",
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: "900",
+    textAlign: "right",
   },
   todayPoints: {
     color: "#f2c94c",

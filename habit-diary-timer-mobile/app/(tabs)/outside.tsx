@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Image as NativeImage, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -49,6 +49,7 @@ const pixelSprites = {
   mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
   crossroadRouteOverlay: require("../../assets/characters/outside-pixels/outside-crossroad-route-overlay.png"),
   crossroadReturnOverlay: require("../../assets/characters/outside-pixels/outside-crossroad-return-overlay.png"),
+  returnArrow: require("../../assets/characters/outside-pixels/outside-return-arrow-v2.png"),
   mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
   mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
@@ -169,19 +170,19 @@ const pixelSprites = {
 };
 
 function CenterMapBackdrop() {
-  return <Image source={pixelSprites.mapCenter} style={styles.mapBackground} contentFit="cover" transition={0} />;
+  return <NativeImage source={pixelSprites.mapCenter} style={styles.mapBackground} resizeMode="cover" />;
 }
 
 function LeftMapBackdrop() {
-  return <Image source={pixelSprites.mapLeft} style={styles.mapBackground} contentFit="cover" transition={0} />;
+  return <NativeImage source={pixelSprites.mapLeft} style={styles.mapBackground} resizeMode="cover" />;
 }
 
 function RightMapBackdrop() {
-  return <Image source={pixelSprites.mapRight} style={styles.mapBackground} contentFit="cover" transition={0} />;
+  return <NativeImage source={pixelSprites.mapRight} style={styles.mapBackground} resizeMode="cover" />;
 }
 
 function TopMapBackdrop() {
-  return <Image source={pixelSprites.mapTop} style={styles.mapBackground} contentFit="cover" transition={0} />;
+  return <NativeImage source={pixelSprites.mapTop} style={styles.mapBackground} resizeMode="cover" />;
 }
 
 function MapBackdrop({ area }: { area: MapArea }) {
@@ -447,6 +448,7 @@ export default function OutsideScreen() {
   const [resultSummary, setResultSummary] = useState("");
   const [queuedMapMessages, setQueuedMapMessages] = useState<string[]>([]);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [playerStatusModalOpen, setPlayerStatusModalOpen] = useState(false);
   const [levelDownFlash, setLevelDownFlash] = useState({ visible: false, left: 18, top: 22 });
   const playerShake = useRef(new Animated.Value(0)).current;
   const enemyShake = useRef(new Animated.Value(0)).current;
@@ -559,19 +561,8 @@ export default function OutsideScreen() {
       setBgmMode("outsideCharm");
       return () => {
         stopEffect("trainingStart");
-        stopEffect("outsideEarLick");
-        stopEffect("outsideNipple");
         stopEffect("outsideLossRhythm");
         stopEffect("ejaculation");
-        setBgmMode("default");
-      };
-    }
-    if (charmTurns > 0) {
-      setBgmMode("outsideCharm");
-      return () => {
-        stopEffect("trainingStart");
-        stopEffect("outsideEarLick");
-        stopEffect("outsideNipple");
         setBgmMode("default");
       };
     }
@@ -579,8 +570,13 @@ export default function OutsideScreen() {
       setBgmMode("outsideBattle");
       return () => {
         stopEffect("trainingStart");
-        stopEffect("outsideEarLick");
-        stopEffect("outsideNipple");
+        setBgmMode("default");
+      };
+    }
+    if (phase === "explore" && (charmTurns > 0 || hasSuccubusMark || deepSuccubusMark)) {
+      setBgmMode("outsideCharm");
+      return () => {
+        stopEffect("trainingStart");
         setBgmMode("default");
       };
     }
@@ -590,15 +586,30 @@ export default function OutsideScreen() {
     }
     setBgmMode("default");
     stopEffect("trainingStart");
-    stopEffect("outsideEarLick");
-    stopEffect("outsideNipple");
     return () => {
       stopEffect("trainingStart");
-      stopEffect("outsideEarLick");
-      stopEffect("outsideNipple");
       setBgmMode("default");
     };
-  }, [charmTurns, mapArea, phase, playEffect, setBgmMode, stopEffect]);
+  }, [charmTurns, deepSuccubusMark, hasSuccubusMark, mapArea, phase, playEffect, setBgmMode, stopEffect]);
+
+  useEffect(() => {
+    const permanentControl = hasSuccubusMark || deepSuccubusMark || slaveContractSigned;
+    const playEarLick = phase === "battle"
+      ? charmTurns > 0 || battleAilments.illusion || permanentControl
+      : phase === "explore" && (charmTurns > 0 || hasSuccubusMark || deepSuccubusMark);
+    const playNipple = phase === "battle"
+      && (battleAilments.bound || battleAilments.weakened || permanentControl);
+
+    if (playEarLick) playEffect("outsideEarLick");
+    else stopEffect("outsideEarLick");
+    if (playNipple) playEffect("outsideNipple");
+    else stopEffect("outsideNipple");
+
+    return () => {
+      stopEffect("outsideEarLick");
+      stopEffect("outsideNipple");
+    };
+  }, [battleAilments.bound, battleAilments.illusion, battleAilments.weakened, charmTurns, deepSuccubusMark, hasSuccubusMark, phase, playEffect, slaveContractSigned, stopEffect]);
 
   useEffect(() => {
     if (phase !== "explore" || mapArea !== "center") return;
@@ -729,34 +740,34 @@ export default function OutsideScreen() {
         openWarningSign();
         return;
       }
-      if (next.y <= 18) {
+      if (next.y <= 18 && next.x >= 40 && next.x <= 60) {
         moveMap("top");
         return;
       }
-      if (next.y >= 88) {
+      if (next.y >= 88 && next.x >= 40 && next.x <= 60) {
         router.replace("/(tabs)");
         return;
       }
-      if (next.x <= 14) {
+      if (next.x <= 14 && next.y >= 40 && next.y <= 62) {
         moveMap("left");
         return;
       }
-      if (next.x >= 82) {
+      if (next.x >= 82 && next.y >= 40 && next.y <= 62) {
         moveMap("right");
         return;
       }
     }
 
-    if (mapArea === "left" && next.x >= 86) {
+    if (mapArea === "left" && next.x >= 86 && next.y >= 40 && next.y <= 62) {
       moveMap("center");
       return;
     }
-    if (mapArea === "right" && next.x <= 14) {
+    if (mapArea === "right" && next.x <= 14 && next.y >= 40 && next.y <= 62) {
       moveMap("center");
       return;
     }
     if (mapArea === "top") {
-      if (next.y >= 88) {
+      if (next.y >= 88 && next.x >= 40 && next.x <= 60) {
         moveMap("center");
         return;
       }
@@ -866,6 +877,27 @@ export default function OutsideScreen() {
     setMessage("設定で魅了モードになりました。\n戦闘中に防御を重ねるか、左の水辺で浄化できます。");
   }
 
+  function activateCrystalSuccubusMark() {
+    setHasSuccubusMark(true);
+    saveSetting(succubusMarkKey, "1");
+    setMessage("設定で淫紋モードになりました。\n戦闘と逃走が封じられ、左の水辺でのみ浄化できます。");
+  }
+
+  function activateCrystalDeepMark() {
+    setHasSuccubusMark(true);
+    setDeepSuccubusMark(true);
+    saveSetting(succubusMarkKey, "1");
+    saveSetting(deepSuccubusMarkKey, "1");
+    setMessage("設定で刻印深化モードになりました。\n敗北時の吸収基準が100になり、左の水辺でのみ浄化できます。");
+  }
+
+  async function releaseSlaveContractAtCrystal() {
+    await slaveContractService.clear();
+    setSlaveContractSigned(false);
+    setCrystalOpen(false);
+    setMessage("クリスタルの力で奴隷契約を解除しました。\n服従状態も解除され、再び戦闘と逃走を選べます。");
+  }
+
   const defeatSlime = useCallback((slimeId: number) => {
     if (phase !== "explore" || mapArea !== "right") return;
     if (dailyOutsidePoints >= 100) {
@@ -887,6 +919,7 @@ export default function OutsideScreen() {
     saveSetting(dailyPointDateKey, today);
     saveSetting(dailyPointKey, String(nextDailyPoints));
     setLevel(nextLevel);
+    if (nextLevel > level) playEffect("levelUp");
     saveSetting(levelKey, String(nextLevel));
     saveSetting(levelDateKey, today);
     setSlimes((current) =>
@@ -897,7 +930,7 @@ export default function OutsideScreen() {
     setMessage(
       `スライムに接触して討伐した。\n+${gained}pt / Lv.${nextLevel}\n本日の外RPG獲得：${nextDailyPoints}/100pt`,
     );
-  }, [dailyOutsidePoints, level, mapArea, phase]);
+  }, [dailyOutsidePoints, level, mapArea, phase, playEffect]);
 
   useEffect(() => {
     if (phase !== "explore" || mapArea !== "right" || dailyOutsidePoints >= 100) return;
@@ -1044,10 +1077,8 @@ export default function OutsideScreen() {
   }
 
   function applyEnemyAilment(kind: LossEventKind) {
-    stopEffect("outsideEarLick");
-    stopEffect("outsideNipple");
-    if (kind === "chest") { addTemptation(25); setBattleAilments((v) => ({ ...v, illusion: true })); setTemptationEffect("heart"); playEffect("outsideNipple"); return "幻惑"; }
-    if (kind === "back") { setBattleAilments((v) => ({ ...v, weakened: true })); setCharmTurns(charmDefenseCount(succubus.stage)); setTemptationGauge(100); setTemptationEffect("kiss"); playEffect("outsideEarLick"); return "魅了＆衰弱"; }
+    if (kind === "chest") { addTemptation(25); setBattleAilments((v) => ({ ...v, illusion: true })); setTemptationEffect("heart"); return "幻惑"; }
+    if (kind === "back") { setBattleAilments((v) => ({ ...v, weakened: true })); setCharmTurns(charmDefenseCount(succubus.stage)); setTemptationGauge(100); setTemptationEffect("kiss"); return "魅了＆衰弱"; }
     if (kind === "foot") { addTemptation(25); setBattleAilments((v) => ({ ...v, feared: true })); setTemptationEffect("heart"); return "恐怖"; }
     setBattleAilments((v) => ({ ...v, bound: true }));
     return "束縛";
@@ -1231,8 +1262,6 @@ export default function OutsideScreen() {
         if (remainingCharm === 0) {
           recordOutsideAchievement("charmClear");
           setTemptationEffect(null);
-          stopEffect("outsideEarLick");
-          stopEffect("outsideNipple");
         }
         const defenseMessage = remainingCharm === 0
           ? `魅了を防御で振り払った：-${damage}HP / MP+8\n次の攻撃は命中する。`
@@ -1284,6 +1313,7 @@ export default function OutsideScreen() {
       const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
       const victoryLevel = Math.min(100, level + 20);
       setBattle(nextBattle);
+      if (victoryLevel > level) playEffect("levelUp");
       savePlayerStats(victoryLevel, nextBattle.hp, nextBattle.mp);
       setPhase("result");
       recordOutsideAchievement("victory", succubus.stage);
@@ -1499,36 +1529,16 @@ export default function OutsideScreen() {
                   <View style={styles.battleChoiceOverlay}>
                     <View style={styles.commandPanel}>
                       <AppText style={styles.panelTitle}>選択</AppText>
-                      <View style={[styles.battleCommands, battleMenu === "fight" && styles.battleCommandGrid]}>
-                        {battleMenu === "root" ? (
-                          <>
-                            {!hasSuccubusMark && !slaveContractSigned ? <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} /> : null}
-                            <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
-                            {!hasSuccubusMark && !slaveContractSigned ? (
-                              <PrimaryButton title={`逃げる（MP${ESCAPE_MP_COST}）`} tone="secondary" onPress={() => resolveCommand("run")} />
-                            ) : (
-                              <View style={styles.succubusMarkBattleNotice}>
-                                <Image source={hasSuccubusMark ? pixelSprites.succubusMark : pixelSprites.statusObedience} style={styles.succubusMarkBattleIcon} contentFit="contain" />
-                                <AppText style={styles.succubusMarkBattleText}>{hasSuccubusMark ? "淫紋：戦闘・逃亡不可" : "服従：戦闘・逃亡不可"}</AppText>
-                              </View>
-                            )}
-                          </>
-                        ) : battleMenu === "fight" ? (
-                          <>
-                            <View style={styles.battleCommandGridItem}><PrimaryButton title={`攻撃（MP${ATTACK_MP_COST}）`} tone="battleAttack" disabled={battle.mp < ATTACK_MP_COST} onPress={() => resolveCommand("attack")} /></View>
-                            <View style={styles.battleCommandGridItem}><PrimaryButton title="防御" tone="battleDefense" onPress={() => resolveCommand("defend")} /></View>
-                            <View style={styles.battleCommandGridItem}><PrimaryButton title="おちんぽ握る♡" tone="battleSpecial" onPress={() => resolveCommand("grip")} /></View>
-                            <View style={styles.battleCommandGridItem}><PrimaryButton title="シコシコする♡" tone="battleSpecial" onPress={() => resolveCommand("stroke")} /></View>
-                            <View style={styles.battleCommandGridItem}><PrimaryButton title="乳首を弄る♡" tone="battleSpecial" onPress={() => resolveCommand("nipple")} /></View>
-                            <View style={styles.battleCommandGridItem}><PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} /></View>
-                          </>
+                      <View style={styles.battleCommands}>
+                        {!hasSuccubusMark && !slaveContractSigned ? <PrimaryButton title="戦う" onPress={() => setBattleMenu("fight")} /> : null}
+                        <PrimaryButton title="降参する" tone="defeat" onPress={() => setBattleMenu("surrender")} />
+                        {!hasSuccubusMark && !slaveContractSigned ? (
+                          <PrimaryButton title={`逃げる（MP${ESCAPE_MP_COST}）`} tone="secondary" onPress={() => resolveCommand("run")} />
                         ) : (
-                          <>
-                            <PrimaryButton title="おっぱい" tone="defeat" onPress={() => resolveCommand("chest")} />
-                            <PrimaryButton title="お尻" tone="defeat" onPress={() => resolveCommand("back")} />
-                            <PrimaryButton title="足裏" tone="defeat" onPress={() => resolveCommand("foot")} />
-                            <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
-                          </>
+                          <View style={styles.succubusMarkBattleNotice}>
+                            <Image source={hasSuccubusMark ? pixelSprites.succubusMark : pixelSprites.statusObedience} style={styles.succubusMarkBattleIcon} contentFit="contain" />
+                            <AppText style={styles.succubusMarkBattleText}>{hasSuccubusMark ? "淫紋：戦闘・逃亡不可" : "服従：戦闘・逃亡不可"}</AppText>
+                          </View>
                         )}
                       </View>
                     </View>
@@ -1610,6 +1620,32 @@ export default function OutsideScreen() {
             )}
           </View>
 
+          <Modal visible={battleAwaitingChoice && battleMenu !== "root"} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setBattleMenu("root")}>
+            <View style={styles.crystalModalBackdrop}>
+              <View style={styles.battleCommandModal}>
+                <AppText style={styles.crystalModalTitle}>{battleMenu === "fight" ? "戦う" : "降参する"}</AppText>
+                <View style={styles.battleCommandModalList}>
+                  {battleMenu === "fight" ? (
+                    <>
+                      <PrimaryButton title={`攻撃（MP${ATTACK_MP_COST}）`} tone="battleAttack" disabled={battle.mp < ATTACK_MP_COST} onPress={() => resolveCommand("attack")} />
+                      <PrimaryButton title="防御" tone="battleDefense" onPress={() => resolveCommand("defend")} />
+                      <PrimaryButton title="おちんぽ握る♡" tone="battleSpecial" onPress={() => resolveCommand("grip")} />
+                      <PrimaryButton title="シコシコする♡" tone="battleSpecial" onPress={() => resolveCommand("stroke")} />
+                      <PrimaryButton title="乳首を弄る♡" tone="battleSpecial" onPress={() => resolveCommand("nipple")} />
+                    </>
+                  ) : (
+                    <>
+                      <PrimaryButton title="おっぱい" tone="defeat" onPress={() => resolveCommand("chest")} />
+                      <PrimaryButton title="お尻" tone="defeat" onPress={() => resolveCommand("back")} />
+                      <PrimaryButton title="足裏" tone="defeat" onPress={() => resolveCommand("foot")} />
+                    </>
+                  )}
+                </View>
+                <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
+              </View>
+            </View>
+          </Modal>
+
           <Animated.View
             pointerEvents="none"
             style={[styles.fadeOverlay, { opacity: fadeOpacity }]}
@@ -1628,7 +1664,7 @@ export default function OutsideScreen() {
           paddingBottom: Math.max(8, insets.bottom),
         },
       ]}>
-        <View style={styles.fullMap}>
+        <View key={`outside-area-${mapArea}`} style={styles.fullMap}>
           <MapBackdrop area={mapArea} />
           {mapArea === "center" ? (
             <>
@@ -1640,9 +1676,9 @@ export default function OutsideScreen() {
               />
             </>
           ) : null}
-          {mapArea === "left" ? <AppText pointerEvents="none" style={[styles.areaReturnArrow, styles.areaReturnArrowLeft]}>→</AppText> : null}
-          {mapArea === "right" ? <AppText pointerEvents="none" style={[styles.areaReturnArrow, styles.areaReturnArrowRight]}>←</AppText> : null}
-          {mapArea === "top" ? <AppText pointerEvents="none" style={[styles.areaReturnArrow, styles.areaReturnArrowTop]}>↓</AppText> : null}
+          {mapArea === "left" ? <Image pointerEvents="none" source={pixelSprites.returnArrow} style={[styles.areaReturnArrow, styles.areaReturnArrowLeft]} contentFit="contain" /> : null}
+          {mapArea === "right" ? <Image pointerEvents="none" source={pixelSprites.returnArrow} style={[styles.areaReturnArrow, styles.areaReturnArrowRight]} contentFit="contain" /> : null}
+          {mapArea === "top" ? <Image pointerEvents="none" source={pixelSprites.returnArrow} style={[styles.areaReturnArrow, styles.areaReturnArrowTop]} contentFit="contain" /> : null}
           {isMovingArea ? (
             <View style={styles.mapMovingOverlay}>
               <AppText style={styles.mapMovingText}>移動中です…</AppText>
@@ -1735,15 +1771,12 @@ export default function OutsideScreen() {
         </View>
         <View style={styles.outsideBottomRow}>
           <View style={styles.statusPanel}>
-            <AppText style={styles.mapHintTitle}>自分のステータス</AppText>
-            <AppText style={styles.statusBig}>Lv.{level}</AppText>
-            <StatGauge label="HP" value={playerHp} max={100} color="#e3364f" />
-            <StatGauge label="MP" value={playerMp} max={100} color="#3f8cff" />
-            <AppText style={styles.statusText}>本日獲得 {dailyOutsidePoints}/100pt</AppText>
-            <AppText style={styles.statusText}>所持Pt {availablePoints}pt</AppText>
+            <Pressable style={styles.mapInfoButton} onPress={() => setPlayerStatusModalOpen(true)}>
+              <AppText style={styles.mapInfoButtonText}>自分のステータス</AppText>
+            </Pressable>
             {hasMapStatus ? (
-              <Pressable style={styles.statusCheckButton} onPress={() => setStatusModalOpen(true)}>
-                <AppText numberOfLines={1} adjustsFontSizeToFit style={styles.statusCheckButtonText}>状態異常を確認</AppText>
+              <Pressable style={styles.mapInfoButton} onPress={() => setStatusModalOpen(true)}>
+                <AppText style={styles.mapInfoButtonText}>状態異常を確認</AppText>
               </Pressable>
             ) : null}
           </View>
@@ -1766,6 +1799,23 @@ export default function OutsideScreen() {
           </View>
         </View>
       </View>
+      <Modal visible={playerStatusModalOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setPlayerStatusModalOpen(false)}>
+        <View style={styles.crystalModalBackdrop}>
+          <View style={styles.statusModal}>
+            <AppText style={styles.crystalModalTitle}>自分のステータス</AppText>
+            <View style={styles.playerStatusModalList}>
+              <AppText style={styles.playerStatusModalLevel}>Lv.{level}</AppText>
+              <StatGauge label="HP" value={playerHp} max={100} color="#e3364f" />
+              <StatGauge label="MP" value={playerMp} max={100} color="#3f8cff" />
+              <AppText style={styles.playerStatusModalText}>館の外獲得Pt　{dailyOutsidePoints}/100pt</AppText>
+              <AppText style={styles.playerStatusModalText}>所持Pt　{availablePoints}pt</AppText>
+            </View>
+            <Pressable style={styles.crystalCloseButton} onPress={() => setPlayerStatusModalOpen(false)}>
+              <AppText style={styles.crystalCloseButtonText}>閉じる</AppText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <Modal visible={statusModalOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setStatusModalOpen(false)}>
         <View style={styles.crystalModalBackdrop}>
           <View style={styles.statusModal}>
@@ -1779,7 +1829,7 @@ export default function OutsideScreen() {
                 battleAilments.feared ? { name: "恐怖", image: pixelSprites.statusFear, effect: "攻撃が50%の確率で失敗します。", cure: "左の水辺で解除" } : null,
                 hasSuccubusMark ? { name: "淫紋", image: pixelSprites.succubusMark, effect: "戦闘と逃走ができず、降参しか選べません。", cure: "左の水辺でのみ解除" } : null,
                 deepSuccubusMark ? { name: "刻印深化", image: pixelSprites.statusDeepMark, effect: "敗北時のレベル・Pt吸収基準が100になります。", cure: "左の水辺でのみ解除" } : null,
-                slaveContractSigned ? { name: "服従", image: pixelSprites.statusObedience, effect: "戦闘と逃走ができず、降参しか選べません。", cure: "水辺では解除不可。設定から契約を初期化" } : null,
+                slaveContractSigned ? { name: "服従", image: pixelSprites.statusObedience, effect: "戦闘と逃走ができず、降参しか選べません。", cure: "クリスタルの設定から奴隷契約を解除" } : null,
               ].filter(Boolean).map((status) => status ? (
                 <View key={status.name} style={styles.statusModalRow}>
                   <Image source={status.image} style={styles.statusModalImage} contentFit="contain" />
@@ -1857,6 +1907,35 @@ export default function OutsideScreen() {
               ※魅了モードになると、戦闘時に攻撃が当たらず逃げられません。防御または左の水辺で解除できます。
             </AppText>
 
+            <Pressable style={[styles.crystalCharmButton, hasSuccubusMark && !deepSuccubusMark && styles.crystalCharmButtonActive]} onPress={activateCrystalSuccubusMark}>
+              <AppText style={styles.crystalCharmButtonText}>
+                {hasSuccubusMark && !deepSuccubusMark ? "淫紋モード中" : "淫紋モードになる"}
+              </AppText>
+            </Pressable>
+            <AppText style={styles.crystalModalNote}>
+              ※淫紋モード中は戦闘と逃走ができず、降参のみ選択できます。左の水辺で解除できます。
+            </AppText>
+
+            <Pressable style={[styles.crystalCharmButton, deepSuccubusMark && styles.crystalCharmButtonActive]} onPress={activateCrystalDeepMark}>
+              <AppText style={styles.crystalCharmButtonText}>
+                {deepSuccubusMark ? "刻印深化モード中" : "刻印深化モードになる"}
+              </AppText>
+            </Pressable>
+            <AppText style={styles.crystalModalNote}>
+              ※刻印深化モード中は敗北時の吸収基準が100になります。左の水辺で解除できます。
+            </AppText>
+
+            {slaveContractSigned ? (
+              <>
+                <Pressable style={styles.crystalContractReleaseButton} onPress={releaseSlaveContractAtCrystal}>
+                  <AppText style={styles.crystalContractReleaseButtonText}>奴隷契約を解除する</AppText>
+                </Pressable>
+                <AppText style={styles.crystalModalNote}>
+                  ※契約データを削除し、服従状態を解除します。
+                </AppText>
+              </>
+            ) : null}
+
             <View style={styles.battleEncyclopedia}>
               <AppText style={styles.battleEncyclopediaTitle}>戦闘図鑑</AppText>
               {([
@@ -1899,7 +1978,13 @@ export default function OutsideScreen() {
             <View style={styles.warningSection}>
               <AppText style={styles.warningSectionTitle}>奥へ進む前の注意事項</AppText>
               <AppText style={styles.warningBody}>
-                上の森ではサキュバスと遭遇します。HPとMPを確認し、必要なら左の水辺で回復してから進んでください。魅了中は逃げられません。
+                上の森ではサキュバスと遭遇します。{"\n"}
+                右のエリアでレベルを上げて強くすること。{"\n"}                
+                HPとMPを確認し、必要なら左の水辺で回復してから進んでください。{"\n"}
+                {"\n"}
+                ※奴隷契約しているの方へ{"\n"}
+                【敗北】することしかできません。{"\n"}
+                戦闘も楽しく遊びたい場合は、設定画面から「契約書・契約ルール」から初期化をおこなってください。
               </AppText>
             </View>
 
@@ -2066,16 +2151,13 @@ const styles = StyleSheet.create({
   areaReturnArrow: {
     position: "absolute",
     zIndex: 3,
-    color: "rgba(8, 8, 8, 0.58)",
-    fontSize: 54,
-    lineHeight: 62,
-    fontWeight: "900",
-    textShadowColor: "rgba(255,255,255,0.16)",
-    textShadowRadius: 2,
+    width: "24%",
+    height: "14%",
+    opacity: 0.72,
   },
-  areaReturnArrowLeft: { right: "5%", top: "43%" },
-  areaReturnArrowRight: { left: "5%", top: "43%" },
-  areaReturnArrowTop: { bottom: "5%", left: "45%" },
+  areaReturnArrowLeft: { right: 0, top: "43%" },
+  areaReturnArrowRight: { left: 0, top: "43%", transform: [{ rotate: "180deg" }] },
+  areaReturnArrowTop: { bottom: "1%", left: "38%", transform: [{ rotate: "90deg" }] },
   crossroadBackdrop: {
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
@@ -2187,27 +2269,27 @@ const styles = StyleSheet.create({
   mapForwardTap: {
     position: "absolute",
     top: 0,
-    left: "35%",
-    right: "35%",
-    height: "46%",
+    left: "40%",
+    right: "40%",
+    height: "26%",
     backgroundColor: "transparent",
     zIndex: 4,
   },
   mapLeftTap: {
     position: "absolute",
-    top: "30%",
-    bottom: "26%",
+    top: "40%",
+    height: "22%",
     left: 0,
-    width: "36%",
+    width: "24%",
     backgroundColor: "transparent",
     zIndex: 4,
   },
   mapRightTap: {
     position: "absolute",
-    top: "30%",
+    top: "40%",
     right: 0,
-    bottom: "26%",
-    width: "36%",
+    height: "22%",
+    width: "24%",
     backgroundColor: "transparent",
     zIndex: 4,
   },
@@ -2229,18 +2311,18 @@ const styles = StyleSheet.create({
   },
   mapBackFromLeftTap: {
     position: "absolute",
-    top: 0,
+    top: "40%",
     right: 0,
-    bottom: 0,
-    width: "28%",
+    width: "20%",
+    height: "22%",
     backgroundColor: "transparent",
   },
   mapBackFromRightTap: {
     position: "absolute",
-    top: 0,
-    bottom: 0,
+    top: "40%",
     left: 0,
-    width: "28%",
+    width: "20%",
+    height: "22%",
     backgroundColor: "transparent",
   },
   mapTopAreaActionTap: {
@@ -2253,18 +2335,18 @@ const styles = StyleSheet.create({
   },
   mapBackFromTopTap: {
     position: "absolute",
-    right: 0,
+    left: "40%",
     bottom: 0,
-    left: 0,
-    height: "22%",
+    width: "20%",
+    height: "18%",
     backgroundColor: "transparent",
   },
   mapDoorTap: {
     position: "absolute",
-    right: 0,
+    left: "40%",
     bottom: 0,
-    left: 0,
-    height: "24%",
+    width: "20%",
+    height: "22%",
     backgroundColor: "transparent",
     zIndex: 4,
   },
@@ -2505,6 +2587,19 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "900",
   },
+  crystalContractReleaseButton: {
+    borderWidth: 2,
+    borderColor: "#ff3b45",
+    backgroundColor: "#8f111a",
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  crystalContractReleaseButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
   crystalModalNote: {
     color: "#ffb6d8",
     fontSize: 12,
@@ -2711,7 +2806,8 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#111",
     padding: 7,
-    gap: 1,
+    gap: 8,
+    justifyContent: "center",
   },
   operationPanel: {
     flex: 1,
@@ -2795,7 +2891,24 @@ const styles = StyleSheet.create({
   statGaugeFill: { height: "100%" },
   statusCheckButton: { width: "100%", minHeight: 25, marginTop: 2, borderWidth: 1, borderColor: "#ff69b4", paddingVertical: 3, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,105,180,0.13)", overflow: "hidden" },
   statusCheckButtonText: { color: "#ff86c5", fontSize: 8, lineHeight: 11, fontWeight: "900", textAlign: "center" },
+  mapInfoButton: {
+    width: "100%",
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ff69b4",
+    backgroundColor: "rgba(255,105,180,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  mapInfoButtonText: { color: "#ff86c5", fontSize: 11, lineHeight: 16, fontWeight: "900", textAlign: "center" },
   statusModal: { width: "88%", maxHeight: "78%", gap: 14, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
+  playerStatusModalList: { gap: 12 },
+  playerStatusModalLevel: { color: "#fff", fontSize: 28, lineHeight: 34, fontWeight: "900" },
+  playerStatusModalText: { color: "#fff", fontSize: 14, lineHeight: 20, fontWeight: "900" },
+  battleCommandModal: { width: "88%", maxHeight: "88%", gap: 12, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
+  battleCommandModalList: { gap: 8 },
   statusModalList: { gap: 10 },
   statusModalRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#683252", padding: 9, backgroundColor: "#1d1119" },
   statusModalImage: { width: 48, height: 48 },
