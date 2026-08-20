@@ -10,6 +10,7 @@ export type OutsideAchievementEvent =
   | "surrender"
   | "grip"
   | "stroke"
+  | "nipple"
   | "statusAttack"
   | "charmClear"
   | "temptationMax"
@@ -44,7 +45,7 @@ export function outsideAchievementStats(): OutsideStats {
   return {
     slimeDefeat: count("slimeDefeat"), purify: count("purify"), escape: count("escape"),
     victory: count("victory"), defeat: count("defeat"), surrender: count("surrender"),
-    grip: count("grip"), stroke: count("stroke"), statusAttack: count("statusAttack"),
+    grip: count("grip"), stroke: count("stroke"), nipple: count("nipple"), statusAttack: count("statusAttack"),
     charmClear: count("charmClear"), temptationMax: count("temptationMax"),
     mark: count("mark"), deepMark: count("deepMark"),
     victoryBeginner: numberSetting(stageKey("victory", "beginner")),
@@ -89,7 +90,8 @@ export const outsideAchievements: OutsideAchievement[] = [
   { name: "降参の常連", condition: "5回降参する", value: (s) => s.surrender, target: 5, unit: "回" },
   { name: "自制心はどこへ", condition: "おちんぽ握る♡を選ぶ", value: (s) => s.grip, target: 1, unit: "回" },
   { name: "見せつける弱点", condition: "シコシコする♡を選ぶ", value: (s) => s.stroke, target: 1, unit: "回" },
-  { name: "無防備の極み", condition: "特殊行動を合計10回選ぶ", value: (s) => s.grip + s.stroke, target: 10, unit: "回" },
+  { name: "乳首いじり", condition: "乳首を弄る♡を選ぶ", value: (s) => s.nipple, target: 1, unit: "回" },
+  { name: "無防備の極み", condition: "特殊行動を合計10回選ぶ", value: (s) => s.grip + s.stroke + s.nipple, target: 10, unit: "回" },
   { name: "状態異常まみれ", condition: "状態異常攻撃を1回受ける", value: (s) => s.statusAttack, target: 1, unit: "回" },
   { name: "誘惑の実験台", condition: "状態異常攻撃を10回受ける", value: (s) => s.statusAttack, target: 10, unit: "回" },
   { name: "鋼の理性", condition: "防御で魅了モードを解除する", value: (s) => s.charmClear, target: 1, unit: "回" },
