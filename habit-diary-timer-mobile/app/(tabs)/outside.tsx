@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Animated, Image as NativeImage, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,6 +25,7 @@ import {
 } from "@/features/outside/gameState";
 import { lossStageComments } from "@/features/outside/lossDialogue";
 import { recordOutsideAchievement } from "@/features/outside/achievements";
+import { CenterArea, LeftArea, RightArea, TopArea } from "@/components/outside/areas";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
@@ -49,13 +50,6 @@ const crystalExitPosition: MapPosition = { x: 48, y: 70 };
 const warningSignPosition: MapPosition = { x: 66, y: 31 };
 const warningSignExitPosition: MapPosition = { x: 66, y: 43 };
 const pixelSprites = {
-  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
-  crossroadRouteOverlay: require("../../assets/characters/outside-pixels/outside-crossroad-route-overlay.png"),
-  crossroadReturnOverlay: require("../../assets/characters/outside-pixels/outside-crossroad-return-overlay.png"),
-  returnArrow: require("../../assets/characters/outside-pixels/outside-return-arrow-v2.png"),
-  mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
-  mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
-  mapTop: require("../../assets/characters/outside-pixels/outside-map-top.png"),
   playerFront: require("../../assets/characters/outside-pixels/player-front-dot-v2.png"),
   playerBack: require("../../assets/characters/outside-pixels/player-back-dot.png"),
   playerLeft: require("../../assets/characters/outside-pixels/player-left-dot.png"),
@@ -171,29 +165,6 @@ const pixelSprites = {
     },
   },
 };
-
-function CenterMapBackdrop() {
-  return <NativeImage source={pixelSprites.mapCenter} style={styles.mapBackground} resizeMode="cover" />;
-}
-
-function LeftMapBackdrop() {
-  return <NativeImage source={pixelSprites.mapLeft} style={styles.mapBackground} resizeMode="cover" />;
-}
-
-function RightMapBackdrop() {
-  return <NativeImage source={pixelSprites.mapRight} style={styles.mapBackground} resizeMode="cover" />;
-}
-
-function TopMapBackdrop() {
-  return <NativeImage source={pixelSprites.mapTop} style={styles.mapBackground} resizeMode="cover" />;
-}
-
-function MapBackdrop({ area }: { area: MapArea }) {
-  if (area === "center") return <CenterMapBackdrop key="outside-map-center" />;
-  if (area === "left") return <LeftMapBackdrop key="outside-map-left" />;
-  if (area === "right") return <RightMapBackdrop key="outside-map-right" />;
-  return <TopMapBackdrop key="outside-map-top" />;
-}
 
 function StatGauge({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const percent = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));
@@ -1730,53 +1701,32 @@ export default function OutsideScreen() {
         },
       ]}>
         <View key={`outside-area-${mapArea}`} style={styles.fullMap}>
-          <MapBackdrop area={mapArea} />
           {mapArea === "center" ? (
-            <>
-              <Image
-                pointerEvents="none"
-                source={pixelSprites.crossroadRouteOverlay}
-                style={styles.crossroadRouteOverlay}
-                contentFit="fill"
-              />
-            </>
-          ) : null}
-          {mapArea === "left" ? <Image pointerEvents="none" source={pixelSprites.returnArrow} style={[styles.areaReturnArrow, styles.areaReturnArrowLeft]} contentFit="contain" /> : null}
-          {mapArea === "right" ? <Image pointerEvents="none" source={pixelSprites.returnArrow} style={[styles.areaReturnArrow, styles.areaReturnArrowRight]} contentFit="contain" /> : null}
-          {mapArea === "top" ? <Image pointerEvents="none" source={pixelSprites.returnArrow} style={[styles.areaReturnArrow, styles.areaReturnArrowTop]} contentFit="contain" /> : null}
+            <CenterArea
+              crystalSource={pixelSprites.crystal}
+              warningSignSource={pixelSprites.warningSign}
+              crystalScaleX={crystalSpinScaleX}
+              onMoveLeft={() => moveMap("left")}
+              onMoveRight={() => moveMap("right")}
+              onMoveForward={advanceMap}
+              onReturnHome={() => router.replace("/(tabs)")}
+              onOpenCrystal={openCrystalSettings}
+              onOpenWarningSign={openWarningSign}
+            />
+          ) : mapArea === "left" ? (
+            <LeftArea onExplore={exploreLeftArea} onReturn={() => moveMap("center")} />
+          ) : mapArea === "right" ? (
+            <RightArea onReturn={() => moveMap("center")} />
+          ) : (
+            <TopArea onExplore={exploreTopArea} onReturn={() => moveMap("center")} />
+          )}
           {isMovingArea ? (
             <View style={styles.mapMovingOverlay}>
               <AppText style={styles.mapMovingText}>移動中です…</AppText>
             </View>
           ) : null}
-          {mapArea === "center" ? (
+          {mapArea === "top" ? (
             <>
-              <Pressable accessibilityRole="button" accessibilityLabel="左の水辺へ移動" style={styles.mapLeftTap} onPress={() => moveMap("left")} />
-              <Pressable accessibilityRole="button" accessibilityLabel="右の草原へ移動" style={styles.mapRightTap} onPress={() => moveMap("right")} />
-              <Pressable accessibilityRole="button" accessibilityLabel="奥の森へ移動" style={styles.mapForwardTap} onPress={advanceMap} />
-              <Pressable accessibilityRole="button" accessibilityLabel="館へ戻る" style={styles.mapDoorTap} onPress={() => router.replace("/(tabs)")} />
-              <Pressable hitSlop={18} style={styles.mapCrystalTap} onPress={openCrystalSettings}>
-                <View style={[styles.mapCrystal, { transform: [{ scaleX: crystalSpinScaleX }] }]}>
-                  <Image source={pixelSprites.crystal} style={styles.mapCrystalImage} contentFit="contain" />
-                </View>
-              </Pressable>
-              <Pressable hitSlop={16} style={styles.mapWarningSignTap} onPress={openWarningSign}>
-                <Image source={pixelSprites.warningSign} style={styles.mapWarningSignImage} contentFit="contain" />
-              </Pressable>
-            </>
-          ) : mapArea === "left" ? (
-            <>
-              <Pressable style={styles.mapLeftAreaActionTap} onPress={exploreLeftArea} />
-              <Pressable style={styles.mapBackFromLeftTap} onPress={() => moveMap("center")} />
-            </>
-          ) : mapArea === "right" ? (
-            <>
-              <Pressable style={styles.mapBackFromRightTap} onPress={() => moveMap("center")} />
-            </>
-          ) : (
-            <>
-              <Pressable style={styles.mapTopAreaActionTap} onPress={exploreTopArea} />
-              <Pressable style={styles.mapBackFromTopTap} onPress={() => moveMap("center")} />
               {mapStep > 0 ? (
                 <View style={styles.exclamation}>
                   <AppText style={styles.exclamationText}>!</AppText>
@@ -1801,7 +1751,7 @@ export default function OutsideScreen() {
                 </View>
               ) : null}
             </>
-          )}
+          ) : null}
           <View style={[
             styles.mapPlayer,
             mapArea === "left" && styles.mapPlayerLeftArea,
@@ -1925,6 +1875,16 @@ export default function OutsideScreen() {
         <View style={styles.crystalModalBackdrop}>
           <View style={styles.crystalModal}>
             <ScrollView contentContainerStyle={styles.crystalModalContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.crystalTutorialSection}>
+              <AppText style={styles.crystalTutorialTitle}>チュートリアル</AppText>
+              <AppText style={styles.crystalTutorialBody}>
+                ・画面の矢印に触れるかタップしてエリアを移動します。{"\n"}
+                ・左の水辺ではHP・MPの回復と状態異常の解除ができます。{"\n"}
+                ・右のエリアでスライムと戦い、レベルを上げられます。{"\n"}
+                ・奥ではサキュバスとの戦闘が始まり、状態異常と誘惑ゲージに注意が必要です。{"\n"}
+                ・詳しい戦い方、状態異常、勝利・敗北時のルールは十字路の看板を確認してください。
+              </AppText>
+            </View>
             <AppText style={styles.crystalModalKicker}>OUTSIDE SETTINGS</AppText>
             <AppText style={styles.crystalModalTitle}>設定</AppText>
             <AppText style={styles.crystalModalHelp}>
@@ -2601,6 +2561,24 @@ const styles = StyleSheet.create({
   crystalModalContent: {
     gap: 12,
     padding: 18,
+  },
+  crystalTutorialSection: {
+    gap: 8,
+    borderWidth: 2,
+    borderColor: "#ff69b4",
+    padding: 12,
+    backgroundColor: "rgba(255, 105, 180, 0.1)",
+  },
+  crystalTutorialTitle: {
+    color: "#ff69b4",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  crystalTutorialBody: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: "700",
   },
   crystalModalKicker: {
     color: "#d9a7ff",
