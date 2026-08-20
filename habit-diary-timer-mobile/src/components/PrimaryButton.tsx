@@ -20,7 +20,10 @@ type Props = {
     | "record"
     | "collection"
     | "reward"
-    | "tribute";
+    | "tribute"
+    | "battleAttack"
+    | "battleDefense"
+    | "battleSpecial";
   disabled?: boolean;
 };
 
@@ -147,6 +150,9 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#000",
   },
+  battleAttack: { borderColor: "#fff", backgroundColor: "#f28c28" },
+  battleDefense: { borderColor: "#fff", backgroundColor: "#2374d8" },
+  battleSpecial: { borderColor: "#fff", backgroundColor: "#e84d9b" },
   darkNavigation: {
     borderColor: "#fff",
     backgroundColor: "#000",
