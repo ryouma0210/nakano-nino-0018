@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Animated, Image as NativeImage, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
@@ -40,6 +41,8 @@ type BattleStatus = {
 type MapStep = 0 | 1 | 2;
 type BattleAilments = { bound: boolean; weakened: boolean; illusion: boolean; feared: boolean };
 const noBattleAilments: BattleAilments = { bound: false, weakened: false, illusion: false, feared: false };
+const LOSS_MEMORY_STORAGE_KEY = "nino-room:outside-loss-memories";
+type LossMemoryKind = Exclude<LossEventKind, "tail">;
 
 const crystalPosition: MapPosition = { x: 48, y: 52 };
 const crystalExitPosition: MapPosition = { x: 48, y: 70 };
@@ -444,6 +447,8 @@ export default function OutsideScreen() {
   const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
   const [encounterStage, setEncounterStage] = useState<SuccubusStage>("beginner");
   const [lossEventIndex, setLossEventIndex] = useState(0);
+  const [isLossReplay, setIsLossReplay] = useState(false);
+  const [unlockedLossMemories, setUnlockedLossMemories] = useState<string[]>([]);
   const [lossSummary, setLossSummary] = useState("");
   const [resultSummary, setResultSummary] = useState("");
   const [queuedMapMessages, setQueuedMapMessages] = useState<string[]>([]);
@@ -494,6 +499,16 @@ export default function OutsideScreen() {
     });
     return () => { active = false; };
   }, []));
+
+  useEffect(() => {
+    AsyncStorage.getItem(LOSS_MEMORY_STORAGE_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) setUnlockedLossMemories(parsed.filter((value): value is string => typeof value === "string"));
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => pointRepository.subscribe(() => {
     setAvailablePoints(rewardRepository.balance().available);
@@ -981,6 +996,15 @@ export default function OutsideScreen() {
     recordOutsideAchievement("defeat", succubus.stage);
     if (surrendered) recordOutsideAchievement("surrender");
     const absorbedPoints = surrendered ? (deepensMark ? 100 : 50) : missingLevel;
+    const memoryKind: LossMemoryKind = kind === "tail" ? "chest" : kind;
+    const memoryKey = `${succubus.stage}:${memoryKind}`;
+    setUnlockedLossMemories((current) => {
+      if (current.includes(memoryKey)) return current;
+      const next = [...current, memoryKey];
+      AsyncStorage.setItem(LOSS_MEMORY_STORAGE_KEY, JSON.stringify(next)).catch(console.error);
+      return next;
+    });
+    setIsLossReplay(false);
     setEncounterStage(succubus.stage);
     setLossEventIndex(0);
     setBattleMenu("root");
@@ -1381,6 +1405,36 @@ export default function OutsideScreen() {
     });
   }
 
+  function replayLossScene(stage: SuccubusStage, kind: LossMemoryKind) {
+    setEncounterStage(stage);
+    setBattle((current) => ({ ...current, lastLossKind: kind }));
+    setLossEventIndex(0);
+    setIsLossReplay(true);
+    setCrystalOpen(false);
+    setPhase("loss");
+  }
+
+  function purchaseLossScene(stage: SuccubusStage, kind: LossMemoryKind) {
+    const memoryKey = `${stage}:${kind}`;
+    if (unlockedLossMemories.includes(memoryKey)) return;
+    if (rewardRepository.balance().available < 500) {
+      setCrystalOpen(false);
+      setMessage("所持Ptが不足しています。\n敗北シーンの解放には500Pt必要です。");
+      return;
+    }
+    const purchased = pointRepository.award(
+      `outside-loss-memory:${memoryKey}:${toDateTimeKey()}`,
+      -500,
+      `敗北シーン回想「${memoryKey}」を解放`,
+    );
+    if (!purchased) return;
+    setUnlockedLossMemories((current) => {
+      const next = [...current, memoryKey];
+      AsyncStorage.setItem(LOSS_MEMORY_STORAGE_KEY, JSON.stringify(next)).catch(console.error);
+      return next;
+    });
+  }
+
   const resetBattle = useCallback((mapMessages: string[] = ["もう一度、帰り道を探す。油断しないように進もう。"]) => {
     setPhase("explore");
     setBattleMenu("root");
@@ -1422,12 +1476,23 @@ export default function OutsideScreen() {
     });
     animation.start(({ finished }) => {
       if (!finished) return;
+      if (finishedDefeat && isLossReplay) {
+        setIsLossReplay(false);
+        setPhase("explore");
+        setMapArea("center");
+        setMapStep(0);
+        setMapPosition(startPositions.center);
+        setPlayerFacing("down");
+        setLossEventIndex(0);
+        setMessage("敗北シーンの回想を終了しました。");
+        return;
+      }
       resetBattle(finishedVictory
         ? [resultSummary, victoryMapQuips[encounterStage]]
         : [lossSummary, defeatMapQuips[encounterStage]]);
     });
     return () => animation.stop();
-  }, [encounterStage, fadeOpacity, lossEventIndex, lossSummary, phase, resetBattle, resultSummary]);
+  }, [encounterStage, fadeOpacity, isLossReplay, lossEventIndex, lossSummary, phase, resetBattle, resultSummary]);
 
   function handleBattleMessagePress() {
     if (phase !== "battle") return;
@@ -1935,6 +2000,35 @@ export default function OutsideScreen() {
                 </AppText>
               </>
             ) : null}
+
+            <View style={styles.lossMemorySection}>
+              <AppText style={styles.lossMemoryTitle}>敗北シーン回想</AppText>
+              <AppText style={styles.lossMemoryHelp}>
+                一度見た敗北シーンは無料で再生できます。未閲覧シーンは各500Ptで解放できます。回想ではレベル・Pt・状態異常は変化しません。
+              </AppText>
+              <View style={styles.lossMemoryList}>
+                {(["beginner", "middle", "queen"] as const).flatMap((stage) =>
+                  (["chest", "back", "foot"] as const).map((kind) => {
+                    const key = `${stage}:${kind}`;
+                    const unlocked = unlockedLossMemories.includes(key);
+                    const stageLabel = stage === "beginner" ? "初級" : stage === "middle" ? "上級" : "女王";
+                    const kindLabel = kind === "chest" ? "おっぱい" : kind === "back" ? "お尻" : "足裏";
+                    return (
+                      <Pressable
+                        key={key}
+                        disabled={!unlocked && availablePoints < 500}
+                        style={[styles.lossMemoryButton, !unlocked && styles.lossMemoryPurchaseButton, !unlocked && availablePoints < 500 && styles.lossMemoryButtonDisabled]}
+                        onPress={() => unlocked ? replayLossScene(stage, kind) : purchaseLossScene(stage, kind)}
+                      >
+                        <AppText style={styles.lossMemoryButtonText}>
+                          {stageLabel}・{kindLabel}　{unlocked ? "見る" : "500Ptで解放"}
+                        </AppText>
+                      </Pressable>
+                    );
+                  }),
+                )}
+              </View>
+            </View>
 
             <View style={styles.battleEncyclopedia}>
               <AppText style={styles.battleEncyclopediaTitle}>戦闘図鑑</AppText>
@@ -2606,6 +2700,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "800",
   },
+  lossMemorySection: {
+    gap: 9,
+    borderWidth: 2,
+    borderColor: "#9b3d72",
+    backgroundColor: "rgba(70, 12, 48, 0.48)",
+    padding: 12,
+  },
+  lossMemoryTitle: { color: "#ff69b4", fontSize: 16, lineHeight: 22, fontWeight: "900" },
+  lossMemoryHelp: { color: "#fff", fontSize: 11, lineHeight: 17, fontWeight: "700" },
+  lossMemoryList: { gap: 7 },
+  lossMemoryButton: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ff69b4",
+    backgroundColor: "#3b102d",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  lossMemoryButtonText: { color: "#fff", fontSize: 13, lineHeight: 18, fontWeight: "900" },
+  lossMemoryPurchaseButton: { borderColor: "#d9a441", backgroundColor: "#49300d" },
+  lossMemoryButtonDisabled: { opacity: 0.42 },
+  lossMemoryEmpty: { color: "#aaa", fontSize: 11, lineHeight: 17, fontWeight: "700" },
   battleEncyclopedia: {
     gap: 8,
     borderWidth: 2,
