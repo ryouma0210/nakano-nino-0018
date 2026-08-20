@@ -9,7 +9,7 @@
 | 項目 | 内容 |
 |---|---|
 | アプリ名 | Nino Room |
-| アプリバージョン | 0.1.0 |
+| アプリバージョン | 1.0.0 |
 | パッケージID | `jp.local.habitdiarytimer` |
 | Framework | Expo SDK 57 / React Native 0.86 |
 | Language | TypeScript |
@@ -155,13 +155,13 @@
 - マップを移動した場合は、移動元に合わせて端から開始します（右から戻ったら右端、上から戻ったら上側など）
 - 説明文や結果メッセージはマップ内の最下部に表示し、タップすると閉じます
 - 下方向またはドア操作でホーム画面へ戻る
-- 中央の十字路には設定ポイントがあり、触れるとモーダルで主人公Lv、サキュバスLv、魅了モードを調整できます
+- 中央の十字路には設定ポイントがあり、触れるとモーダルで主人公Lv、サキュバスLv、魅了を調整できます
 - サキュバスLvは主人公Lvとは別に保存され、設定ではLv.1〜100の範囲で調整できます
 - 設定ポイントのクリスタルは、立ったまま横方向に回転しているように表示します
 - 右の草原では背景に固定されたスライムではなく、4体のスライムがマップ上を自由に移動します
 - 移動中のスライムへ主人公が接触すると討伐して消えます
 - スライム討伐は1回10pt、1日100ptまで獲得できます
-- 左の浄化エリアへ入ると、HP／MPを自動で全回復し、魅了モードも解除します。回復メッセージは緑色で表示します
+- 左の浄化エリアへ入ると、HP／MPを自動で全回復し、魅了も解除します。回復メッセージは緑色で表示します
 - 上の誘惑の森では、影に隠れたサキュバスへ近づくと「！」が表示され、戦闘開始イベントへ移行します
 - 戦闘画面は画像をメインに表示し、画像まわりの白枠は出さず、画像内の上にサキュバスLv／HPを表示します
 - 画像上には「コメント」または「選択肢＋主人公HP／MP／魅了状態」のどちらかだけを表示し、コメントをタップすると選択肢へ切り替わります
@@ -485,6 +485,45 @@ Androidエミュレータ:
 ```powershell
 npm run android
 ```
+
+### WindowsでAndroid Emulatorを使ってローカル起動する
+
+1. [Android Studio](https://developer.android.com/studio)をインストールします。
+2. Android StudioのWelcome画面から `More Actions` → `Virtual Device Manager`（または `Device Manager`）を開きます。
+3. `Create Virtual Device`で仮想端末を作成します。画面確認には `Pixel 4a` などのPhone端末を推奨します。
+4. Google APIs付きの安定版Androidイメージをダウンロードして仮想端末を起動します。
+5. PowerShellまたはVS Codeのターミナルで、必ずアプリ本体のディレクトリへ移動します。
+
+```powershell
+cd C:\Users\ryoum\nakanoNino0018\habit-diary-timer-mobile
+```
+
+`C:\Users\ryoum\nakanoNino0018`直下には`package.json`がないため、その場所でExpoを起動すると`ConfigError`になります。
+
+初回だけExpoアカウントへログインします。
+
+```powershell
+npx expo login
+```
+
+Metro Bundlerをキャッシュ削除付きで起動します。
+
+```powershell
+npx expo start --clear
+```
+
+起動メニューが表示されたら、ターミナルを選択した状態で半角の`a`キーを押します。Enterは不要です。初回はExpo GoがAndroid Emulatorへ自動的にダウンロードされます。
+
+```text
+› Opening on Android...
+› Opening exp://... on Pixel_4a
+```
+
+Expo Goの確認画面で匿名実行時に`ERR_STREAM_UNABLE_TO_PIPE`が発生する場合は、`Ctrl+C`で終了し、`npx expo login`後に再度`npx expo start --clear`を実行してください。
+
+エミュレータを起動しているのに接続できない場合は、Android StudioのDevice Managerで対象端末のメニューから`Cold Boot Now`を実行します。それでも改善しない場合のみ`Wipe Data`で仮想端末を初期化してください。
+
+ローカルのレイアウト確認だけなら、`eas init`および`eas build --profile production`は不要です。これらはExpoクラウドへのプロジェクト接続と配布用ビルドを行うコマンドです。
 
 iOSシミュレータはmacOSが必要です。WindowsではiPhoneシミュレータを起動できません。
 
