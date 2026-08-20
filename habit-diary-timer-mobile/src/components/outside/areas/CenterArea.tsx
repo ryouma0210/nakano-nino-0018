@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   leftExit: { position: "absolute", top: "40%", left: 0, width: "24%", height: "22%", zIndex: 4 },
   rightExit: { position: "absolute", top: "40%", right: 0, width: "24%", height: "22%", zIndex: 4 },
   homeExit: { position: "absolute", left: "40%", bottom: 0, width: "20%", height: "22%", zIndex: 4 },
-  crystalTap: { position: "absolute", left: "43%", top: "48%", width: "14%", height: "14%", zIndex: 5, alignItems: "center", justifyContent: "center" },
+  crystalTap: { position: "absolute", left: "10%", top: "58%", width: "14%", height: "14%", zIndex: 5, alignItems: "center", justifyContent: "center" },
   crystal: { width: "100%", height: "100%" },
   crystalImage: { width: "100%", height: "100%" },
   warningSignTap: { position: "absolute", left: "58%", top: "22%", width: "20%", height: "22%", zIndex: 5 },

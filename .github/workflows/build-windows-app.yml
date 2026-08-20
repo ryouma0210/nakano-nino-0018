@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nino-${{ github.ref_name }}-windows
-          path: nino-room-windows/release/Nino Room Setup 0.1.0.exe
+          path: nino-room-windows/release/Nino Room Setup 1.0.0.exe
           if-no-files-found: error
 
       - name: Install rclone
@@ -94,5 +94,5 @@ jobs:
       - name: Upload Windows installer to Google Drive
         shell: pwsh
         run: |
-          rclone copyto "nino-room-windows/release/Nino Room Setup 0.1.0.exe" "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
+          rclone copyto "nino-room-windows/release/Nino Room Setup 1.0.0.exe" "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
         working-directory: .

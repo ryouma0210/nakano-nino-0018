@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Image as NativeImage, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { slaveContractService } from "@/services/slaveContractService";
+import { contractService } from "@/services/gameRoomService";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -45,8 +45,8 @@ const noBattleAilments: BattleAilments = { bound: false, weakened: false, illusi
 const LOSS_MEMORY_STORAGE_KEY = "nino-room:outside-loss-memories";
 type LossMemoryKind = Exclude<LossEventKind, "tail">;
 
-const crystalPosition: MapPosition = { x: 48, y: 52 };
-const crystalExitPosition: MapPosition = { x: 48, y: 70 };
+const crystalPosition: MapPosition = { x: 17, y: 65 };
+const crystalExitPosition: MapPosition = { x: 30, y: 65 };
 const warningSignPosition: MapPosition = { x: 66, y: 31 };
 const warningSignExitPosition: MapPosition = { x: 66, y: 43 };
 const pixelSprites = {
@@ -66,6 +66,9 @@ const pixelSprites = {
   statusObedience: require("../../assets/ui/outside-status-obedience.png"),
   statusDeepMark: require("../../assets/ui/outside-status-deep-mark.png"),
   warningSign: require("../../assets/characters/outside-pixels/warning-sign.png"),
+  mapCenter: require("../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png"),
+  mapLeft: require("../../assets/characters/outside-pixels/outside-map-left.png"),
+  mapRight: require("../../assets/characters/outside-pixels/outside-map-right.png"),
   succubus: {
     beginner: require("../../assets/characters/outside-events/beginner-battle-v2.png"),
     middle: require("../../assets/characters/outside-events/middle-battle-v2.png"),
@@ -465,8 +468,8 @@ export default function OutsideScreen() {
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    slaveContractService.load().then((contract) => {
-      if (active) setSlaveContractSigned(Boolean(contract.contractorName?.trim()));
+    contractService.load().then((contract) => {
+      if (active) setSlaveContractSigned(Boolean(contract.signedAt));
     });
     return () => { active = false; };
   }, []));
@@ -811,7 +814,7 @@ export default function OutsideScreen() {
         startEncounter(forcedLines[succubus.stage]);
         return;
       }
-      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了モードで戦闘が始まった。", charmDefenseCount(succubus.stage));
+      startEncounter("サキュバスと目が合った瞬間、耳元に甘い吐息が触れた。\n耳舐め攻撃を受け、魅了で戦闘が始まった。", charmDefenseCount(succubus.stage));
       setTemptationEffect("kiss");
       playEffect("outsideEarLick");
       return;
@@ -860,7 +863,7 @@ export default function OutsideScreen() {
   function activateCrystalCharm() {
     setCharmTurns(charmDefenseCount(succubus.stage));
     setTemptationGauge(100);
-    setMessage("設定で魅了モードになりました。\n戦闘中に防御を重ねるか、左の水辺で浄化できます。");
+    setMessage("設定で魅了になりました。\n戦闘中に防御を重ねるか、左の水辺で浄化できます。");
   }
 
   function activateCrystalSuccubusMark() {
@@ -878,7 +881,7 @@ export default function OutsideScreen() {
   }
 
   async function releaseSlaveContractAtCrystal() {
-    await slaveContractService.clear();
+    await contractService.clear();
     setSlaveContractSigned(false);
     setCrystalOpen(false);
     setMessage("クリスタルの力で奴隷契約を解除しました。\n服従状態も解除され、再び戦闘と逃走を選べます。");
@@ -1011,8 +1014,8 @@ export default function OutsideScreen() {
     const pointsAfterDefeat = rewardRepository.balance().available;
     setLossSummary(
       surrendered
-        ? `自ら降参したため、全レベルとなるLv.${absorbedLevel}と50Ptを吸収された。\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.1 / HP1 / MP1 / 魅了中\n所持${pointsBeforeDefeat}Pt → ${pointsAfterDefeat}Ptになりました。\n淫紋を刻まれました。淫紋と魅了を解除できるのは左の水辺だけです。`
-        : `レベルドレインにより、Lv.${absorbedLevel}を吸収された。\n${missingLevel > 0 ? `不足分${missingLevel}の代わりに、所持Ptから${absorbedPoints}Ptを吸収された。` : `${absorptionTarget}レベル吸収されたため、所持Ptの吸収はありません。`}\nサキュバスのレベルは${nextSuccubusLevel}となった。\n現在：Lv.${nextPlayerLevel} / HP1 / MP1\n所持${pointsBeforeDefeat}Pt → ${pointsAfterDefeat}Ptになりました。${deepensMark ? "\n淫紋が再び刻まれ、刻印深化しました。次回の吸収基準は100です。" : grantsSuccubusMark ? "\n吸収できるレベルがないため、淫紋を刻まれました。解除できるのは左の水辺だけです。" : ""}`,
+        ? `自ら降参したため、全レベルとなるLv.${absorbedLevel}と50Ptを吸収された。\nサキュバスのレベルが${succubus.level} → ${nextSuccubusLevel}になった。\n現在：Lv.1 / HP1 / MP1 / 魅了中\n所持${pointsBeforeDefeat}Pt → ${pointsAfterDefeat}Ptになりました。\n淫紋を刻まれました。淫紋と魅了を解除できるのは左の水辺だけです。`
+        : `レベルドレインにより、Lv.${absorbedLevel}を吸収された。\n${missingLevel > 0 ? `不足分${missingLevel}の代わりに、所持Ptから${absorbedPoints}Ptを吸収された。` : `${absorptionTarget}レベル吸収されたため、所持Ptの吸収はありません。`}\nサキュバスのレベルが${succubus.level} → ${nextSuccubusLevel}になった。\n現在：Lv.${nextPlayerLevel} / HP1 / MP1\n所持${pointsBeforeDefeat}Pt → ${pointsAfterDefeat}Ptになりました。${deepensMark ? "\n淫紋が再び刻まれ、刻印深化しました。次回の吸収基準は100です。" : grantsSuccubusMark ? "\n吸収できるレベルがないため、淫紋を刻まれました。解除できるのは左の水辺だけです。" : ""}`,
     );
     savePlayerStats(nextPlayerLevel, 1, 1);
     setMessage(reason);
@@ -1144,7 +1147,7 @@ export default function OutsideScreen() {
         const failureReason = battleAilments.bound
           ? "束縛されているため逃げられない。"
           : charmTurns > 0
-            ? "魅了モード中で逃げられない。"
+            ? "魅了中で逃げられない。"
             : `逃走に必要なMP${ESCAPE_MP_COST}が足りない。（現在MP：${Math.round(battle.mp)}）`;
         let finalAttackMessage: string;
         if (normalAttack) {
@@ -1232,7 +1235,7 @@ export default function OutsideScreen() {
       saveSetting(hpKey, String(Math.max(1, nextHp)));
       saveSetting(mpKey, String(nextMp));
       const effectLabel = applyEnemyAilment(enemyKind);
-      const finalAttackMessage = `魅了モード中で攻撃が当たらない。MP-${ATTACK_MP_COST}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
+      const finalAttackMessage = `魅了中で攻撃が当たらない。MP-${ATTACK_MP_COST}\n${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${effectLabel}の誘惑がさらに絡みつく。`;
       showEnemyTurn(battleQuip("evaded"), finalAttackMessage, nextHp, enemyKind);
       return;
     }
@@ -1507,12 +1510,11 @@ export default function OutsideScreen() {
             {phase === "loss" ? (
               <>
                 <Pressable style={styles.lossStage} onPress={advanceLossScene}>
-                  <Image
-                    key={`${activeSuccubusStage}-${battle.lastLossKind}-${lossImageIndex}`}
+                  <NativeImage
+                    key={`loss-${isLossReplay ? "replay" : "battle"}-${activeSuccubusStage}-${battle.lastLossKind}-${lossImageIndex}`}
                     source={lossEventImages[lossImageIndex] ?? lossEventImages[0]}
-                    recyclingKey={`${activeSuccubusStage}-${battle.lastLossKind}-${lossImageIndex}`}
                     style={styles.lossImage}
-                    contentFit="cover"
+                    resizeMode="cover"
                   />
                   <AppText style={styles.lossImageLabel}>
                     {lossEventIndex + 1} / 20
@@ -1583,7 +1585,7 @@ export default function OutsideScreen() {
                       <StatGauge label="HP" value={displayedBattle.hp} max={100} color="#e3364f" />
                       <StatGauge label="MP" value={displayedBattle.mp} max={100} color="#3f8cff" />
                       <StatGauge label="誘惑" value={displayedTemptationGauge} max={100} color="#ff69b4" />
-                      {displayedCharmTurns > 0 ? <AppText style={styles.charmedMark}>魅了モード（防御あと{displayedCharmTurns}回）</AppText> : null}
+                      {displayedCharmTurns > 0 ? <AppText style={styles.charmedMark}>魅了（防御あと{displayedCharmTurns}回）</AppText> : null}
                       <View style={styles.statusGrid}>
                       {displayedCharmTurns > 0 ? (
                         <View style={styles.statusEffectRow}>
@@ -1641,7 +1643,7 @@ export default function OutsideScreen() {
                       <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
                     </View>
                     {charmTurns > 0 ? (
-                      <AppText style={styles.charmText}>魅了モード：逃亡不可 / 防御あと{charmTurns}回で解除</AppText>
+                      <AppText style={styles.charmText}>魅了：逃亡不可 / 防御あと{charmTurns}回で解除</AppText>
                     ) : null}
                     <AppText style={[styles.message, pendingGameOver ? styles.pendingGameOverMessage : null]}>
                       {message}
@@ -1837,7 +1839,7 @@ export default function OutsideScreen() {
             <AppText style={styles.crystalModalTitle}>状態異常</AppText>
             <ScrollView contentContainerStyle={styles.statusModalList}>
               {[
-                charmTurns > 0 ? { name: "魅了モード", image: pixelSprites.heartMark, effect: "攻撃が命中せず、逃走もできなくなります。", cure: `防御をあと${charmTurns}回、または左の水辺で解除` } : null,
+                charmTurns > 0 ? { name: "魅了", image: pixelSprites.heartMark, effect: "攻撃が命中せず、逃走もできなくなります。", cure: `防御をあと${charmTurns}回、または左の水辺で解除` } : null,
                 battleAilments.bound ? { name: "束縛", image: pixelSprites.statusObedience, effect: "逃走できなくなります。", cure: "左の水辺で解除" } : null,
                 battleAilments.weakened ? { name: "衰弱", image: pixelSprites.statusWeakness, effect: "攻撃力が半減します。", cure: "左の水辺で解除" } : null,
                 battleAilments.illusion ? { name: "幻惑", image: pixelSprites.statusIllusion, effect: "サキュバスのHPが見えなくなります。", cure: "左の水辺で解除" } : null,
@@ -1877,117 +1879,102 @@ export default function OutsideScreen() {
             <ScrollView contentContainerStyle={styles.crystalModalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.crystalTutorialSection}>
               <AppText style={styles.crystalTutorialTitle}>チュートリアル</AppText>
-              <AppText style={styles.crystalTutorialBody}>
-                ・画面の矢印に触れるかタップしてエリアを移動します。{"\n"}
-                ・左の水辺ではHP・MPの回復と状態異常の解除ができます。{"\n"}
-                ・右のエリアでスライムと戦い、レベルを上げられます。{"\n"}
-                ・奥ではサキュバスとの戦闘が始まり、状態異常と誘惑ゲージに注意が必要です。{"\n"}
-                ・詳しい戦い方、状態異常、勝利・敗北時のルールは十字路の看板を確認してください。
-              </AppText>
+              {[
+                { title: "移動", action: "画面の矢印に触れるか、タップしてエリアを移動します。", image: pixelSprites.mapCenter },
+                { title: "水辺", action: "左の水辺に触れると、HP・MPと状態異常を回復できます。", image: pixelSprites.mapLeft },
+                { title: "戦闘", action: "右のエリアでスライムと戦い、レベルを上げます。", image: pixelSprites.mapRight },
+                { title: "状態異常", action: "付与された効果と解除方法を確認して行動します。", image: pixelSprites.statusDeepMark },
+                { title: "誘惑ゲージ", action: "100％になる前に防御し、誘惑ゲージを減らします。", image: pixelSprites.heartMark },
+                { title: "看板", action: "詳しい戦い方、状態異常、勝利・敗北時のルールは十字路の看板を確認してください。", image: pixelSprites.warningSign },
+              ].map((item) => (
+                <View key={item.title} style={styles.crystalTutorialRow}>
+                  <Image source={item.image} style={styles.crystalTutorialRowImage} contentFit="contain" />
+                  <View style={styles.crystalTutorialRowCopy}>
+                    <AppText style={styles.crystalTutorialRowTitle}>{item.title}</AppText>
+                    <AppText style={styles.crystalTutorialRowAction}>{item.action}</AppText>
+                  </View>
+                </View>
+              ))}
             </View>
-            <AppText style={styles.crystalModalKicker}>OUTSIDE SETTINGS</AppText>
-            <AppText style={styles.crystalModalTitle}>設定</AppText>
+            <AppText style={styles.crystalSettingsTitle}>設定</AppText>
             <AppText style={styles.crystalModalHelp}>
-              レベル調整と魅了モードを設定できます。
+              レベル調整と状態異常を設定できます。
             </AppText>
 
-            <View style={styles.crystalSettingRow}>
-              <View style={styles.crystalSettingText}>
-                <AppText style={styles.crystalSettingLabel}>自分のレベル</AppText>
-                <AppText style={styles.crystalSettingValue}>現在 Lv.{level}</AppText>
+            <View style={styles.crystalSettingsGroup}>
+              <AppText style={styles.crystalSettingsGroupTitle}>レベル</AppText>
+              <View style={styles.crystalSettingRow}>
+                <View style={styles.crystalSettingText}>
+                  <AppText style={styles.crystalSettingLabel}>自分のレベル</AppText>
+                  <AppText style={styles.crystalSettingValue}>現在 Lv.{level}</AppText>
+                </View>
+                <View style={styles.crystalStepButtons}>
+                  <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(-10)}>
+                    <AppText style={styles.crystalStepButtonText}>-10</AppText>
+                  </Pressable>
+                  <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(10)}>
+                    <AppText style={styles.crystalStepButtonText}>+10</AppText>
+                  </Pressable>
+                </View>
               </View>
-              <View style={styles.crystalStepButtons}>
-                <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(-10)}>
-                  <AppText style={styles.crystalStepButtonText}>-10</AppText>
-                </Pressable>
-                <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(10)}>
-                  <AppText style={styles.crystalStepButtonText}>+10</AppText>
-                </Pressable>
+
+              <View style={styles.crystalSettingRow}>
+                <View style={styles.crystalSettingText}>
+                  <AppText style={styles.crystalSettingLabel}>サキュバスのレベル</AppText>
+                  <AppText style={[styles.crystalSettingValue, { color: succubus.color }]}>
+                    現在 Lv.{succubus.level}
+                  </AppText>
+                </View>
+                <View style={styles.crystalStepButtons}>
+                  <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(-10)}>
+                    <AppText style={styles.crystalStepButtonText}>-10</AppText>
+                  </Pressable>
+                  <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(10)}>
+                    <AppText style={styles.crystalStepButtonText}>+10</AppText>
+                  </Pressable>
+                </View>
               </View>
             </View>
 
-            <View style={styles.crystalSettingRow}>
-              <View style={styles.crystalSettingText}>
-                <AppText style={styles.crystalSettingLabel}>サキュバスのレベル</AppText>
-                <AppText style={[styles.crystalSettingValue, { color: succubus.color }]}>
-                  現在 Lv.{succubus.level}
+            <View style={styles.crystalSettingsGroup}>
+              <AppText style={styles.crystalSettingsGroupTitle}>状態異常</AppText>
+              <Pressable style={[styles.crystalCharmButton, charmTurns > 0 && styles.crystalCharmButtonActive]} onPress={activateCrystalCharm}>
+                <AppText style={styles.crystalCharmButtonText}>
+                  {charmTurns > 0 ? "魅了中" : "魅了になる"}
                 </AppText>
-              </View>
-              <View style={styles.crystalStepButtons}>
-                <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(-10)}>
-                  <AppText style={styles.crystalStepButtonText}>-10</AppText>
-                </Pressable>
-                <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(10)}>
-                  <AppText style={styles.crystalStepButtonText}>+10</AppText>
-                </Pressable>
-              </View>
-            </View>
-
-            <Pressable style={[styles.crystalCharmButton, charmTurns > 0 && styles.crystalCharmButtonActive]} onPress={activateCrystalCharm}>
-              <AppText style={styles.crystalCharmButtonText}>
-                {charmTurns > 0 ? "魅了モード中" : "魅了モードになる"}
+              </Pressable>
+              <AppText style={styles.crystalModalNote}>
+                ※魅了モード中になると、戦闘時に攻撃が当たらず逃げられません。防御または左の水辺で解除できます。
               </AppText>
-            </Pressable>
-            <AppText style={styles.crystalModalNote}>
-              ※魅了モードになると、戦闘時に攻撃が当たらず逃げられません。防御または左の水辺で解除できます。
-            </AppText>
 
-            <Pressable style={[styles.crystalCharmButton, hasSuccubusMark && !deepSuccubusMark && styles.crystalCharmButtonActive]} onPress={activateCrystalSuccubusMark}>
-              <AppText style={styles.crystalCharmButtonText}>
-                {hasSuccubusMark && !deepSuccubusMark ? "淫紋モード中" : "淫紋モードになる"}
-              </AppText>
-            </Pressable>
-            <AppText style={styles.crystalModalNote}>
-              ※淫紋モード中は戦闘と逃走ができず、降参のみ選択できます。左の水辺で解除できます。
-            </AppText>
-
-            <Pressable style={[styles.crystalCharmButton, deepSuccubusMark && styles.crystalCharmButtonActive]} onPress={activateCrystalDeepMark}>
-              <AppText style={styles.crystalCharmButtonText}>
-                {deepSuccubusMark ? "刻印深化モード中" : "刻印深化モードになる"}
-              </AppText>
-            </Pressable>
-            <AppText style={styles.crystalModalNote}>
-              ※刻印深化モード中は敗北時の吸収基準が100になります。左の水辺で解除できます。
-            </AppText>
-
-            {slaveContractSigned ? (
-              <>
-                <Pressable style={styles.crystalContractReleaseButton} onPress={releaseSlaveContractAtCrystal}>
-                  <AppText style={styles.crystalContractReleaseButtonText}>奴隷契約を解除する</AppText>
-                </Pressable>
-                <AppText style={styles.crystalModalNote}>
-                  ※契約データを削除し、服従状態を解除します。
+              <Pressable style={[styles.crystalCharmButton, hasSuccubusMark && !deepSuccubusMark && styles.crystalCharmButtonActive]} onPress={activateCrystalSuccubusMark}>
+                <AppText style={styles.crystalCharmButtonText}>
+                  {hasSuccubusMark && !deepSuccubusMark ? "淫紋モード中" : "淫紋モードになる"}
                 </AppText>
-              </>
-            ) : null}
-
-            <View style={styles.lossMemorySection}>
-              <AppText style={styles.lossMemoryTitle}>敗北シーン回想</AppText>
-              <AppText style={styles.lossMemoryHelp}>
-                一度見た敗北シーンは無料で再生できます。未閲覧シーンは各500Ptで解放できます。回想ではレベル・Pt・状態異常は変化しません。
+              </Pressable>
+              <AppText style={styles.crystalModalNote}>
+                ※淫紋モード中は戦闘と逃走ができず、降参のみ選択できます。左の水辺で解除できます。
               </AppText>
-              <View style={styles.lossMemoryList}>
-                {(["beginner", "middle", "queen"] as const).flatMap((stage) =>
-                  (["chest", "back", "foot"] as const).map((kind) => {
-                    const key = `${stage}:${kind}`;
-                    const unlocked = unlockedLossMemories.includes(key);
-                    const stageLabel = stage === "beginner" ? "初級" : stage === "middle" ? "上級" : "女王";
-                    const kindLabel = kind === "chest" ? "おっぱい" : kind === "back" ? "お尻" : "足裏";
-                    return (
-                      <Pressable
-                        key={key}
-                        disabled={!unlocked && availablePoints < 500}
-                        style={[styles.lossMemoryButton, !unlocked && styles.lossMemoryPurchaseButton, !unlocked && availablePoints < 500 && styles.lossMemoryButtonDisabled]}
-                        onPress={() => unlocked ? replayLossScene(stage, kind) : purchaseLossScene(stage, kind)}
-                      >
-                        <AppText style={styles.lossMemoryButtonText}>
-                          {stageLabel}・{kindLabel}　{unlocked ? "見る" : "500Ptで解放"}
-                        </AppText>
-                      </Pressable>
-                    );
-                  }),
-                )}
-              </View>
+
+              <Pressable style={[styles.crystalCharmButton, deepSuccubusMark && styles.crystalCharmButtonActive]} onPress={activateCrystalDeepMark}>
+                <AppText style={styles.crystalCharmButtonText}>
+                  {deepSuccubusMark ? "刻印深化モード中" : "刻印深化モードになる"}
+                </AppText>
+              </Pressable>
+              <AppText style={styles.crystalModalNote}>
+                ※刻印深化モード中は敗北時の吸収基準が100になります。左の水辺で解除できます。
+              </AppText>
+
+              {slaveContractSigned ? (
+                <>
+                  <Pressable style={styles.crystalContractReleaseButton} onPress={releaseSlaveContractAtCrystal}>
+                    <AppText style={styles.crystalContractReleaseButtonText}>奴隷契約を解除する</AppText>
+                  </Pressable>
+                  <AppText style={styles.crystalModalNote}>
+                    ※契約データを削除し、服従状態を解除します。
+                  </AppText>
+                </>
+              ) : null}
             </View>
 
             <View style={styles.battleEncyclopedia}>
@@ -2010,8 +1997,45 @@ export default function OutsideScreen() {
               </AppText>
             </View>
 
-            <Pressable style={styles.crystalCloseButton} onPress={closeCrystalSettings}>
-              <AppText style={styles.crystalCloseButtonText}>閉じる</AppText>
+            <View style={styles.lossMemorySection}>
+              <AppText style={styles.lossMemoryTitle}>敗北シーン回想</AppText>
+              <AppText style={styles.lossMemoryHelp}>
+                一度見た敗北シーンは無料で再生できます。{"\n"}
+                未閲覧シーンは各500Ptで解放できます。{"\n"}
+                回想ではレベル・Pt・状態異常は変化しません。
+              </AppText>
+              <View style={styles.lossMemoryList}>
+                {(["beginner", "middle", "queen"] as const).map((stage) => {
+                  const stageLabel = stage === "beginner" ? "初級サキュバス" : stage === "middle" ? "上級サキュバス" : "女王サキュバス";
+                  return (
+                    <View key={stage} style={styles.lossMemoryStageGroup}>
+                      <AppText style={styles.lossMemoryStageTitle}>{stageLabel}</AppText>
+                      <View style={styles.lossMemoryStageButtons}>
+                        {(["chest", "back", "foot"] as const).map((kind) => {
+                          const key = `${stage}:${kind}`;
+                          const unlocked = unlockedLossMemories.includes(key);
+                          const kindLabel = kind === "chest" ? "おっぱい" : kind === "back" ? "お尻" : "足裏";
+                          return (
+                            <Pressable
+                              key={key}
+                              disabled={!unlocked && availablePoints < 500}
+                              style={[styles.lossMemoryButton, !unlocked && styles.lossMemoryPurchaseButton, !unlocked && availablePoints < 500 && styles.lossMemoryButtonDisabled]}
+                              onPress={() => unlocked ? replayLossScene(stage, kind) : purchaseLossScene(stage, kind)}
+                            >
+                              <AppText style={styles.lossMemoryButtonText}>{kindLabel}</AppText>
+                              <AppText style={styles.lossMemoryButtonState}>{unlocked ? "見る" : "500Ptで解放"}</AppText>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            <Pressable style={styles.crystalSettingsCloseButton} onPress={closeCrystalSettings}>
+              <AppText style={styles.crystalSettingsCloseButtonText}>閉じる</AppText>
             </Pressable>
             </ScrollView>
           </View>
@@ -2029,23 +2053,28 @@ export default function OutsideScreen() {
             <AppText style={styles.warningModalKicker}>WARNING SIGN</AppText>
             <AppText style={styles.warningModalTitle}>この先、サキュバス出没注意</AppText>
 
-            <View style={styles.warningSection}>
-              <AppText style={styles.warningSectionTitle}>奥へ進む前の注意事項</AppText>
+            <View style={styles.advanceWarningSection}>
+              <View pointerEvents="none" style={[styles.guideTopBorder, styles.advanceWarningTopBorder]} />
+              <AppText style={styles.advanceWarningTitle}>奥へ進む前の注意事項</AppText>
               <AppText style={styles.warningBody}>
                 上の森ではサキュバスと遭遇します。{"\n"}
                 右のエリアでレベルを上げて強くすること。{"\n"}                
-                HPとMPを確認し、必要なら左の水辺で回復してから進んでください。{"\n"}
-                {"\n"}
-                ※奴隷契約しているの方へ{"\n"}
+                HPとMPを確認し、必要なら左の水辺で回復してから進んでください。
+              </AppText>
+              <AppText style={styles.slaveContractWarning}>
+                ※奴隷契約している方へ{"\n"}
                 【敗北】することしかできません。{"\n"}
-                戦闘も楽しく遊びたい場合は、設定画面から「契約書・契約ルール」から初期化をおこなってください。
+                戦闘も楽しく遊びたい場合は、{"\n"}  
+                クリスタルから「契約書・契約ルール」の{"\n"} 
+                初期化をおこなってください。
               </AppText>
             </View>
 
             <View style={styles.succubusInfoSection}>
               <AppText style={styles.succubusInfoTitle}>サキュバスについて</AppText>
               <AppText style={styles.warningBody}>
-                サキュバスはレベルを吸収するほど、体格と魔力が成長します。現在は「{succubus.title}」Lv.{succubus.level}です。
+                サキュバスはレベルを吸収するほど、体格と魔力が成長します。{"\n"}
+                現在は「{succubus.title}」Lv.{succubus.level}です。
               </AppText>
               <AppText style={styles.succubusGrowthText}>
                 ・Lv.1〜29：小柄な初級段階。誘惑は防御1回で解除。{"\n"}
@@ -2054,13 +2083,14 @@ export default function OutsideScreen() {
               </AppText>
             </View>
 
-            <View style={styles.warningSection}>
-              <AppText style={styles.warningSectionTitle}>戦い方</AppText>
+            <View style={styles.battleGuideSection}>
+              <View pointerEvents="none" style={[styles.guideTopBorder, styles.battleGuideTopBorder]} />
+              <AppText style={styles.battleGuideTitle}>戦い方</AppText>
               <AppText style={styles.warningBody}>
                 ・攻撃：サキュバスのHPを減らし、毎回MPを20消費。魅了中は命中しませんが、MPは消費します。{"\n"}
                 ・防御：被害を抑えてMPを8回復。魅了中は防御するたび解除へ近づきます。{"\n"}
                 ・魅了解除：初級1回／上級2回／女王3回の防御が必要です。{"\n"}
-                ・降参する：発情した場合、そのまま降参することができます♡{"\n"}
+                ・降参する：発情＆我慢できなくなった場合、そのまま降参することができます♡{"\n"}
                 ・逃げる：MP50を消費。魅了されておらず、MPが50以上ある時だけ成功。失敗すると敵の攻撃を受けます。
               </AppText>
             </View>
@@ -2068,7 +2098,7 @@ export default function OutsideScreen() {
             <View style={styles.warningSection}>
               <AppText style={styles.warningSectionTitle}>状態異常について</AppText>
               {[
-                { name: "魅了モード", image: pixelSprites.heartMark, effect: "攻撃が命中せず、逃走もできなくなります。", cure: "難易度に応じた回数を防御するか、左の水辺で解除。" },
+                { name: "魅了", image: pixelSprites.heartMark, effect: "攻撃が命中せず、逃走もできなくなります。", cure: "難易度に応じた回数を防御するか、左の水辺で解除。" },
                 { name: "束縛", image: pixelSprites.statusObedience, effect: "逃走できなくなります。", cure: "左の水辺で解除。" },
                 { name: "幻惑", image: pixelSprites.statusIllusion, effect: "サキュバスのHPが見えなくなります。", cure: "左の水辺で解除。" },
                 { name: "衰弱", image: pixelSprites.statusWeakness, effect: "攻撃力が半減します。", cure: "左の水辺で解除。" },
@@ -2087,8 +2117,9 @@ export default function OutsideScreen() {
               ))}
             </View>
 
-            <View style={styles.warningSection}>
-              <AppText style={styles.warningSectionTitle}>勝利した場合</AppText>
+            <View style={styles.victoryGuideSection}>
+              <View pointerEvents="none" style={[styles.guideTopBorder, styles.victoryGuideTopBorder]} />
+              <AppText style={styles.victoryGuideTitle}>勝利した場合</AppText>
               <AppText style={styles.warningBody}>
                 ・スライム勝利：1体につきレベルが1上がり、10Ptを獲得します（一日最大100Pt）。{"\n"}
                 ・サキュバス勝利：経験値としてレベルが20上がります。Ptは付与されません。
@@ -2098,16 +2129,27 @@ export default function OutsideScreen() {
             <View style={styles.defeatWarningSection}>
               <AppText style={styles.defeatWarningTitle}>敗北した場合</AppText>
               <AppText style={styles.defeatWarningText}>
-                HPが0になるか降参すると敗北シーンへ移行します。{"\n"}
+                HPが0になるか降参すると敗北シーンへ移行{"\n"}
+                {"\n"}
                 最大50レベルを吸収され、HPとMPは1になります。{"\n"}
                 50レベルに足りない分は、1レベルにつき1Ptとして所持Ptから吸収されます。{"\n"}
-                例：Lv.45ならLv.1になり5Pt吸収、Lv.1なら50Pt吸収されます。{"\n"}
-                所持Ptが不足していても不足分は全額吸収され、所持Ptは【マイナス】となります。{"\n"}
+                （例）Lv.45の場合：{"\n"}
+                　Lv.1になり5Pt吸収されます。{"\n"}
+                （例）Lv.1の場合：{"\n"}
+                　50Pt吸収されます。{"\n"}
+                ※所持Ptが不足している場合：{"\n"}
+                所持Ptは【マイナス】となります。{"\n"}
                 {"\n"}
-                Lv.1で敗北すると淫紋を刻まれ、戦闘と逃亡ができず、降参しか選べなくなります。{"\n"}
-                淫紋は左の水辺でのみ解除できます。{"\n"}
+                【Lv.1】で【敗北した】場合：{"\n"}
+                淫紋を刻まれ、戦闘と逃亡ができず、降参しか選べなくなります。{"\n"}
                 {"\n"}
-                ※自ら降参した場合は【全レベル】と【50Pt】を吸収され、魅了状態と淫紋を付与されます。
+                【淫紋】の状態で【敗北した】場合：{"\n"}
+                刻印深化を刻まれ、戦闘と逃亡ができず、降参しか選べなくなります。{"\n"}
+                敗北時のレベル・Pt吸収基準が50から100になります。{"\n"}
+                {"\n"}
+                自ら【降参する】を選んだ場合：{"\n"}
+                【全レベル】と【50Pt】を吸収され、{"\n"}
+                魅了と淫紋を付与されます。
               </AppText>
             </View>
 
@@ -2555,8 +2597,8 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     maxHeight: "88%",
     borderWidth: 2,
-    borderColor: "#b967ff",
-    backgroundColor: "#08020f",
+    borderColor: "#d84f92",
+    backgroundColor: "#fffafc",
   },
   crystalModalContent: {
     gap: 12,
@@ -2567,21 +2609,53 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#ff69b4",
     padding: 12,
-    backgroundColor: "rgba(255, 105, 180, 0.1)",
+    backgroundColor: "#fff0f6",
   },
   crystalTutorialTitle: {
     color: "#ff69b4",
     fontSize: 20,
     fontWeight: "900",
   },
+  crystalTutorialRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#e4b5ca",
+    backgroundColor: "#fff",
+    padding: 7,
+  },
+  crystalTutorialRowImage: {
+    width: 82,
+    height: 66,
+    borderWidth: 1,
+    borderColor: "#d7c4cd",
+    backgroundColor: "#150d17",
+  },
+  crystalTutorialRowCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  crystalTutorialRowTitle: {
+    color: "#c22973",
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "900",
+  },
+  crystalTutorialRowAction: {
+    color: "#33232c",
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
   crystalTutorialBody: {
-    color: "#fff",
+    color: "#2d2027",
     fontSize: 14,
     lineHeight: 22,
     fontWeight: "700",
   },
   crystalModalKicker: {
-    color: "#d9a7ff",
+    color: "#a62c6b",
     fontSize: 10,
     lineHeight: 14,
     fontWeight: "900",
@@ -2593,11 +2667,30 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontWeight: "900",
   },
+  crystalSettingsTitle: {
+    color: "#21151d",
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
   crystalModalHelp: {
-    color: "#cfcfcf",
+    color: "#4c4148",
     fontSize: 13,
     lineHeight: 20,
     fontWeight: "700",
+  },
+  crystalSettingsGroup: {
+    gap: 10,
+    borderWidth: 2,
+    borderColor: "#33232c",
+    backgroundColor: "#fff",
+    padding: 10,
+  },
+  crystalSettingsGroupTitle: {
+    color: "#21151d",
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "900",
   },
   crystalSettingRow: {
     flexDirection: "row",
@@ -2605,8 +2698,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.28)",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderColor: "#d8c8d0",
+    backgroundColor: "#fff",
     padding: 12,
   },
   crystalSettingText: {
@@ -2614,13 +2707,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   crystalSettingLabel: {
-    color: "#fff",
+    color: "#271b22",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "900",
   },
   crystalSettingValue: {
-    color: "#d9a7ff",
+    color: "#8c3270",
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "900",
@@ -2632,13 +2725,13 @@ const styles = StyleSheet.create({
   crystalStepButton: {
     minWidth: 52,
     borderWidth: 1,
-    borderColor: "#fff",
-    backgroundColor: "#000",
+    borderColor: "#7c6673",
+    backgroundColor: "#fff",
     paddingVertical: 8,
     alignItems: "center",
   },
   crystalStepButtonText: {
-    color: "#fff",
+    color: "#33232c",
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "900",
@@ -2673,7 +2766,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   crystalModalNote: {
-    color: "#ffb6d8",
+    color: "#743653",
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "800",
@@ -2682,31 +2775,49 @@ const styles = StyleSheet.create({
     gap: 9,
     borderWidth: 2,
     borderColor: "#9b3d72",
-    backgroundColor: "rgba(70, 12, 48, 0.48)",
+    backgroundColor: "#fff3f8",
     padding: 12,
   },
   lossMemoryTitle: { color: "#ff69b4", fontSize: 16, lineHeight: 22, fontWeight: "900" },
-  lossMemoryHelp: { color: "#fff", fontSize: 11, lineHeight: 17, fontWeight: "700" },
-  lossMemoryList: { gap: 7 },
+  lossMemoryHelp: { color: "#46353e", fontSize: 11, lineHeight: 17, fontWeight: "700" },
+  lossMemoryList: { gap: 12 },
+  lossMemoryStageGroup: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: "#dfc4d2",
+    paddingTop: 9,
+  },
+  lossMemoryStageTitle: {
+    color: "#2a1d24",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
+  lossMemoryStageButtons: {
+    gap: 7,
+    paddingLeft: 12,
+  },
   lossMemoryButton: {
     minHeight: 40,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "#ff69b4",
-    backgroundColor: "#3b102d",
+    backgroundColor: "#fff",
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  lossMemoryButtonText: { color: "#fff", fontSize: 13, lineHeight: 18, fontWeight: "900" },
-  lossMemoryPurchaseButton: { borderColor: "#d9a441", backgroundColor: "#49300d" },
+  lossMemoryButtonText: { color: "#72214e", fontSize: 13, lineHeight: 18, fontWeight: "900" },
+  lossMemoryButtonState: { color: "#8b6577", fontSize: 11, lineHeight: 16, fontWeight: "800" },
+  lossMemoryPurchaseButton: { borderColor: "#d9a441", backgroundColor: "#fff7df" },
   lossMemoryButtonDisabled: { opacity: 0.42 },
   lossMemoryEmpty: { color: "#aaa", fontSize: 11, lineHeight: 17, fontWeight: "700" },
   battleEncyclopedia: {
     gap: 8,
     borderWidth: 2,
     borderColor: "#ff69b4",
-    backgroundColor: "rgba(255, 105, 180, 0.08)",
+    backgroundColor: "#fff3f8",
     padding: 12,
   },
   battleEncyclopediaTitle: {
@@ -2720,7 +2831,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.18)",
+    borderTopColor: "#e1cbd5",
     paddingTop: 8,
   },
   battleEncyclopediaImage: {
@@ -2732,19 +2843,19 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   battleEncyclopediaName: {
-    color: "#fff",
+    color: "#2a1d24",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "900",
   },
   battleEncyclopediaMeta: {
-    color: "#ffb6d8",
+    color: "#9d356a",
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "800",
   },
   battleEncyclopediaMoves: {
-    color: "#d7d7d7",
+    color: "#51434a",
     fontSize: 11,
     lineHeight: 17,
     fontWeight: "700",
@@ -2762,27 +2873,40 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "900",
   },
+  crystalSettingsCloseButton: {
+    borderWidth: 2,
+    borderColor: "#a62c6b",
+    backgroundColor: "#a62c6b",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  crystalSettingsCloseButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
   warningModal: {
     width: "100%",
     maxWidth: 460,
     maxHeight: "90%",
     borderWidth: 2,
     borderColor: "#d99a45",
-    backgroundColor: "#100a05",
+    backgroundColor: "#fffdf8",
   },
   warningModalContent: {
     gap: 12,
     padding: 18,
   },
   warningModalKicker: {
-    color: "#e9bd72",
+    color: "#9b651d",
     fontSize: 10,
     lineHeight: 14,
     fontWeight: "900",
     letterSpacing: 3,
   },
   warningModalTitle: {
-    color: "#ffe0a3",
+    color: "#5c3510",
     fontSize: 21,
     lineHeight: 28,
     fontWeight: "900",
@@ -2790,37 +2914,108 @@ const styles = StyleSheet.create({
   warningSection: {
     gap: 5,
     borderTopWidth: 1,
-    borderTopColor: "rgba(217, 154, 69, 0.45)",
+    borderTopColor: "#d9b77f",
     paddingTop: 10,
+  },
+  battleGuideSection: {
+    gap: 5,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: "#171717",
+    borderStyle: "solid",
+    backgroundColor: "#fff",
+    padding: 10,
+    overflow: "hidden",
+  },
+  guideTopBorder: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    zIndex: 2,
+  },
+  battleGuideTopBorder: {
+    backgroundColor: "#171717",
+  },
+  victoryGuideTopBorder: {
+    backgroundColor: "#2776d2",
+  },
+  advanceWarningTopBorder: {
+    backgroundColor: "#e0ad20",
+  },
+  battleGuideTitle: {
+    color: "#171717",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+  victoryGuideSection: {
+    gap: 5,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: "#2776d2",
+    borderStyle: "solid",
+    backgroundColor: "#fff",
+    padding: 10,
+    overflow: "hidden",
+  },
+  victoryGuideTitle: {
+    color: "#185fae",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+  advanceWarningSection: {
+    gap: 7,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: "#e0ad20",
+    borderStyle: "solid",
+    backgroundColor: "#fffdf3",
+    padding: 10,
+    overflow: "hidden",
+  },
+  advanceWarningTitle: {
+    color: "#7a4b00",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
   },
   succubusInfoSection: {
     gap: 6,
     borderWidth: 1,
     borderColor: "#b967ff",
-    backgroundColor: "rgba(83, 25, 116, 0.22)",
+    backgroundColor: "#f8efff",
     padding: 10,
   },
   succubusInfoTitle: {
-    color: "#e0a7ff",
+    color: "#713593",
     fontSize: 15,
     lineHeight: 21,
     fontWeight: "900",
   },
   succubusGrowthText: {
-    color: "#e9d7f3",
+    color: "#3d3044",
     fontSize: 12,
     lineHeight: 19,
   },
   warningSectionTitle: {
-    color: "#ffd08a",
+    color: "#774612",
     fontSize: 15,
     lineHeight: 21,
     fontWeight: "900",
   },
   warningBody: {
-    color: "#f5ead7",
+    color: "#29231d",
     fontSize: 13,
     lineHeight: 20,
+  },
+  slaveContractWarning: {
+    color: "#c51624",
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "900",
   },
   statusGuideRow: {
     flexDirection: "row",
@@ -2828,7 +3023,7 @@ const styles = StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     borderColor: "rgba(255, 105, 180, 0.34)",
-    backgroundColor: "rgba(66, 9, 62, 0.3)",
+    backgroundColor: "#fff5fa",
     padding: 9,
   },
   statusGuideIcon: {
@@ -2840,7 +3035,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   statusGuideName: {
-    color: "#ff69b4",
+    color: "#b72872",
     fontSize: 15,
     lineHeight: 20,
     fontWeight: "900",
@@ -2849,17 +3044,17 @@ const styles = StyleSheet.create({
     gap: 5,
     borderWidth: 1,
     borderColor: "#e53945",
-    backgroundColor: "rgba(130, 0, 12, 0.24)",
+    backgroundColor: "#fff0f1",
     padding: 10,
   },
   defeatWarningTitle: {
-    color: "#ff5360",
+    color: "#c51624",
     fontSize: 15,
     lineHeight: 21,
     fontWeight: "900",
   },
   defeatWarningText: {
-    color: "#ff6670",
+    color: "#c51624",
     fontSize: 13,
     lineHeight: 20,
     fontWeight: "800",
@@ -2868,12 +3063,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#d99a45",
-    backgroundColor: "#3a230e",
+    backgroundColor: "#9b651d",
     paddingVertical: 11,
     paddingHorizontal: 14,
   },
   warningCloseButtonText: {
-    color: "#ffe0a3",
+    color: "#fff",
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "900",
@@ -2993,12 +3188,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#ff69b4",
-    backgroundColor: "rgba(255,105,180,0.15)",
+    borderColor: "#111",
+    backgroundColor: "#fff",
     paddingHorizontal: 8,
     paddingVertical: 8,
   },
-  mapInfoButtonText: { color: "#ff86c5", fontSize: 11, lineHeight: 16, fontWeight: "900", textAlign: "center" },
+  mapInfoButtonText: { color: "#111", fontSize: 11, lineHeight: 16, fontWeight: "900", textAlign: "center" },
   statusModal: { width: "88%", maxHeight: "78%", gap: 14, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
   playerStatusModalList: { gap: 12 },
   playerStatusModalLevel: { color: "#fff", fontSize: 28, lineHeight: 34, fontWeight: "900" },
