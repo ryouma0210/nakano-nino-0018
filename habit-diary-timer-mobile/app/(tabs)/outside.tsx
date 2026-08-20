@@ -27,7 +27,7 @@ import { recordOutsideAchievement } from "@/features/outside/achievements";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
-type BattleCommand = "attack" | "defend" | "grip" | "stroke" | LossEventKind | "run";
+type BattleCommand = "attack" | "defend" | "grip" | "stroke" | "nipple" | LossEventKind | "run";
 type BattleMenu = "root" | "fight" | "surrender";
 type TemptationEffect = "kiss" | "heart" | null;
 type BattleEnemyImage = "battle" | "status" | LossEventKind;
@@ -177,6 +177,13 @@ function MapBackdrop({ area }: { area: MapArea }) {
 
 function StatGauge({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const percent = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));
+  const gaugeColor = label === "HP"
+    ? percent >= 80
+      ? "#35c759"
+      : percent >= 30
+        ? "#f2c94c"
+        : "#e3364f"
+    : color;
   return (
     <View style={styles.statGaugeWrap}>
       <View style={styles.statGaugeLabelRow}>
@@ -184,7 +191,7 @@ function StatGauge({ label, value, max, color }: { label: string; value: number;
         <AppText style={styles.statGaugeValue}>{Math.round(value)} / {max}</AppText>
       </View>
       <View style={styles.statGaugeTrack}>
-        <View style={[styles.statGaugeFill, { width: `${percent}%`, backgroundColor: color }]} />
+        <View style={[styles.statGaugeFill, { width: `${percent}%`, backgroundColor: gaugeColor }]} />
       </View>
     </View>
   );
@@ -257,18 +264,21 @@ const battleQuips: Record<SuccubusStage, Record<BattleQuipKind, string>> = {
   },
 };
 
-const passiveActionQuips: Record<SuccubusStage, Record<"grip" | "stroke", string>> = {
+const passiveActionQuips: Record<SuccubusStage, Record<"grip" | "stroke" | "nipple", string>> = {
   beginner: {
     grip: "「えっ、自分から握ってるの？　戦うよりそっちが大事なんだ、ざぁこ♡」",
     stroke: "「シコシコしてる場合？　そんなに余裕ないくせに、ほんと馬鹿だね♡」",
+    nipple: "「乳首まで弄り始めたの？　戦う気ゼロじゃん。そんな弱点、見逃すわけないでしょ♡」",
   },
   middle: {
     grip: "「武器ではなく、そこを握るのね。自分から隙を見せるなんて愚かだわ」",
     stroke: "「私の前で自分を慰めるの？　では、その無防備な姿へご褒美をあげる」",
+    nipple: "「自分から乳首を弄って感じているのね。そこまで隙だらけなら、遠慮なく堕としてあげる」",
   },
   queen: {
     grip: "「戦場で何を握っているのです。そこまで判断力を失った者に慈悲はありません」",
     stroke: "「女王の御前でその醜態……よろしい。身の程を攻撃で教えてあげましょう」",
+    nipple: "「女王の前で自ら乳首を弄るとは、随分と従順ですね。その弱さに相応しい罰を与えましょう」",
   },
 };
 
@@ -1101,9 +1111,13 @@ export default function OutsideScreen() {
       return;
     }
 
-    if (command === "grip" || command === "stroke") {
+    if (command === "grip" || command === "stroke" || command === "nipple") {
       recordOutsideAchievement(command);
-      const playerAction = command === "grip" ? "おちんぽを握った。" : "シコシコし始めた。";
+      const playerAction = command === "grip"
+        ? "おちんぽを握った。"
+        : command === "stroke"
+          ? "シコシコし始めた。"
+          : "乳首を弄り始めた。";
       const mockingQuip = `${playerAction}\n${passiveActionQuips[succubus.stage][command]}`;
       addTemptation(40);
 
@@ -1466,6 +1480,7 @@ export default function OutsideScreen() {
                             <PrimaryButton title="防御" tone="secondary" onPress={() => resolveCommand("defend")} />
                             <PrimaryButton title="おちんぽ握る♡" tone="secondary" onPress={() => resolveCommand("grip")} />
                             <PrimaryButton title="シコシコする♡" tone="secondary" onPress={() => resolveCommand("stroke")} />
+                            <PrimaryButton title="乳首を弄る♡" tone="secondary" onPress={() => resolveCommand("nipple")} />
                             <PrimaryButton title="戻る" tone="secondary" onPress={() => setBattleMenu("root")} />
                           </>
                         ) : (
