@@ -12,6 +12,8 @@ export type LoginBonusStatus = {
   currentStreak: number;
   claimStreak: number;
   claimPoints: number;
+  nextClaimStreak: number;
+  nextClaimPoints: number;
 };
 
 export type LoginBonusStamp = {
@@ -92,6 +94,7 @@ export const loginBonusRepository = {
     const currentStreak = readNumberSetting(streakKey);
     const alreadyClaimed = lastClaimedDate === today;
     const claimStreak = nextStreak(lastClaimedDate, currentStreak, today);
+    const nextClaimStreak = Math.min(7, claimStreak + 1);
 
     return {
       today,
@@ -100,6 +103,8 @@ export const loginBonusRepository = {
       currentStreak,
       claimStreak,
       claimPoints: bonusPoints(claimStreak),
+      nextClaimStreak,
+      nextClaimPoints: bonusPoints(nextClaimStreak),
     };
   },
 
