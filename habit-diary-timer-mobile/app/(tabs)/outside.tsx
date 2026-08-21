@@ -432,6 +432,7 @@ export default function OutsideScreen() {
   const playerShake = useRef(new Animated.Value(0)).current;
   const enemyShake = useRef(new Animated.Value(0)).current;
   const [damageFlash, setDamageFlash] = useState<{ target: "player" | "enemy"; amount: number } | null>(null);
+  const [battleMessageHeight, setBattleMessageHeight] = useState(98);
   const damageFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingDamageQueue, setPendingDamageQueue] = useState<{ target: "player" | "enemy"; amount: number }[]>([]);
   const [battle, setBattle] = useState<BattleStatus>({
@@ -1633,7 +1634,11 @@ export default function OutsideScreen() {
                     </Animated.View>
                   </View>
                 ) : (
-                  <Pressable style={styles.battleStageMessage} onPress={handleBattleMessagePress}>
+                  <Pressable
+                    style={styles.battleStageMessage}
+                    onPress={handleBattleMessagePress}
+                    onLayout={(event) => setBattleMessageHeight(event.nativeEvent.layout.height)}
+                  >
                     <View style={styles.rowBetween}>
                       <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
                       <AppText style={styles.phase}>{phase.toUpperCase()}</AppText>
@@ -1648,7 +1653,16 @@ export default function OutsideScreen() {
                   </Pressable>
                 )}
                 {damageFlash ? (
-                  <AppText style={[styles.damageFlash, damageFlash.target === "enemy" ? styles.damageFlashEnemy : styles.damageFlashPlayer]}>ダメージ -{damageFlash.amount}</AppText>
+                  <AppText
+                    style={[
+                      styles.damageFlash,
+                      damageFlash.target === "enemy"
+                        ? styles.damageFlashEnemy
+                        : [styles.damageFlashPlayer, { bottom: battleMessageHeight + 22 }],
+                    ]}
+                  >
+                    ダメージ -{damageFlash.amount}
+                  </AppText>
                 ) : null}
               </>
             )}
@@ -3534,7 +3548,7 @@ const styles = StyleSheet.create({
   },
   damageFlash: { position: "absolute", zIndex: 60, color: "#ff263d", fontSize: 20, fontWeight: "900", textShadowColor: "#000", textShadowRadius: 4 },
   damageFlashEnemy: { top: 70, alignSelf: "center" },
-  damageFlashPlayer: { right: 20, bottom: 132 },
+  damageFlashPlayer: { right: 20 },
   levelDownFlash: { position: "absolute", zIndex: 40, color: "#4da6ff", fontSize: 20, fontWeight: "900", textShadowColor: "#001a35", textShadowRadius: 5 },
   rowBetween: {
     flexDirection: "row",
