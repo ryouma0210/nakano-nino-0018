@@ -10,11 +10,12 @@ import { roomMessages } from "@/constants/messages";
 import { contractService } from "@/services/gameRoomService";
 
 const recordExchangeItems = [
+  ["本日の記録", "/(tabs)/today"],
+  ["週間報告", "/(tabs)/report"],
+  ["調教日記", "/(tabs)/records"],
   ["ご褒美", "/(tabs)/rewards"],
   ["コレクション", "/(tabs)/collection"],
   ["お貢ぎ履歴", "/(tabs)/tribute"],
-  ["週間報告", "/(tabs)/report"],
-  ["調教日記", "/(tabs)/records"],
 ] as const;
 
 const managementSettingItems = [
@@ -22,6 +23,7 @@ const managementSettingItems = [
   ["ファイル格納", "/(tabs)/files"],
   ["マイページ", "/(tabs)/mypage"],
   ["設定", "/(tabs)/settings"],
+  ["外部リンク", "/(tabs)/external-links"],
 ] as const;
 
 type MenuTitle =
@@ -29,13 +31,14 @@ type MenuTitle =
   | (typeof managementSettingItems)[number][0];
 
 function menuTone(title: MenuTitle) {
-  if (title === "設定") return "secondary";
+  if (title === "設定" || title === "外部リンク") return "secondary";
   if (title === "ご褒美") return "defeat";
   if (title === "マイページ") return "record";
   if (title === "ファイル格納") return "preparation";
   if (title === "お貢ぎ履歴") return "tribute";
   if (title === "ループ音声" || title === "コレクション") return "collection";
-  if (title === "週間報告" || title === "調教日記") return "record";
+  if (title === "本日の記録" || title === "週間報告" || title === "調教日記")
+    return "record";
   return "primary";
 }
 
@@ -52,13 +55,6 @@ export default function MenuScreen() {
       : section === "management"
         ? "管理・設定メニュー"
         : "記録・管理メニュー";
-  const kicker =
-    section === "record"
-      ? "RECORD / EXCHANGE"
-      : section === "management"
-        ? "MANAGEMENT / SETTINGS"
-        : "RECORD / MANAGEMENT";
-
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -74,7 +70,6 @@ export default function MenuScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>{kicker}</AppText>
         <AppText variant="title">{title}</AppText>
         <View style={styles.rule} />
       </View>

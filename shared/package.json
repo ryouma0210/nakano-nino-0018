@@ -1,0 +1,10 @@
+{
+  "name": "@nino/shared",
+  "version": "1.0.0",
+  "private": true,
+  "exports": {
+    "./date": "./date.ts",
+    "./contract": "./contract.ts",
+    "./messages": "./messages.ts"
+  }
+}

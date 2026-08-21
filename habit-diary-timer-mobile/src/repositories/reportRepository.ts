@@ -29,7 +29,7 @@ function summarize(startDate: string, endDate: string): ActivityReport {
   )?.count ?? 0;
   const earnedPoints = queryOne<{ total: number }>(
     `SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions
-     WHERE substr(created_at, 1, 10) BETWEEN ? AND ?`,
+     WHERE points > 0 AND substr(created_at, 1, 10) BETWEEN ? AND ?`,
     [startDate, endDate],
   )?.total ?? 0;
   const punishmentSeconds = queryOne<{ total: number }>(

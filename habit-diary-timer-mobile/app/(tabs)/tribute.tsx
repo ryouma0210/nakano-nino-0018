@@ -16,6 +16,8 @@ import {
   type TributeRecord,
 } from "@/repositories/tributeRepository";
 import { useAppModal } from "@/components/AppModalProvider";
+import { useAppAudio } from "@/audio/AudioProvider";
+import type { AppLanguage } from "@/i18n";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
 function formatYen(value: number) {
@@ -32,9 +34,11 @@ function parseAmount(value: string) {
   return Number.isFinite(amount) ? Math.floor(amount) : 0;
 }
 
-function monthLabel(month: string) {
+function monthLabel(month: string, language: AppLanguage = "ja") {
   const [year, monthNumber] = month.split("-");
-  return `${Number(year)}年${Number(monthNumber)}月`;
+  const locale = language === "en" ? "en-US" : language === "ko" ? "ko-KR" : "ja-JP";
+  return new Intl.DateTimeFormat(locale, { year: "numeric", month: "long" })
+    .format(new Date(Number(year), Number(monthNumber) - 1, 1));
 }
 
 function shiftMonth(month: string, diff: number) {
@@ -56,6 +60,8 @@ const tributeComments = [
 
 export default function TributeScreen() {
   const { showNotice, showError } = useAppModal();
+  const { settings } = useAppAudio();
+  const language = settings?.language ?? "ja";
   const [selectedMonth, setSelectedMonth] = useState(toDateKey().slice(0, 7));
   const [monthlyIncome, setMonthlyIncome] = useState(0);
   const [incomeInput, setIncomeInput] = useState("");
@@ -117,7 +123,7 @@ export default function TributeScreen() {
     try {
       tributeRepository.saveMonthlyIncome(amount, selectedMonth);
       load();
-      showNotice("保存しました", `${monthLabel(selectedMonth)}の基本収入を保存しました。`);
+      showNotice("保存しました", `${monthLabel(selectedMonth, language)}の基本収入を保存しました。`);
     } catch (error) {
       showError("基本収入の保存に失敗しました", error);
     }
@@ -130,7 +136,7 @@ export default function TributeScreen() {
       return;
     }
     if (!incomeDate.startsWith(selectedMonth)) {
-      showNotice("入力エラー", `日付は${monthLabel(selectedMonth)}内で入力してください。`);
+      showNotice("入力エラー", `日付は${monthLabel(selectedMonth, language)}内で入力してください。`);
       return;
     }
     if (amount <= 0) {
@@ -159,7 +165,7 @@ export default function TributeScreen() {
       return;
     }
     if (!recordDate.startsWith(selectedMonth)) {
-      showNotice("入力エラー", `日付は${monthLabel(selectedMonth)}内で入力してください。`);
+      showNotice("入力エラー", `日付は${monthLabel(selectedMonth, language)}内で入力してください。`);
       return;
     }
     if (amount <= 0) {
@@ -209,7 +215,6 @@ export default function TributeScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>TRIBUTE</AppText>
         <AppText variant="title">お貢ぎ履歴</AppText>
         <View style={styles.rule} />
       </View>
@@ -221,12 +226,18 @@ export default function TributeScreen() {
       />
       <Card style={styles.summary}>
         <View style={styles.monthHeader}>
-          <PrimaryButton title="前月" tone="secondary" onPress={() => changeMonth(-1)} />
           <View style={styles.monthTitleWrap}>
             <AppText variant="label">対象月</AppText>
-            <AppText variant="subtitle">{monthLabel(selectedMonth)}</AppText>
+            <AppText variant="subtitle">{monthLabel(selectedMonth, language)}</AppText>
           </View>
-          <PrimaryButton title="翌月" tone="secondary" onPress={() => changeMonth(1)} />
+          <View style={styles.monthNavigation}>
+            <View style={styles.monthNavigationButton}>
+              <PrimaryButton title="前月" tone="secondary" onPress={() => changeMonth(-1)} />
+            </View>
+            <View style={styles.monthNavigationButton}>
+              <PrimaryButton title="翌月" tone="secondary" onPress={() => changeMonth(1)} />
+            </View>
+          </View>
         </View>
         <View style={styles.summaryTotalTop}>
           <AppText style={styles.remainingLabel}>集計金額</AppText>
@@ -263,7 +274,7 @@ export default function TributeScreen() {
       </Card>
 
       <Card style={styles.incomeCard}>
-        <AppText variant="subtitle">{monthLabel(selectedMonth)}の収入入力・変更</AppText>
+        <AppText variant="subtitle">{monthLabel(selectedMonth, language)}の収入入力・変更</AppText>
         <TextField
           label="今月の基本収入"
           value={incomeInput}
@@ -354,7 +365,7 @@ export default function TributeScreen() {
       </Card>
 
       <Card>
-        <AppText variant="subtitle">{monthLabel(selectedMonth)}のお貢ぎ履歴</AppText>
+        <AppText variant="subtitle">{monthLabel(selectedMonth, language)}のお貢ぎ履歴</AppText>
         {records.length === 0 ? (
           <AppText variant="muted">今月のお貢ぎ履歴はまだありません。</AppText>
         ) : (
@@ -383,7 +394,7 @@ export default function TributeScreen() {
       </Card>
 
       <Card>
-        <AppText variant="subtitle">{monthLabel(selectedMonth)}の追加収入履歴</AppText>
+        <AppText variant="subtitle">{monthLabel(selectedMonth, language)}の追加収入履歴</AppText>
         {incomeRecords.length === 0 ? (
           <AppText variant="muted">今月の追加収入はまだありません。</AppText>
         ) : (
@@ -498,11 +509,12 @@ const styles = StyleSheet.create({
   },
   rule: { height: 1, backgroundColor: "#fff" },
   monthHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: 8,
   },
-  monthTitleWrap: { flex: 1, alignItems: "center", gap: 2 },
+  monthTitleWrap: { alignItems: "center", gap: 2, paddingHorizontal: 8 },
+  monthNavigation: { flexDirection: "row", gap: 8 },
+  monthNavigationButton: { flex: 1, minWidth: 0 },
   summaryTotalTop: {
     gap: 6,
     borderTopWidth: 1,

@@ -12,6 +12,7 @@ import { execute } from "@/database/client";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
 import { defaultSettings, settingsService } from "@/services/settingsService";
+import { slaveContractService } from "@/services/slaveContractService";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { contractService, dailyOrderService } from "@/services/gameRoomService";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -31,7 +32,7 @@ const partialResetItems: {
 }[] = [
   { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置きの全記録" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
-  { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・契約後の追加ルール" },
+  { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・解約日・契約後の追加ルール" },
   { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
   { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画" },
 ];
@@ -74,6 +75,8 @@ export default function SettingsScreen() {
       execute("DELETE FROM app_settings");
       await settingsService.reset();
       await dailyOrderService.clearAll();
+      await contractService.clear();
+      await slaveContractService.clear();
       await notificationService.cancelAll();
       await fileStorageService.clear();
       loadSize();
@@ -110,13 +113,17 @@ export default function SettingsScreen() {
         execute("DELETE FROM reward_redemptions");
         execute("DELETE FROM point_transactions");
       }
-      if (selected.has("contract")) await contractService.clear();
+      if (selected.has("contract")) {
+        await contractService.clear();
+        await slaveContractService.clear();
+      }
       if (selected.has("settings")) {
         await updateAudioSettings({
           backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,
           soundEnabled: defaultSettings.soundEnabled,
           musicVolume: defaultSettings.musicVolume,
           soundVolume: defaultSettings.soundVolume,
+          language: defaultSettings.language,
         });
         await notificationService.cancelAll();
       }
@@ -150,7 +157,7 @@ export default function SettingsScreen() {
         contractLines={roomMessages.settings.contractLines}
       />
       <Card>
-        <AppText variant="subtitle">サウンド</AppText>
+        <AppText variant="subtitle">サウンド設定</AppText>
         <View style={styles.audioRow}>
           <View style={styles.audioText}>
             <AppText>部屋のBGM</AppText>
@@ -187,6 +194,30 @@ export default function SettingsScreen() {
           value={settings?.soundVolume ?? 0.7}
           onChange={(value) => updateAudioSettings({ soundVolume: value })}
         />
+      </Card>
+      <Card>
+        <AppText variant="subtitle">言語設定</AppText>
+        <AppText variant="muted">アプリ内の文字表示を変更します。</AppText>
+        <View style={styles.languageButtons}>
+          {([
+            { key: "ja", label: "日本語（デフォルト）" },
+            { key: "en", label: "English" },
+            { key: "ko", label: "한국어" },
+          ] as const).map((item) => {
+            const selected = (settings?.language ?? "ja") === item.key;
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => updateAudioSettings({ language: item.key })}
+                style={[styles.languageButton, selected && styles.languageButtonSelected]}
+              >
+                <AppText style={[styles.languageButtonText, selected && styles.languageButtonTextSelected]}>
+                  {item.label}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
       </Card>
       <Card>
         <AppText variant="label">現在のファイル使用量</AppText>
@@ -360,5 +391,24 @@ const styles = StyleSheet.create({
   },
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
+  languageButtons: { gap: 7 },
+  languageButton: {
+    minHeight: 44,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#777",
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  languageButtonSelected: {
+    borderColor: "#e84d9b",
+    backgroundColor: "#3b1728",
+  },
+  languageButtonText: {
+    color: "#111",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  languageButtonTextSelected: { color: "#fff" },
 });
 

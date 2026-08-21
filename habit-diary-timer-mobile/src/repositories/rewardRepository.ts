@@ -59,6 +59,36 @@ const runtimeAppEnv =
 const stgBonus = runtimeAppEnv === "stg" ? 99999 : 0;
 const pointChangeListeners = new Set<() => void>();
 
+function reconcileLegacyLossMemoryPurchases() {
+  const legacyPurchases = query<{
+    source_key: string;
+    points: number;
+    description: string;
+    created_at: string;
+  }>(
+    "SELECT source_key, points, description, created_at FROM point_transactions WHERE source_key LIKE 'outside-loss-memory:%'",
+  );
+
+  legacyPurchases.forEach((purchase) => {
+    const memoryKey = purchase.description.match(/「(.+)」/)?.[1]
+      ?? purchase.source_key.match(/^outside-loss-memory:([^:]+:[^:]+):/)?.[1]
+      ?? purchase.source_key;
+    const alreadyMigrated = queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM reward_redemptions WHERE reward_key='outside-loss-memory' AND reward_content=?",
+      [memoryKey],
+    )?.count ?? 0;
+    transaction(() => {
+      if (alreadyMigrated === 0) {
+        execute(
+          "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('outside-loss-memory', ?, ?, ?, ?)",
+          ["敗北シーン回想", Math.abs(Number(purchase.points) || 500), memoryKey, purchase.created_at],
+        );
+      }
+      execute("DELETE FROM point_transactions WHERE source_key=?", [purchase.source_key]);
+    });
+  });
+}
+
 export const pointRepository = {
   award(sourceKey: string, points: number, description: string) {
     const result = execute(
@@ -122,6 +152,7 @@ export const pointRepository = {
 export const rewardRepository = {
   balance() {
     pointRepository.reconcileCompletionAwards();
+    reconcileLegacyLossMemoryPurchases();
     const activityPoints =
       queryOne<{ total: number }>(
         "SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions",
@@ -131,7 +162,7 @@ export const rewardRepository = {
         "SELECT COALESCE(SUM(points_spent), 0) AS total FROM reward_redemptions",
       )?.total ?? 0;
     const earned = activityPoints + stgBonus;
-    return { earned, spent, available: Math.max(0, earned - spent), stgBonus };
+    return { earned, spent, available: earned - spent, stgBonus };
   },
 
   acquired() {
@@ -245,5 +276,20 @@ export const rewardRepository = {
       redeemed = true;
     });
     return redeemed;
+  },
+
+  redeemLossMemory(memoryKey: string) {
+    const cost = 500;
+    if (this.balance().available < cost) return false;
+    const existing = queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM reward_redemptions WHERE reward_key='outside-loss-memory' AND reward_content=?",
+      [memoryKey],
+    )?.count ?? 0;
+    if (existing > 0) return true;
+    const result = execute(
+      "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('outside-loss-memory', ?, ?, ?, ?)",
+      ["敗北シーン回想", cost, memoryKey, toDateTimeKey()],
+    );
+    return result.changes > 0;
   },
 };

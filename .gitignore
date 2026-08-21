@@ -1,9 +1,12 @@
 node_modules/
 .expo/
 .expo-test/
+.expo-*-check/
 dist/
 dist-web-electron/
 build/
+.tmp/
+.codex-tmp/
 .env
 .env.*
 

@@ -76,6 +76,24 @@ export function RoomConversation({
     current.withName !== false && playerName
       ? `${playerName}。${current.text}`
       : current.text;
+  const resolveAssetSource = (
+    Image as typeof Image & {
+      resolveAssetSource?: (source: ImageSourcePropType) => {
+        width?: number;
+        height?: number;
+      } | null;
+    }
+  ).resolveAssetSource;
+  const embeddedCharacterMetadata =
+    characterSource && typeof characterSource === "object" && !Array.isArray(characterSource)
+      ? characterSource as { width?: number; height?: number }
+      : null;
+  const resolvedCharacter = characterSource && typeof resolveAssetSource === "function"
+    ? resolveAssetSource(characterSource)
+    : embeddedCharacterMetadata;
+  const characterAspectRatio = resolvedCharacter?.width && resolvedCharacter?.height
+    ? resolvedCharacter.width / resolvedCharacter.height
+    : null;
 
   function next() {
     playEffect("dialogue");
@@ -100,7 +118,14 @@ export function RoomConversation({
         </AppText>
       </View>
 
-      <View style={styles.stage}>
+      <View
+        style={[
+          styles.stage,
+          characterAspectRatio
+            ? { aspectRatio: characterAspectRatio }
+            : styles.stageFallbackHeight,
+        ]}
+      >
         {characterVideoSource ? (
           <RoomConversationVideo source={characterVideoSource} contentFit={characterFit} />
         ) : characterSource ? (
@@ -204,11 +229,14 @@ const styles = StyleSheet.create({
   roomLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   counter: { color: lightTheme.muted, fontSize: 12 },
   stage: {
-    height: 390,
+    // Match local artwork's aspect ratio at render time so portrait images can
+    // occupy the full width without side bars, cropping, or distortion.
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#0c0c0c",
   },
+  stageFallbackHeight: { height: 480 },
   characterImage: { width: "100%", height: "100%" },
   chainLeft: {
     position: "absolute",

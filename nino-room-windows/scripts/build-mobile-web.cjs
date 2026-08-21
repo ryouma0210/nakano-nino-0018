@@ -6,20 +6,15 @@ const windowsRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(windowsRoot, "..");
 const mobileRoot = path.join(repoRoot, "habit-diary-timer-mobile");
 const outputDirectory = path.join(windowsRoot, "dist-web");
-
-execFileSync("npm", ["run", "sync:shared"], {
-  cwd: mobileRoot,
-  stdio: "inherit",
-  shell: process.platform === "win32",
-});
+const expoCli = require.resolve("expo/bin/cli", { paths: [mobileRoot] });
 
 execFileSync(
-  "npx",
-  ["expo", "export", "--platform", "web", "--output-dir", outputDirectory],
+  process.execPath,
+  [expoCli, "export", "--platform", "web", "--output-dir", outputDirectory],
   {
     cwd: mobileRoot,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: false,
   },
 );
 

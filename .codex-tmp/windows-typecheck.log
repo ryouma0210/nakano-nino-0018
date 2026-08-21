@@ -1,0 +1,4 @@
+
+> nino-room-windows@0.1.0 typecheck
+> node --check electron/main.cjs && node --check electron/preload.cjs && node --check scripts/build-mobile-web.cjs && node --check scripts/start-electron.cjs
+

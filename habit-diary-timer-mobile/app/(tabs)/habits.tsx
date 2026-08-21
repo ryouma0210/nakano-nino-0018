@@ -20,34 +20,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
 
-const trainingJudgements = [
-  { limit: 10, comments: [
+const trainingJudgementGroups = [
+  { comments: [
     "は？10秒も我慢できないなんて早すぎよ。すぐにお仕置き部屋へ行きなさい",
     "え？一桁秒で終わり？記録するのも恥ずかしい速さね。お仕置き確定よ",
     "始まったと思ったらもう終わり？早漏すぎて話にならないわね。反省しながらお仕置きを受けなさい",
   ] },
-  { limit: 30, comments: [
+  { comments: [
     "ずいぶん早かったわね。お仕置き部屋で鍛え直しなさい",
   ] },
-  { limit: 100, comments: [
+  { comments: [
     "その弱さはお仕置き部屋で鍛え直しね♡",
     "合格には程遠いからお仕置きね♡",
     "少しは耐えたけど足りないわ。次はもっと我慢しなさい♡",
   ] },
-  { limit: 300, comments: [
-    "5分まで届かなかったのね。惜しくてもお仕置きは免除しないわ♡",
+  { comments: [
+    "目標時間まで届かなかったのね。惜しくてもお仕置きは免除しないわ♡",
     "ここで終わるなんて中途半端よ。お仕置き部屋へ行きなさい♡",
   ] },
-  { limit: 600, comments: [
+  { comments: [
     "よく耐えたけれど基準未満ね。最後にお仕置きを受けてきなさい♡",
   ] },
-  { limit: Number.POSITIVE_INFINITY, comments: [
+  { comments: [
     "最後までよく我慢したわね。今日はお仕置きなしでいいわ♡",
   ] },
 ] as const;
 
-function trainingJudgement(seconds: number) {
-  const group = trainingJudgements.find((item) => seconds < item.limit) ?? trainingJudgements.at(-1)!;
+function trainingJudgement(seconds: number, targetSeconds: number) {
+  const limits = [10, 30, targetSeconds / 6, targetSeconds / 2, targetSeconds, Number.POSITIVE_INFINITY];
+  const index = limits.findIndex((limit) => seconds < limit);
+  const group = trainingJudgementGroups[index < 0 ? trainingJudgementGroups.length - 1 : index];
   return group.comments[Math.floor(Math.random() * group.comments.length)];
 }
 
@@ -79,7 +81,7 @@ export default function HabitsScreen() {
   function completeTraining(result: TrainingResult) {
     try {
       const recordDate = toDateKey();
-      const judgement = trainingJudgement(result.elapsedSeconds);
+      const judgement = trainingJudgement(result.elapsedSeconds, result.targetSeconds);
       journalRepository.create({
         recordDate,
         title: "調教完了記録",
@@ -195,7 +197,7 @@ export default function HabitsScreen() {
               <AppText>{namedResultJudgement}</AppText>
               <AppText variant="muted">調教日記へ保存しました。</AppText>
             </View>
-            {(trainingResult?.elapsedSeconds ?? 600) < 600 ? (
+            {trainingResult && trainingResult.elapsedSeconds < trainingResult.targetSeconds ? (
               <PrimaryButton
                 title="お仕置き部屋へ"
                 tone="danger"

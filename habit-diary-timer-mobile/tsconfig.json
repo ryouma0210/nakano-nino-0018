@@ -7,11 +7,15 @@
     "paths": {
       "@/*": [
         "src/*"
+      ],
+      "@nino/shared/*": [
+        "../shared/*"
       ]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "../shared/**/*.ts"
   ]
 }

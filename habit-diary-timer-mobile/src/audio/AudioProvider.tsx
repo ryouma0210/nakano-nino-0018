@@ -1,16 +1,20 @@
 /* eslint-disable react-hooks/immutability */
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
+import { AppState } from "react-native";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
-type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "punishmentHit" | "ejaculation" | "complete";
+type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
 export type LoopAudioName = "earLick" | "nippleScratch";
+export type BgmMode = "default" | "outsideBright" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
   settings: AppSettings | null;
   updateAudioSettings: (partial: Partial<AppSettings>) => Promise<void>;
   playEffect: (name: EffectName) => void;
   stopEffect: (name: EffectName) => void;
+  bgmMode: BgmMode;
+  setBgmMode: (mode: BgmMode) => void;
   loopAudioName: LoopAudioName | null;
   playLoopAudio: (name: LoopAudioName) => void;
   stopLoopAudio: () => void;
@@ -22,30 +26,87 @@ const AudioContext = createContext<AudioContextValue>({
   updateAudioSettings: async () => {},
   playEffect: () => {},
   stopEffect: () => {},
+  bgmMode: "default",
+  setBgmMode: () => {},
   loopAudioName: null,
   playLoopAudio: () => {},
   stopLoopAudio: () => {},
   setSessionAudioActive: () => {},
 });
 
-const bgmSource = require("../../assets/audio/kyouhunomori.mp4");
+const bgmSource = require("../../assets/audio/kyouhunomori.m4a");
+const outsideBrightBgmSource = require("../../assets/audio/outside-bright-explore.m4a");
+const outsideTemptationBgmSource = require("../../assets/audio/voice-samples/voice_whisper.wav");
+const outsideBattleBgmSource = require("../../assets/audio/kyouhunomori.m4a");
+const outsideCharmBgmSource = require("../../assets/audio/yuuwakubgm.m4a");
 
 export function AudioProvider({ children }: PropsWithChildren) {
+  // Expo Go is used only for layout checks. Creating every native audio player
+  // at startup can overwhelm the emulator audio device and leave the UI black.
+  if (__DEV__) return <SilentAudioProvider>{children}</SilentAudioProvider>;
+  return <ActiveAudioProvider>{children}</ActiveAudioProvider>;
+}
+
+function SilentAudioProvider({ children }: PropsWithChildren) {
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [bgmMode, setBgmMode] = useState<BgmMode>("default");
+
+  useEffect(() => {
+    settingsService.load().then(setSettings).catch(console.error);
+  }, []);
+
+  const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
+    if (!settings) return;
+    const next = { ...settings, ...partial };
+    setSettings(next);
+    await settingsService.save(next);
+  }, [settings]);
+
+  const value = useMemo<AudioContextValue>(() => ({
+    settings,
+    updateAudioSettings,
+    playEffect: () => {},
+    stopEffect: () => {},
+    bgmMode,
+    setBgmMode,
+    loopAudioName: null,
+    playLoopAudio: () => {},
+    stopLoopAudio: () => {},
+    setSessionAudioActive: () => {},
+  }), [bgmMode, settings, updateAudioSettings]);
+
+  return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
+}
+
+function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
   const [loopAudioName, setLoopAudioName] = useState<LoopAudioName | null>(null);
+  const [bgmMode, setBgmMode] = useState<BgmMode>("default");
+  const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
   const bgm = useAudioPlayer(bgmSource);
+  const outsideBrightBgm = useAudioPlayer(outsideBrightBgmSource);
+  const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
+  const outsideBattleBgm = useAudioPlayer(outsideBattleBgmSource);
+  const outsideCharmBgm = useAudioPlayer(outsideCharmBgmSource);
   const button = useAudioPlayer(require("../../assets/audio/button.wav"));
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
-  const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.mp4"));
-  const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
-  const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
-  const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.mp4"));
+  const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.m4a"));
+  const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
+  const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
+  const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.m4a"));
+  const outsideEscape = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
+  const outsideAttack = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
+  const outsideEvade = useAudioPlayer(require("../../assets/audio/button.wav"));
+  const outsideEarLick = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
+  const outsideNipple = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
+  const outsideLossRhythm = useAudioPlayer(require("../../assets/audio/tekoki.m4a"));
+  const levelUp = useAudioPlayer(require("../../assets/audio/level-up.wav"));
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
-  const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.mp4"));
+  const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.m4a"));
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
-  const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.mp4"));
-  const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.mp4"));
+  const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
+  const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
 
   useEffect(() => {
     if (typeof setAudioModeAsync === "function") {
@@ -59,12 +120,57 @@ export function AudioProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    const backgroundPausedPlayers = [
+      bgm,
+      outsideBrightBgm,
+      outsideTemptationBgm,
+      outsideBattleBgm,
+      outsideCharmBgm,
+      button,
+      dialogue,
+      preparationLoop,
+      defeatLoop,
+      trainingStart,
+      trainingRhythm,
+      outsideEscape,
+      outsideAttack,
+      outsideEvade,
+      outsideEarLick,
+      outsideNipple,
+      outsideLossRhythm,
+      levelUp,
+      punishmentHit,
+      ejaculation,
+      complete,
+    ];
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const active = nextState === "active";
+      setAppIsActive(active);
+      if (!active) {
+        backgroundPausedPlayers.forEach((player) => player.pause());
+      }
+    });
+    return () => subscription.remove();
+  }, [bgm, button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, outsideTemptationBgm, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+
+  useEffect(() => {
     if (!settings) return;
-    bgm.pause();
-    bgm.loop = true;
-    bgm.volume = settings.musicVolume;
-    if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) bgm.play();
-  }, [bgm, loopAudioName, sessionAudioActive, settings]);
+    const bgms = {
+      default: bgm,
+      outsideBright: outsideBrightBgm,
+      outsideTemptation: outsideTemptationBgm,
+      outsideBattle: outsideBattleBgm,
+      outsideCharm: outsideCharmBgm,
+    };
+    Object.entries(bgms).forEach(([mode, player]) => {
+      player.pause();
+      player.loop = true;
+      player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
+    });
+    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
+      bgms[bgmMode].play();
+    }
+  }, [appIsActive, bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -75,17 +181,22 @@ export function AudioProvider({ children }: PropsWithChildren) {
 
   const playEffect = useCallback((name: EffectName) => {
     if (!settings?.soundEnabled) return;
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
-    player.loop = name === "preparationLoop" || name === "defeatLoop" || name === "trainingStart";
+    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
+    player.loop = name === "preparationLoop"
+      || name === "defeatLoop"
+      || name === "trainingStart"
+      || name === "outsideEarLick"
+      || name === "outsideNipple"
+      || name === "outsideLossRhythm";
     player.volume = settings.soundVolume;
     player.seekTo(0).then(() => player.play()).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
+  }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const stopEffect = useCallback((name: EffectName) => {
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, punishmentHit, ejaculation, complete }[name];
+    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
     player.pause();
     player.seekTo(0).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+  }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   const stopLoopAudio = useCallback(() => {
     earLickLoop.pause();
@@ -122,12 +233,14 @@ export function AudioProvider({ children }: PropsWithChildren) {
       updateAudioSettings,
       playEffect,
       stopEffect,
+      bgmMode,
+      setBgmMode,
       loopAudioName,
       playLoopAudio,
       stopLoopAudio,
       setSessionAudioActive,
     }),
-    [loopAudioName, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioName, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
 }
