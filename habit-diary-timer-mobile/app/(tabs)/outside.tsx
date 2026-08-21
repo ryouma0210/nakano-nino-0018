@@ -1389,12 +1389,9 @@ export default function OutsideScreen() {
       setMessage("所持Ptが不足しています。\n敗北シーンの解放には500Pt必要です。");
       return;
     }
-    const purchased = pointRepository.award(
-      `outside-loss-memory:${memoryKey}:${toDateTimeKey()}`,
-      -500,
-      `敗北シーン回想「${memoryKey}」を解放`,
-    );
+    const purchased = rewardRepository.redeemLossMemory(memoryKey);
     if (!purchased) return;
+    setAvailablePoints(rewardRepository.balance().available);
     setUnlockedLossMemories((current) => {
       const next = [...current, memoryKey];
       AsyncStorage.setItem(LOSS_MEMORY_STORAGE_KEY, JSON.stringify(next)).catch(console.error);
