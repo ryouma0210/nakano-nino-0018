@@ -84,7 +84,6 @@ export default function Index() {
   return (
     <Screen>
       <View style={styles.start}>
-        <AppText style={styles.title}>PRIVATE ROOM</AppText>
         <Image
           source={require("../assets/characters/home-nino.png")}
           style={styles.hero}
@@ -131,7 +130,6 @@ export default function Index() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.loginDialog}>
-            <AppText style={styles.modalKicker}>LOGIN BONUS</AppText>
             <AppText variant="subtitle">
               {loginBonusMonthLabel}のスタンプ
             </AppText>

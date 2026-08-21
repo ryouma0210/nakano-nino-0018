@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { Habit } from "@/types/models";
+import { settingsService } from "@/services/settingsService";
+import { translateText } from "@/i18n";
 
 type NotificationsModule = typeof import("expo-notifications");
 
@@ -47,10 +49,11 @@ export const notificationService = {
     const notifications = await getNotifications();
     if (!notifications) return null;
     const [hour, minute] = habit.reminder_time.split(":").map(Number);
+    const language = (await settingsService.load()).language;
     return notifications.scheduleNotificationAsync({
       content: {
         title: habit.name,
-        body: `${habit.reminder_time} の予定です。今日も少しだけ進めましょう。`,
+        body: translateText(`${habit.reminder_time} の予定です。今日も少しだけ進めましょう。`, language),
         data: { habitId: habit.id, screen: "habit-detail" },
       },
       trigger: { type: notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
@@ -62,8 +65,9 @@ export const notificationService = {
     if (!granted) return null;
     const notifications = await getNotifications();
     if (!notifications) return null;
+    const language = (await settingsService.load()).language;
     return notifications.scheduleNotificationAsync({
-      content: { title: "タイマー完了", body: title },
+      content: { title: translateText("タイマー完了", language), body: title },
       trigger: { type: notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds },
     });
   },

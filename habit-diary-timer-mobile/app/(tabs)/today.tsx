@@ -48,13 +48,11 @@ export default function TodayScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>TODAY RECORD</AppText>
         <AppText variant="title">本日の記録</AppText>
         <View style={styles.rule} />
       </View>
 
       <Card style={styles.bonusCard}>
-        <AppText style={styles.cardKicker}>LOGIN BONUS</AppText>
         <AppText variant="subtitle">ログインボーナス</AppText>
         <View style={styles.bonusRow}>
           <View>
@@ -107,7 +105,6 @@ export default function TodayScreen() {
       </Card>
 
       <Card style={styles.reportCard}>
-        <AppText style={styles.cardKicker}>TODAY SUMMARY</AppText>
         <AppText variant="subtitle">本日の報告</AppText>
         <View style={styles.grid}>
           <Metric label="調教回数" value={`${data.report.trainingCount}回`} />

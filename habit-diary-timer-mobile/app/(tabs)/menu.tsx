@@ -55,13 +55,6 @@ export default function MenuScreen() {
       : section === "management"
         ? "管理・設定メニュー"
         : "記録・管理メニュー";
-  const kicker =
-    section === "record"
-      ? "RECORD / EXCHANGE"
-      : section === "management"
-        ? "MANAGEMENT / SETTINGS"
-        : "RECORD / MANAGEMENT";
-
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -77,7 +70,6 @@ export default function MenuScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>{kicker}</AppText>
         <AppText variant="title">{title}</AppText>
         <View style={styles.rule} />
       </View>

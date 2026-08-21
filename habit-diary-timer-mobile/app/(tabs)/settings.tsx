@@ -123,6 +123,7 @@ export default function SettingsScreen() {
           soundEnabled: defaultSettings.soundEnabled,
           musicVolume: defaultSettings.musicVolume,
           soundVolume: defaultSettings.soundVolume,
+          language: defaultSettings.language,
         });
         await notificationService.cancelAll();
       }
@@ -156,7 +157,7 @@ export default function SettingsScreen() {
         contractLines={roomMessages.settings.contractLines}
       />
       <Card>
-        <AppText variant="subtitle">サウンド</AppText>
+        <AppText variant="subtitle">サウンド設定</AppText>
         <View style={styles.audioRow}>
           <View style={styles.audioText}>
             <AppText>部屋のBGM</AppText>
@@ -193,6 +194,30 @@ export default function SettingsScreen() {
           value={settings?.soundVolume ?? 0.7}
           onChange={(value) => updateAudioSettings({ soundVolume: value })}
         />
+      </Card>
+      <Card>
+        <AppText variant="subtitle">言語設定</AppText>
+        <AppText variant="muted">アプリ内の文字表示を変更します。</AppText>
+        <View style={styles.languageButtons}>
+          {([
+            { key: "ja", label: "日本語（デフォルト）" },
+            { key: "en", label: "English" },
+            { key: "ko", label: "한국어" },
+          ] as const).map((item) => {
+            const selected = (settings?.language ?? "ja") === item.key;
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => updateAudioSettings({ language: item.key })}
+                style={[styles.languageButton, selected && styles.languageButtonSelected]}
+              >
+                <AppText style={[styles.languageButtonText, selected && styles.languageButtonTextSelected]}>
+                  {item.label}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
       </Card>
       <Card>
         <AppText variant="label">現在のファイル使用量</AppText>
@@ -366,5 +391,24 @@ const styles = StyleSheet.create({
   },
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
+  languageButtons: { gap: 7 },
+  languageButton: {
+    minHeight: 44,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#777",
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  languageButtonSelected: {
+    borderColor: "#e84d9b",
+    backgroundColor: "#3b1728",
+  },
+  languageButtonText: {
+    color: "#111",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  languageButtonTextSelected: { color: "#fff" },
 });
 

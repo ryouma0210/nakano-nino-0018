@@ -28,7 +28,6 @@ export default function ExternalLinksScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>EXTERNAL LINKS</AppText>
         <AppText variant="title">外部リンク</AppText>
         <View style={styles.rule} />
       </View>

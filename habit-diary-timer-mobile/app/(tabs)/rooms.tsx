@@ -38,7 +38,6 @@ export default function RoomsScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>ROOMS</AppText>
         <AppText variant="title">部屋</AppText>
         <View style={styles.rule} />
       </View>

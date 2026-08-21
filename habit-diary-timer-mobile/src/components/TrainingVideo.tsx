@@ -63,9 +63,9 @@ function createRandomMarkerOffsets(
 }
 
 const modes = [
-  { key: "easy", label: "イージー", rate: 1 },
-  { key: "normal", label: "ノーマル", rate: 3 },
-  { key: "hard", label: "ハード", rate: 5 },
+  { key: "easy", label: "イージー", rate: 1, targetSeconds: 5 * 60 },
+  { key: "normal", label: "ノーマル", rate: 3, targetSeconds: 7 * 60 },
+  { key: "hard", label: "ハード", rate: 5, targetSeconds: 10 * 60 },
 ] as const;
 
 const warmupComments = trainingStageMessages.warmup;
@@ -74,14 +74,13 @@ const intensiveComments = trainingStageMessages.intensive;
 const finishingComments = trainingStageMessages.finishing;
 
 const warmupDurationSeconds = 30;
-const intensiveStartSeconds = 300;
-const finishingStartSeconds = 600;
 
 type TrainingMode = (typeof modes)[number]["key"];
 
 export type TrainingResult = {
   elapsedSeconds: number;
   difficulty: string;
+  targetSeconds: number;
 };
 
 export function TrainingVideo({
@@ -154,6 +153,9 @@ export function TrainingVideo({
   );
 
   const showRandomComment = useCallback((elapsedSeconds = elapsedMilliseconds.current / 1000) => {
+    const selected = modes.find((item) => item.key === mode) ?? modes[1];
+    const intensiveStartSeconds = selected.targetSeconds / 2;
+    const finishingStartSeconds = selected.targetSeconds;
     if (
       elapsedSeconds >= intensiveStartSeconds &&
       elapsedSeconds < finishingStartSeconds
@@ -174,7 +176,7 @@ export function TrainingVideo({
       const candidates = comments.filter((comment) => comment !== current);
       return candidates[Math.floor(Math.random() * candidates.length)] ?? comments[0];
     });
-  }, []);
+  }, [mode]);
 
   useEventListener(player, "playToEnd", () => {
     if (!started) return;
@@ -359,6 +361,7 @@ export function TrainingVideo({
         Math.floor(elapsedMilliseconds.current / 1000),
       ),
       difficulty: selected.label,
+      targetSeconds: selected.targetSeconds,
     });
   }
 
@@ -514,6 +517,13 @@ export function TrainingVideo({
         </View>
         {!started ? (
           <>
+            <View style={styles.modeDescriptions}>
+              {modes.map((item) => (
+                <AppText key={item.key} style={styles.modeDescription}>
+                  {item.label}：耐える時間{item.targetSeconds / 60}分＆速度{item.rate}倍
+                </AppText>
+              ))}
+            </View>
             <AppText variant="muted">
               難易度を選択してから開始してください。
             </AppText>
@@ -609,6 +619,8 @@ const styles = StyleSheet.create({
   modeButtonText: { color: lightTheme.muted, fontSize: 12, fontWeight: "900" },
   modeButtonTextSelected: { color: "#fff" },
   rateText: { color: "#777", fontSize: 9, fontWeight: "800" },
+  modeDescriptions: { gap: 3 },
+  modeDescription: { color: "#fff", fontSize: 11, fontWeight: "700" },
   startedText: {
     color: lightTheme.danger,
     fontSize: 11,

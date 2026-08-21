@@ -46,6 +46,7 @@ export default function SoundSettingsScreen() {
           onChange={(value) => updateAudioSettings({ soundVolume: value })}
         />
       </Card>
+
       <PrimaryButton title="スタート画面へ戻る" onPress={() => router.back()} />
     </Screen>
   );

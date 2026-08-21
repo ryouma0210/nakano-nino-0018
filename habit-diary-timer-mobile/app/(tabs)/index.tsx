@@ -19,7 +19,6 @@ export default function HomeScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <AppText style={styles.kicker}>ROOM SELECT</AppText>
         <AppText variant="title">ホーム</AppText>
         <View style={styles.rule} />
       </View>

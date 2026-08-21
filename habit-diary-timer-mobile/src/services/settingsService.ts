@@ -7,6 +7,7 @@ const SETTINGS_KEY = "habit-diary-timer:settings";
 
 export const defaultSettings: AppSettings = {
   playerName: "マゾ",
+  language: "ja",
   darkMode: false,
   backgroundMusicEnabled: true,
   notificationsEnabled: true,

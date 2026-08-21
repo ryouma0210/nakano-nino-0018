@@ -19,6 +19,7 @@ export const profileSettingsSchema = z.object({
 
 export const appSettingsSchema = z.object({
   playerName: z.string().default("マゾ"), darkMode: z.boolean().default(false),
+  language: z.enum(["ja", "en", "ko"]).default("ja"),
   backgroundMusicEnabled: z.boolean().default(true), notificationsEnabled: z.boolean().default(true),
   soundEnabled: z.boolean().default(true), musicVolume: z.number().min(0).max(1).default(0.35),
   soundVolume: z.number().min(0).max(1).default(0.7), vibrationEnabled: z.boolean().default(true),
