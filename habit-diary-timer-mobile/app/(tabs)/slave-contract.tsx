@@ -12,6 +12,7 @@ import { settingsService } from "@/services/settingsService";
 import { slaveContractService } from "@/services/slaveContractService";
 import { lightTheme } from "@/constants/theme";
 import { toDateKey } from "@/utils/date";
+import { downloadHtmlAsPdf } from "@/utils/htmlPdfDownload";
 
 const ownerName = "中野二乃";
 
@@ -323,25 +324,7 @@ export default function SlaveContractScreen() {
         return;
       }
       if (Platform.OS === "web") {
-        if (typeof window === "undefined" || typeof document === "undefined") {
-          throw new Error("WEB PDF出力を利用できません。");
-        }
-        const { default: html2pdf } = await import("html2pdf.js");
-        await html2pdf()
-          .set({
-            margin: 0,
-            filename: pdfFileName,
-            image: { type: "jpeg", quality: 0.98 },
-            html2canvas: {
-              scale: 2,
-              useCORS: true,
-              backgroundColor: "#ffffff",
-              windowWidth: 794,
-            },
-            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          })
-          .from(html)
-          .save(pdfFileName);
+        await downloadHtmlAsPdf(html, pdfFileName);
         showNotice("PDFをダウンロードしました", pdfFileName);
         return;
       }
