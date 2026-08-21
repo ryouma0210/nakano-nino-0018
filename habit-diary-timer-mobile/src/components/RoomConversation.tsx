@@ -76,9 +76,21 @@ export function RoomConversation({
     current.withName !== false && playerName
       ? `${playerName}。${current.text}`
       : current.text;
-  const resolvedCharacter = characterSource
-    ? Image.resolveAssetSource(characterSource)
-    : null;
+  const resolveAssetSource = (
+    Image as typeof Image & {
+      resolveAssetSource?: (source: ImageSourcePropType) => {
+        width?: number;
+        height?: number;
+      } | null;
+    }
+  ).resolveAssetSource;
+  const embeddedCharacterMetadata =
+    characterSource && typeof characterSource === "object" && !Array.isArray(characterSource)
+      ? characterSource as { width?: number; height?: number }
+      : null;
+  const resolvedCharacter = characterSource && typeof resolveAssetSource === "function"
+    ? resolveAssetSource(characterSource)
+    : embeddedCharacterMetadata;
   const characterAspectRatio = resolvedCharacter?.width && resolvedCharacter?.height
     ? resolvedCharacter.width / resolvedCharacter.height
     : null;
