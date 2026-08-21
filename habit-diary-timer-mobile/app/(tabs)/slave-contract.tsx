@@ -323,20 +323,26 @@ export default function SlaveContractScreen() {
         return;
       }
       if (Platform.OS === "web") {
-        if (typeof window === "undefined") {
-          throw new Error("WEB印刷を利用できません。");
+        if (typeof window === "undefined" || typeof document === "undefined") {
+          throw new Error("WEB PDF出力を利用できません。");
         }
-        const printWindow = window.open("", "_blank", "width=900,height=1200");
-        if (!printWindow) {
-          throw new Error("PDF出力画面を開けませんでした。ポップアップ許可を確認してください。");
-        }
-        printWindow.document.open();
-        printWindow.document.write(html);
-        printWindow.document.close();
-        printWindow.document.title = pdfFileName.replace(/\.pdf$/i, "");
-        printWindow.focus();
-        printWindow.setTimeout(() => printWindow.print(), 300);
-        showNotice("PDF出力を開きました", `印刷画面で「PDFに保存」を選択してください。\n推奨ファイル名：${pdfFileName}`);
+        const { default: html2pdf } = await import("html2pdf.js");
+        await html2pdf()
+          .set({
+            margin: 0,
+            filename: pdfFileName,
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+              windowWidth: 794,
+            },
+            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          })
+          .from(html)
+          .save(pdfFileName);
+        showNotice("PDFをダウンロードしました", pdfFileName);
         return;
       }
 
