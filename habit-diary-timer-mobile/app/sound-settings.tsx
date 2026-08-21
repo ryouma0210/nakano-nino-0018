@@ -1,4 +1,4 @@
-import { StyleSheet, Switch, View } from "react-native";
+import { Pressable, StyleSheet, Switch, View } from "react-native";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -46,7 +46,32 @@ export default function SoundSettingsScreen() {
           onChange={(value) => updateAudioSettings({ soundVolume: value })}
         />
       </Card>
-
+      <Card>
+        <AppText variant="subtitle">言語設定</AppText>
+        <AppText variant="muted">アプリ内の文字表示を変更します。</AppText>
+        <View style={styles.languageButtons}>
+          {([
+            { key: "ja", label: "日本語（デフォルト）" },
+            { key: "en", label: "English" },
+            { key: "ko", label: "한국어" },
+          ] as const).map((item) => {
+            const selected = (settings?.language ?? "ja") === item.key;
+            return (
+              <Pressable
+                key={item.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => updateAudioSettings({ language: item.key })}
+                style={[styles.languageButton, selected && styles.languageButtonSelected]}
+              >
+                <AppText style={[styles.languageButtonText, selected && styles.languageButtonTextSelected]}>
+                  {item.label}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Card>
       <PrimaryButton title="スタート画面へ戻る" onPress={() => router.back()} />
     </Screen>
   );
@@ -100,4 +125,24 @@ const styles = StyleSheet.create({
   },
   volumeLabel: { flex: 1, fontWeight: "800" },
   volumeValue: { width: 46, textAlign: "center", fontWeight: "900" },
+  languageButtons: { gap: 7 },
+  languageButton: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#777",
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  languageButtonSelected: {
+    borderColor: "#e84d9b",
+    backgroundColor: "#3b1728",
+  },
+  languageButtonText: {
+    color: "#111",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  languageButtonTextSelected: { color: "#fff" },
 });

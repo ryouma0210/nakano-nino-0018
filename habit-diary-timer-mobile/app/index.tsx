@@ -84,10 +84,11 @@ export default function Index() {
   return (
     <Screen>
       <View style={styles.start}>
+        <AppText style={styles.title}>Nino Room</AppText>
         <Image
           source={require("../assets/characters/home-nino.png")}
           style={styles.hero}
-          resizeMode="contain"
+          resizeMode="cover"
         />
         <View style={styles.menu}>
           <PrimaryButton
@@ -200,7 +201,7 @@ const styles = StyleSheet.create({
   },
   hero: {
     width: "100%",
-    height: 430,
+    height: 480,
     borderWidth: 1,
     borderColor: "#fff",
     borderRadius: 4,
