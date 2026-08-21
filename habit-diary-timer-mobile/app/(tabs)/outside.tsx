@@ -432,6 +432,7 @@ export default function OutsideScreen() {
   const playerShake = useRef(new Animated.Value(0)).current;
   const enemyShake = useRef(new Animated.Value(0)).current;
   const [damageFlash, setDamageFlash] = useState<{ target: "player" | "enemy"; amount: number } | null>(null);
+  const damageFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingDamageQueue, setPendingDamageQueue] = useState<{ target: "player" | "enemy"; amount: number }[]>([]);
   const [battle, setBattle] = useState<BattleStatus>({
     hp: playerHp,
@@ -528,6 +529,7 @@ export default function OutsideScreen() {
 
   useEffect(() => () => {
     if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
+    if (damageFlashTimerRef.current) clearTimeout(damageFlashTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -1183,30 +1185,20 @@ export default function OutsideScreen() {
       const mockingQuip = `${playerAction}\n${passiveActionQuips[succubus.stage][command]}`;
       addTemptation(40);
 
-      if (Math.random() < 0.5) {
-        const effectLabel = applyStatusOnlyAttack();
-        setMessage(mockingQuip);
-        setPendingBattleMessage(`サキュバスの瞳が妖しく輝いた。\nダメージはないが、${effectLabel}を付与された。`);
-        return;
-      }
-
-      const normalAttack = shouldUseNormalAttack();
-      const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-      const damage = normalAttack
-        ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7)
-        : enemyAttackDamage[succubus.stage];
+      // These deliberately defenseless actions always invite a temptation
+      // attack. The separate status-only attack remains available during
+      // ordinary enemy turns, but is not used as the response here.
+      const enemyKind = randomLossKind();
+      const damage = enemyAttackDamage[succubus.stage];
       const nextHp = clamp(battle.hp - damage);
-      const nextMp = clamp(battle.mp + (normalAttack ? 0 : -6));
+      const nextMp = clamp(battle.mp - 6);
       setBattleEnemyImage(enemyKind);
       setBattle({ ...battle, hp: nextHp, mp: nextMp, lastLossKind: enemyKind });
       setPlayerHp(Math.max(1, nextHp));
       setPlayerMp(nextMp);
       saveSetting(hpKey, String(Math.max(1, nextHp)));
       saveSetting(mpKey, String(nextMp));
-      const outcome = normalAttack
-        ? `無防備なところへ尻尾の通常攻撃：-${damage}HP\n束縛を付与された。`
-        : `無防備なところへ${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${applyEnemyAilment(enemyKind)}を付与された。`;
-      if (normalAttack) applyEnemyAilment("tail");
+      const outcome = `無防備なところへ${lossLabels[enemyKind]}の誘惑攻撃：-${damage}HP\n${applyEnemyAilment(enemyKind)}を付与された。`;
       showEnemyTurn(mockingQuip, outcome, nextHp, enemyKind);
       return;
     }
@@ -1479,13 +1471,17 @@ export default function OutsideScreen() {
       setPendingDamageQueue(rest);
       const value = effect?.target === "player" ? playerShake : enemyShake;
       if (effect) {
+        if (damageFlashTimerRef.current) clearTimeout(damageFlashTimerRef.current);
         setDamageFlash(effect);
         Animated.sequence([
           Animated.timing(value, { toValue: -7, duration: 55, useNativeDriver: true }),
           Animated.timing(value, { toValue: 7, duration: 70, useNativeDriver: true }),
           Animated.timing(value, { toValue: 0, duration: 55, useNativeDriver: true }),
         ]).start();
-        setTimeout(() => setDamageFlash(null), 650);
+        damageFlashTimerRef.current = setTimeout(() => {
+          setDamageFlash(null);
+          damageFlashTimerRef.current = null;
+        }, 3000);
       }
     }
     if (pendingBattleMessage) {
@@ -2050,7 +2046,6 @@ export default function OutsideScreen() {
       >
         <View style={styles.crystalModalBackdrop}>
           <ScrollView style={styles.warningModal} contentContainerStyle={styles.warningModalContent}>
-            <AppText style={styles.warningModalKicker}>WARNING SIGN</AppText>
             <AppText style={styles.warningModalTitle}>この先、サキュバス出没注意</AppText>
 
             <View style={styles.advanceWarningSection}>

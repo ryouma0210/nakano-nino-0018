@@ -353,7 +353,6 @@ export default function SlaveContractScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.headerText}>
-            <AppText style={styles.kicker}>REAL CONTRACT</AppText>
             <AppText variant="title">奴隷契約書　※本物</AppText>
           </View>
           <View style={styles.pdfButton}>

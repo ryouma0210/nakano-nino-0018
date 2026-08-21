@@ -30,7 +30,6 @@
     },
     "android": {
       "package": "jp.local.habitdiarytimer",
-      "edgeToEdgeEnabled": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#050505"
@@ -39,10 +38,6 @@
         "POST_NOTIFICATIONS",
         "VIBRATE"
       ]
-    },
-    "androidNavigationBar": {
-      "backgroundColor": "#050505",
-      "barStyle": "light-content"
     },
     "extra": {
       "eas": {

@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/immutability */
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
+import { AppState } from "react-native";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 
@@ -40,10 +41,49 @@ const outsideBattleBgmSource = require("../../assets/audio/kyouhunomori.m4a");
 const outsideCharmBgmSource = require("../../assets/audio/yuuwakubgm.m4a");
 
 export function AudioProvider({ children }: PropsWithChildren) {
+  // Expo Go is used only for layout checks. Creating every native audio player
+  // at startup can overwhelm the emulator audio device and leave the UI black.
+  if (__DEV__) return <SilentAudioProvider>{children}</SilentAudioProvider>;
+  return <ActiveAudioProvider>{children}</ActiveAudioProvider>;
+}
+
+function SilentAudioProvider({ children }: PropsWithChildren) {
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [bgmMode, setBgmMode] = useState<BgmMode>("default");
+
+  useEffect(() => {
+    settingsService.load().then(setSettings).catch(console.error);
+  }, []);
+
+  const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
+    if (!settings) return;
+    const next = { ...settings, ...partial };
+    setSettings(next);
+    await settingsService.save(next);
+  }, [settings]);
+
+  const value = useMemo<AudioContextValue>(() => ({
+    settings,
+    updateAudioSettings,
+    playEffect: () => {},
+    stopEffect: () => {},
+    bgmMode,
+    setBgmMode,
+    loopAudioName: null,
+    playLoopAudio: () => {},
+    stopLoopAudio: () => {},
+    setSessionAudioActive: () => {},
+  }), [bgmMode, settings, updateAudioSettings]);
+
+  return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
+}
+
+function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
   const [loopAudioName, setLoopAudioName] = useState<LoopAudioName | null>(null);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
+  const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
   const bgm = useAudioPlayer(bgmSource);
   const outsideBrightBgm = useAudioPlayer(outsideBrightBgmSource);
   const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
@@ -80,6 +120,40 @@ export function AudioProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    const backgroundPausedPlayers = [
+      bgm,
+      outsideBrightBgm,
+      outsideTemptationBgm,
+      outsideBattleBgm,
+      outsideCharmBgm,
+      button,
+      dialogue,
+      preparationLoop,
+      defeatLoop,
+      trainingStart,
+      trainingRhythm,
+      outsideEscape,
+      outsideAttack,
+      outsideEvade,
+      outsideEarLick,
+      outsideNipple,
+      outsideLossRhythm,
+      levelUp,
+      punishmentHit,
+      ejaculation,
+      complete,
+    ];
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const active = nextState === "active";
+      setAppIsActive(active);
+      if (!active) {
+        backgroundPausedPlayers.forEach((player) => player.pause());
+      }
+    });
+    return () => subscription.remove();
+  }, [bgm, button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, outsideTemptationBgm, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+
+  useEffect(() => {
     if (!settings) return;
     const bgms = {
       default: bgm,
@@ -93,10 +167,10 @@ export function AudioProvider({ children }: PropsWithChildren) {
       player.loop = true;
       player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
     });
-    if (settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
+    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
       bgms[bgmMode].play();
     }
-  }, [bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
+  }, [appIsActive, bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
