@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Animated, Image as NativeImage, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Image as NativeImage, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1809,17 +1809,17 @@ export default function OutsideScreen() {
           </View>
           <View style={styles.operationPanel}>
             <AppText style={styles.mapHintTitle}>操作</AppText>
-            <View style={styles.dpad}>
-              <Pressable style={[styles.dpadButton, styles.dpadUp]} onPress={() => movePlayer("up")}>
+            <View style={[styles.dpad, Platform.OS === "web" && styles.webDpad]}>
+              <Pressable style={[styles.dpadButton, styles.dpadUp, Platform.OS === "web" && styles.webDpadUp]} onPress={() => movePlayer("up")}>
                 <AppText style={styles.dpadText}>⌃</AppText>
               </Pressable>
-              <Pressable style={[styles.dpadButton, styles.dpadLeft]} onPress={() => movePlayer("left")}>
+              <Pressable style={[styles.dpadButton, styles.dpadLeft, Platform.OS === "web" && styles.webDpadLeft]} onPress={() => movePlayer("left")}>
                 <AppText style={styles.dpadText}>‹</AppText>
               </Pressable>
-              <Pressable style={[styles.dpadButton, styles.dpadRight]} onPress={() => movePlayer("right")}>
+              <Pressable style={[styles.dpadButton, styles.dpadRight, Platform.OS === "web" && styles.webDpadRight]} onPress={() => movePlayer("right")}>
                 <AppText style={styles.dpadText}>›</AppText>
               </Pressable>
-              <Pressable style={[styles.dpadButton, styles.dpadDown]} onPress={() => movePlayer("down")}>
+              <Pressable style={[styles.dpadButton, styles.dpadDown, Platform.OS === "web" && styles.webDpadDown]} onPress={() => movePlayer("down")}>
                 <AppText style={styles.dpadText}>⌄</AppText>
               </Pressable>
             </View>
@@ -2219,6 +2219,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 22,
     fontWeight: "900",
+  },
+  webDpad: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+  },
+  webDpadUp: {
+    top: 0,
+    left: 17,
+  },
+  webDpadLeft: {
+    top: 17,
+    left: 0,
+  },
+  webDpadRight: {
+    top: 17,
+    right: 0,
+  },
+  webDpadDown: {
+    bottom: 0,
+    left: 17,
   },
   fullMap: {
     flex: 8.4,
@@ -3203,11 +3224,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   mapInfoButtonText: { color: "#111", fontSize: 11, lineHeight: 16, fontWeight: "900", textAlign: "center" },
-  statusModal: { width: "88%", maxHeight: "78%", gap: 14, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
+  statusModal: { width: "88%", maxWidth: 520, maxHeight: "78%", gap: 14, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
   playerStatusModalList: { gap: 12 },
   playerStatusModalLevel: { color: "#fff", fontSize: 28, lineHeight: 34, fontWeight: "900" },
   playerStatusModalText: { color: "#fff", fontSize: 14, lineHeight: 20, fontWeight: "900" },
-  battleCommandModal: { width: "88%", maxHeight: "88%", gap: 12, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
+  battleCommandModal: { width: "88%", maxWidth: 440, maxHeight: "88%", gap: 12, borderWidth: 2, borderColor: "#ff69b4", backgroundColor: "#111", padding: 16 },
   battleCommandModalList: { gap: 8 },
   statusModalList: { gap: 10 },
   statusModalRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#683252", padding: 9, backgroundColor: "#1d1119" },
