@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IO_CHUNK_SIZE,
   backupEntryBase64,
+  backupEntryBlob,
   copyBackupEntry,
   createBackupOutput,
   createBackupStaging,
@@ -10,6 +11,7 @@ import {
   openNativeBackupWriter,
   readSmallBackup,
 } from "./backupIO";
+import { readBackupArchive, writeBackupArchive } from "./backupArchive";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" },
@@ -293,6 +295,68 @@ describe("web backup readers", () => {
     const source = await openBackupSource("blob:stored-video");
     expect(fetch).toHaveBeenCalledWith("blob:stored-video");
     expect(await source.read(1, 2)).toEqual(new Uint8Array([2, 3]));
+  });
+
+  it("restores a 7 MiB ZIP entry as a Blob slice without Base64 or a whole-file read", async () => {
+    const expected = Uint8Array.from({ length: 7 * 1024 * 1024 + 13 }, (_, index) => index % 251);
+    const parts: Blob[] = [];
+    await writeBackupArchive([{
+      name: "files/000000", size: expected.length,
+      read: async (offset, length) => expected.subarray(offset, offset + length),
+    }], { write: async (bytes) => { parts.push(new Blob([new Uint8Array(bytes)])); } });
+    const archive = new Blob(parts, { type: "application/zip" });
+    const fullRead = vi.spyOn(archive, "arrayBuffer");
+    const base64 = vi.fn(() => { throw new Error("Base64 is forbidden for binary restores"); });
+    vi.stubGlobal("btoa", base64);
+    const source = await openBackupSource("blob:archive", archive);
+    const [entry] = await readBackupArchive(source);
+    await entry.verify();
+    const read = vi.spyOn(entry, "read");
+    const result = await backupEntryBlob(entry, "video/mp4");
+    source.close();
+    expect(result.size).toBe(expected.length);
+    expect(result.type).toBe("video/mp4");
+    expect(Buffer.compare(Buffer.from(await result.arrayBuffer()), Buffer.from(expected))).toBe(0);
+    expect(fullRead).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(base64).not.toHaveBeenCalled();
+  });
+
+  it("rejects Blob slices outside the selected file before slicing", async () => {
+    const blob = new Blob([new Uint8Array(IO_CHUNK_SIZE + 7)]);
+    const slice = vi.spyOn(blob, "slice");
+    const source = await openBackupSource("blob:archive", blob);
+    expect(source.slice!(0, blob.size, "video/mp4").size).toBe(blob.size);
+    expect(source.slice!(blob.size, 0).size).toBe(0);
+    for (const [offset, length] of [[-1, 1], [0, -1], [0.5, 1], [0, NaN], [blob.size, 1]]) {
+      expect(() => source.slice!(offset, length)).toThrow(invalidBackupMessage);
+    }
+    expect(slice).toHaveBeenCalledTimes(2);
+  });
+
+  it("constructs binary fallback Blobs with bounded reads and immutable chunks", async () => {
+    const size = IO_CHUNK_SIZE + 19;
+    const buffer = new Uint8Array(IO_CHUNK_SIZE);
+    const read = vi.fn(async (offset: number, length: number) => {
+      for (let index = 0; index < length; index++) buffer[index] = (offset + index) % 251;
+      return buffer.subarray(0, length);
+    });
+    const blob = await backupEntryBlob({ size, read }, "audio/mpeg");
+    buffer.fill(0);
+    expect(read.mock.calls).toEqual([[0, IO_CHUNK_SIZE], [IO_CHUNK_SIZE, 19]]);
+    expect(blob.type).toBe("audio/mpeg");
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(Uint8Array.from({ length: size }, (_, index) => index % 251));
+    const empty = await backupEntryBlob({ size: 0, read }, "image/png");
+    expect(empty.size).toBe(0);
+  });
+
+  it("rejects truncated binary views and fallback reads", async () => {
+    const read = vi.fn(async () => new Uint8Array(2));
+    await expect(backupEntryBlob({ size: 3, read }, "video/mp4")).rejects.toThrow(invalidBackupMessage);
+    read.mockClear();
+    await expect(backupEntryBlob({ size: 3, read, slice: () => new Blob([new Uint8Array(2)]) }, "video/mp4"))
+      .rejects.toThrow(invalidBackupMessage);
+    expect(read).not.toHaveBeenCalled();
   });
 
   it("encodes base64 across chunk boundaries without inserting padding mid-file", async () => {

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, storage: new Map<string, string>(), sources: new Map<string, Uint8Array>(),
   chunks: [] as Uint8Array[], staged: new Map<string, Uint8Array[]>(),
   setItem: vi.fn(), multiSet: vi.fn(), write: vi.fn(), finish: vi.fn(), abort: vi.fn(),
-  list: vi.fn(), prepare: vi.fn(), activate: vi.fn(), rollback: vi.fn(), finalize: vi.fn(),
+  list: vi.fn(), getBlob: vi.fn(), prepare: vi.fn(), activate: vi.fn(), rollback: vi.fn(), finalize: vi.fn(),
   execute: vi.fn(), query: vi.fn(), exclusive: vi.fn(), pick: vi.fn(), source: vi.fn(),
   sourceRead: vi.fn(), close: vi.fn(), stage: vi.fn(), dispose: vi.fn(),
 }));
@@ -24,7 +24,7 @@ vi.mock("expo-document-picker", () => ({ getDocumentAsync: mocks.pick }));
 vi.mock("@/database/client", () => ({ query: mocks.query, execute: mocks.execute, transaction: (fn: () => void) => fn() }));
 vi.mock("@/services/fileStorageService", () => ({
   mimeTypeForName: () => "video/mp4",
-  fileStorageService: { list: mocks.list, prepareRestore: mocks.prepare, withExclusiveFiles: mocks.exclusive },
+  fileStorageService: { list: mocks.list, getBlob: mocks.getBlob, prepareRestore: mocks.prepare, withExclusiveFiles: mocks.exclusive },
 }));
 vi.mock("./backupIO", () => ({
   invalidBackupMessage: "バックアップファイルが壊れているか、対応していない形式です。",
@@ -49,9 +49,14 @@ vi.mock("./backupIO", () => ({
   copyBackupEntry: async (source: { size: number; read: (offset: number, length: number) => Promise<Uint8Array> }, target: { write: (data: Uint8Array) => Promise<void> }) => {
     for (let offset = 0; offset < source.size; offset += 256 * 1024) await target.write(await source.read(offset, Math.min(256 * 1024, source.size - offset)));
   },
-  backupEntryBase64: async (source: { size: number; read: (offset: number, length: number) => Promise<Uint8Array> }) => {
-    const bytes = await source.read(0, source.size);
-    return Buffer.from(bytes).toString("base64");
+  backupEntryBlob: async (source: { size: number; slice?: (offset: number, length: number, mimeType?: string) => Blob;
+    read: (offset: number, length: number) => Promise<Uint8Array> }, mimeType: string) => {
+    if (source.slice) return source.slice(0, source.size, mimeType);
+    const parts: Blob[] = [];
+    for (let offset = 0; offset < source.size; offset += 256 * 1024) {
+      parts.push(new Blob([new Uint8Array(await source.read(offset, Math.min(256 * 1024, source.size - offset)))]));
+    }
+    return new Blob(parts, { type: mimeType });
   },
 }));
 
@@ -93,16 +98,20 @@ beforeEach(() => {
   mocks.finish.mockResolvedValue(undefined); mocks.abort.mockResolvedValue(undefined);
   mocks.dispose.mockResolvedValue(undefined);
   mocks.list.mockResolvedValue([]); mocks.query.mockReturnValue([]);
+  mocks.getBlob.mockResolvedValue(undefined);
   mocks.prepare.mockResolvedValue({ activate: mocks.activate, rollback: mocks.rollback, finalize: mocks.finalize });
   mocks.exclusive.mockImplementation(async (operation: () => Promise<unknown>) => operation());
   mocks.stage.mockResolvedValue({ uri: "file:///stage/", dispose: mocks.dispose });
-  mocks.source.mockImplementation(async (uri: string) => {
+  mocks.source.mockImplementation(async (uri: string, blob?: Blob) => {
     const bytes = mocks.sources.get(uri);
-    if (!bytes) throw new Error("missing source");
-    return { size: bytes.length, close: () => mocks.close(uri), read: async (offset: number, length: number) => {
+    if (!bytes && !blob) throw new Error("missing source");
+    const content = blob ?? (mocks.platform.OS === "web" ? new Blob([new Uint8Array(bytes!)]) : undefined);
+    return { size: content?.size ?? bytes!.length, close: () => mocks.close(uri),
+      ...(content ? { slice: (offset: number, length: number, mimeType?: string) => content.slice(offset, offset + length, mimeType) } : {}),
+      read: async (offset: number, length: number) => {
       if (length > 256 * 1024) throw new Error("unbounded read");
       mocks.sourceRead(uri, offset, length);
-      return bytes.subarray(offset, offset + length);
+      return content ? new Uint8Array(await content.slice(offset, offset + length).arrayBuffer()) : bytes!.subarray(offset, offset + length);
     } };
   });
 });
@@ -133,7 +142,7 @@ describe("bounded backup export and import", () => {
     const picked = await backupService.pick();
     expect(picked?.kind).toBe("complete");
     expect(picked?.files?.[0]).toMatchObject({ name: "動画.mp4", uri: "file:///stage/0" });
-    expect(join(mocks.staged.get("file:///stage/0")!)).toEqual(video);
+    expect(Buffer.compare(Buffer.from(join(mocks.staged.get("file:///stage/0")!)), Buffer.from(video))).toBe(0);
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
     await backupService.restore(picked!);
@@ -150,8 +159,42 @@ describe("bounded backup export and import", () => {
     select(join(mocks.chunks));
     mocks.platform.OS = "web";
     const picked = await backupService.pick();
-    expect(picked?.files?.[0]).toEqual({ name: "clip.mp4", size: 4, purpose: "punishment", mimeType: "video/mp4", data: "AQIDBA==" });
+    expect(picked?.files?.[0]).toEqual({ name: "clip.mp4", size: 4, purpose: "punishment", mimeType: "video/mp4", blob: expect.any(Blob) });
+    expect(new Uint8Array(await picked!.files![0].blob!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4]));
     expect(mocks.stage).not.toHaveBeenCalled();
+  });
+
+  it("keeps a large APP-to-Web restore binary and exports it back to the APP ZIP format", async () => {
+    const video = Uint8Array.from({ length: 6 * 1024 * 1024 + 19 }, (_, index) => index % 251);
+    mocks.sources.set("file:///video", video);
+    mocks.list.mockResolvedValue([{ name: "clip.mp4", uri: "file:///video", size: video.length, purpose: "training" }]);
+    await backupService.export("complete");
+    select(join(mocks.chunks));
+    mocks.platform.OS = "web";
+    const picked = await backupService.pick();
+    const file = picked!.files![0];
+    expect(file.blob).toBeInstanceOf(Blob);
+    expect(file.data).toBeUndefined();
+    expect(file.blob!.size).toBe(video.length);
+    expect(mocks.stage).not.toHaveBeenCalled();
+    await backupService.restore(picked!);
+    expect(mocks.prepare).toHaveBeenCalledWith(picked!.files);
+
+    const stored = { name: file.name, purpose: file.purpose, size: file.size, uri: "blob:stored" };
+    mocks.list.mockResolvedValue([stored]);
+    mocks.getBlob.mockResolvedValue(file.blob!.slice(0, file.size, "video/webm"));
+    mocks.chunks.length = 0;
+    await backupService.export("complete");
+    expect(mocks.getBlob).toHaveBeenCalledWith(stored);
+    const archive = join(mocks.chunks);
+    const entries = await readBackupArchive(reader(archive));
+    const manifest = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
+    expect(manifest.files[0].mimeType).toBe("video/webm");
+    select(archive);
+    mocks.platform.OS = "android";
+    const native = await backupService.pick();
+    expect(native!.files![0]).toMatchObject({ uri: "file:///stage/0", name: "clip.mp4", mimeType: "video/webm" });
+    expect(Buffer.compare(Buffer.from(join(mocks.staged.get("file:///stage/0")!)), Buffer.from(video))).toBe(0);
   });
 
   it("rejects a corrupt media entry and cleans staging before modifying current data", async () => {

@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { execute, query, transaction } from "@/database/client";
 import { fileStorageService, mimeTypeForName, type BackupStoredFile, type RestoreStoredFile } from "@/services/fileStorageService";
 import { readBackupArchive, writeBackupArchive, type RandomAccessReader } from "./backupArchive";
-import { backupEntryBase64, copyBackupEntry, createBackupOutput, createBackupStaging, invalidBackupMessage, openBackupSource, openNativeBackupWriter, readSmallBackup, type BackupSource } from "./backupIO";
+import { backupEntryBlob, copyBackupEntry, createBackupOutput, createBackupStaging, invalidBackupMessage, openBackupSource, openNativeBackupWriter, readSmallBackup, type BackupSource } from "./backupIO";
 
 const BACKUP_FORMAT = "nino-room-backup";
 const BACKUP_VERSION = 1;
@@ -76,10 +76,11 @@ async function exportFile(kind: BackupKind) {
   const files = kind === "complete" ? await fileStorageService.list() : [];
   const manifestFiles: ArchiveFile[] = [];
   for (const [index, file] of files.entries()) {
-    const source = await openBackupSource(file.uri);
+    const blob = await fileStorageService.getBlob(file);
+    const source = await openBackupSource(file.uri, blob);
     try {
       manifestFiles.push({ name: file.name, purpose: file.purpose, size: source.size,
-        mimeType: file.uri.startsWith("data:") ? file.uri.slice(5, file.uri.indexOf(";")) : mimeTypeForName(file.name),
+        mimeType: blob?.type || (file.uri.startsWith("data:") ? file.uri.slice(5, file.uri.indexOf(";")) : mimeTypeForName(file.name)),
         path: `files/${String(index).padStart(6, "0")}` });
     } finally { source.close(); }
   }
@@ -101,7 +102,7 @@ async function exportFile(kind: BackupKind) {
           async read(offset: number, length: number) {
             if (currentIndex !== index) {
               closeCurrent();
-              current = await openBackupSource(files[index].uri);
+              current = await openBackupSource(files[index].uri, await fileStorageService.getBlob(files[index]));
               currentIndex = index;
               if (current.size !== file.size) throw new Error(invalidBackupMessage);
             }
@@ -187,7 +188,7 @@ async function readArchive(source: BackupSource): Promise<PickedBackup> {
         try { await copyBackupEntry(entry, output); } finally { output.close(); }
         restored.push({ ...metadata, uri });
       } else {
-        restored.push({ ...metadata, data: await backupEntryBase64(entry) });
+        restored.push({ ...metadata, blob: await backupEntryBlob(entry, file.mimeType) });
       }
     }
     return { kind: payload.kind, payload, files: restored, dispose: stage?.dispose ?? (async () => {}) };
@@ -287,8 +288,8 @@ export const backupService = {
         } catch (error) {
           const rollbackErrors: unknown[] = [];
           const retry: (() => Promise<void>)[] = [];
-          // These share localStorage's quota on Web. Free changed settings
-          // before restoring the database and media.
+          // Settings and save data share localStorage's quota on Web. Free
+          // changed settings before restoring the database and media pointer.
           for (const rollback of [
             async () => { if (changingStorage) await replaceStorage(previous.asyncStorage); },
             async () => { if (databaseChanged) restoreDatabase(previous.database); },

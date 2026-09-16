@@ -437,6 +437,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   rhythmFrame: {
+    // Match the portrait-sized rail so a wider window cannot speed up its motion.
+    width: "100%",
+    maxWidth: 430,
+    alignSelf: "center",
     borderWidth: 1,
     borderColor: "#777",
     backgroundColor: "#151515",

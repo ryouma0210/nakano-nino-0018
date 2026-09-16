@@ -1,9 +1,9 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
+import { base64ToBlob, webFileStorage } from "./webFileStorage";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
-const webStorageKey = "nino-room-web-files-v2";
 export type FilePurpose = "training" | "punishment";
 
 function purposeDirectory(purpose: FilePurpose) {
@@ -25,7 +25,9 @@ async function ensurePurposeDirectory(purpose: FilePurpose) {
 export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose };
 export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; mimeType: string; data: string };
 export type RestoreStoredFile = Omit<BackupStoredFile, "data"> & (
-  { uri: string; data?: never } | { data: string; uri?: never }
+  { uri: string; data?: never; blob?: never }
+  | { data: string; uri?: never; blob?: never }
+  | { blob: Blob; uri?: never; data?: never }
 );
 export type PreparedFileRestore = {
   activate: () => Promise<void>;
@@ -100,33 +102,7 @@ export function mimeTypeForName(name: string) {
 }
 
 function webAvailable() {
-  return Platform.OS === "web" && typeof document !== "undefined" && typeof localStorage !== "undefined";
-}
-
-function webReadFiles(): StoredFile[] {
-  try {
-    return JSON.parse(localStorage.getItem(webStorageKey) ?? "[]") as StoredFile[];
-  } catch {
-    return [];
-  }
-}
-
-function webWriteFiles(files: StoredFile[]) {
-  // Quota errors must reach the caller; an unsuccessful write is not a save.
-  localStorage.setItem(webStorageKey, JSON.stringify(files));
-}
-
-function readWebFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("ファイルを読み込めませんでした。"));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("ファイルを読み込めませんでした。"));
-    reader.onabort = () => reject(new Error("ファイルを読み込めませんでした。"));
-    reader.readAsDataURL(file);
-  });
+  return Platform.OS === "web";
 }
 
 function webPickFiles(purpose: FilePurpose, onProgress?: ProgressHandler): Promise<FileImportResult | null> {
@@ -154,15 +130,13 @@ function webPickFiles(purpose: FilePurpose, onProgress?: ProgressHandler): Promi
         return;
       }
       const result = await storeSelectedFiles(selectedFiles, async (file) => {
-        const uri = await readWebFile(file);
-        const files = webReadFiles();
-        files.push({
+        await webFileStorage.put({
           name: storedFileName(file.name),
-          uri,
+          blob: file,
+          mimeType: file.type || mimeTypeForName(file.name),
           size: file.size,
           purpose,
         });
-        webWriteFiles(files);
       }, onProgress);
       finish(result);
     }, { once: true });
@@ -202,7 +176,8 @@ function validateRestoreFiles(files: readonly RestoreStoredFile[]) {
       || !["training", "punishment"].includes(file.purpose)
       || !Number.isSafeInteger(file.size) || file.size < 0
       || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
-      || (typeof file.data === "string") === (typeof file.uri === "string")
+      || [typeof file.data === "string", typeof file.uri === "string", typeof Blob !== "undefined" && file.blob instanceof Blob].filter(Boolean).length !== 1
+      || (file.blob !== undefined && (!webAvailable() || file.blob.size !== file.size))
       || (typeof file.uri === "string" && !file.uri.startsWith("file://") && !file.uri.startsWith("content://"))) {
       throw new Error(invalidRestoreFilesMessage);
     }
@@ -232,26 +207,12 @@ async function cleanupRestoreDirectory(uri: string) {
 async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<PreparedFileRestore> {
   validateRestoreFiles(files);
   if (webAvailable()) {
-    const previous = webReadFiles();
-    const restored = files.map((file): StoredFile => {
-      if (typeof file.data !== "string") throw new Error(invalidRestoreFilesMessage);
-      return { name: file.name, size: file.size, purpose: file.purpose, uri: `data:${file.mimeType};base64,${file.data}` };
+    const restored = files.map((file) => {
+      const blob = file.blob ?? (typeof file.data === "string" ? base64ToBlob(file.data, file.mimeType, file.size) : undefined);
+      if (!blob) throw new Error(invalidRestoreFilesMessage);
+      return { name: file.name, size: file.size, purpose: file.purpose, mimeType: file.mimeType, blob };
     });
-    let state: "prepared" | "active" | "closed" = "prepared";
-    return {
-      async activate() {
-        if (state !== "prepared") return;
-        // localStorage.setItem is atomic: quota errors leave the previous value intact.
-        webWriteFiles(restored);
-        state = "active";
-      },
-      async rollback() {
-        if (state === "closed") return;
-        if (state === "active") webWriteFiles(previous);
-        state = "closed";
-      },
-      async finalize() { state = "closed"; },
-    };
+    return webFileStorage.prepareRestore(restored);
   }
 
   const token = `${Date.now()}-${restoreSequence++}-${Math.random().toString(36).slice(2)}`;
@@ -267,8 +228,10 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
       const destination = `${stageDirectory}${file.purpose}/${encodeURIComponent(file.name)}`;
       if (typeof file.uri === "string") {
         await FileSystem.copyAsync({ from: file.uri, to: destination });
-      } else {
+      } else if (typeof file.data === "string") {
         await FileSystem.writeAsStringAsync(destination, file.data, { encoding: FileSystem.EncodingType.Base64 });
+      } else {
+        throw new Error(invalidRestoreFilesMessage);
       }
       const info = await FileSystem.getInfoAsync(destination);
       if (!info.exists || info.isDirectory || info.size !== file.size) throw new Error(invalidRestoreFilesMessage);
@@ -370,7 +333,7 @@ export const fileStorageService = {
 
   async list(purpose?: FilePurpose): Promise<StoredFile[]> {
     if (webAvailable()) {
-      return webReadFiles()
+      return (await webFileStorage.list())
         .filter((file) => !purpose || file.purpose === purpose)
         .sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -381,6 +344,10 @@ export const fileStorageService = {
     return [...legacyFiles, ...trainingFiles, ...punishmentFiles]
       .filter((file) => !purpose || file.purpose === purpose)
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
+  async getBlob(file: Pick<StoredFile, "name" | "purpose">): Promise<Blob | undefined> {
+    return webAvailable() ? webFileStorage.getBlob(file) : undefined;
   },
 
   async pickAndStore(purpose: FilePurpose = "training", onProgress?: ProgressHandler): Promise<FileImportResult | null> {
@@ -420,8 +387,7 @@ export const fileStorageService = {
 
   async remove(file: StoredFile) {
     if (webAvailable()) {
-      // Identical file contents share a data URL, but are separate stored entries.
-      webWriteFiles(webReadFiles().filter((entry) => entry.name !== file.name || entry.purpose !== file.purpose));
+      await webFileStorage.remove(file);
       return;
     }
     await FileSystem.deleteAsync(file.uri, { idempotent: true });
@@ -452,7 +418,7 @@ export const fileStorageService = {
 
   async clear() {
     if (webAvailable()) {
-      webWriteFiles([]);
+      await webFileStorage.clear();
       return;
     }
     await FileSystem.deleteAsync(uploadDirectory, { idempotent: true });
