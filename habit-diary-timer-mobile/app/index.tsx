@@ -22,10 +22,13 @@ import {
   type LoginBonusStatus,
 } from "@/repositories/loginBonusRepository";
 import { reportRepository } from "@/repositories/reportRepository";
+import { useDesktopLayout } from "@/hooks/useDesktopLayout";
 
 let startupLoginBonusModalShown = false;
 
 export default function Index() {
+  const { isDesktop, height } = useDesktopLayout();
+  const desktopContentHeight = Math.max(1, height - 112);
   const [exitConfirmation, setExitConfirmation] = useState(false);
   const [loginBonusVisible, setLoginBonusVisible] = useState(false);
   const [loginBonusStatus, setLoginBonusStatus] = useState<LoginBonusStatus | null>(null);
@@ -83,32 +86,41 @@ export default function Index() {
 
   return (
     <Screen>
-      <View style={styles.start}>
-        <AppText style={styles.title}>Nino Room</AppText>
+      <View style={[
+        styles.start,
+        isDesktop && [styles.desktopStart, { minHeight: desktopContentHeight }],
+      ]}>
+        {!isDesktop && <AppText style={styles.title}>Nino Room</AppText>}
         <Image
           source={require("../assets/characters/home-nino.png")}
-          style={styles.hero}
-          resizeMode="cover"
+          style={[
+            styles.hero,
+            isDesktop && [styles.desktopHero, { height: Math.min(760, desktopContentHeight) }],
+          ]}
+          resizeMode={isDesktop ? "contain" : "cover"}
         />
-        <View style={styles.menu}>
-          <PrimaryButton
-            title="始める"
-            tone="secondary"
-            onPress={() => router.replace("/(tabs)")}
-          />
-          <PrimaryButton
-            title="アプリ設定"
-            onPress={() => router.push("/sound-settings")}
-          />
-          <PrimaryButton
-            title="ゲーム終了"
-            onPress={() => setExitConfirmation(true)}
-            tone="danger"
-          />
+        <View style={[styles.startActions, isDesktop && styles.desktopActions]}>
+          {isDesktop && <AppText style={styles.title}>Nino Room</AppText>}
+          <View style={styles.menu}>
+            <PrimaryButton
+              title="始める"
+              tone="secondary"
+              onPress={() => router.replace("/(tabs)")}
+            />
+            <PrimaryButton
+              title="アプリ設定"
+              onPress={() => router.push("/sound-settings")}
+            />
+            <PrimaryButton
+              title="ゲーム終了"
+              onPress={() => setExitConfirmation(true)}
+              tone="danger"
+            />
+          </View>
+          <AppText style={styles.version}>
+            Ver:{Constants.expoConfig?.version ?? "-"}
+          </AppText>
         </View>
-        <AppText style={styles.version}>
-          Ver:{Constants.expoConfig?.version ?? "-"}
-        </AppText>
       </View>
       <ConfirmModal
         visible={exitConfirmation}
@@ -191,6 +203,16 @@ export default function Index() {
 
 const styles = StyleSheet.create({
   start: { minHeight: 620, justifyContent: "center", gap: 24 },
+  desktopStart: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 1200,
+    gap: 48,
+  },
+  startActions: { gap: 24 },
+  desktopActions: { flex: 1, minWidth: 300, maxWidth: 400, gap: 32 },
   title: {
     color: lightTheme.text,
     fontSize: 34,
@@ -207,6 +229,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#000",
   },
+  desktopHero: { flex: 1, width: 0, minWidth: 0, maxWidth: 720 },
   menu: { gap: 16 },
   version: {
     alignSelf: "flex-end",

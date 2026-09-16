@@ -6,6 +6,7 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Screen } from "@/components/Screen";
+import { DesktopDisplaySettings } from "@/components/DesktopDisplaySettings";
 import { execute } from "@/database/client";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
@@ -221,6 +222,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   return (
     <Screen>
       <AppText variant="title">アプリ設定</AppText>
+      <DesktopDisplaySettings />
       <Card>
         <AppText variant="subtitle">サウンド設定</AppText>
         <View style={styles.audioRow}>

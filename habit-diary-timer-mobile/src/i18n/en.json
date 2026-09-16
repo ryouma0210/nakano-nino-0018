@@ -1938,5 +1938,15 @@
   "抽選は1日1回です。": "You can spin once per day.",
   "本日の命令を読み込めませんでした。": "Could not load today's order.",
   "保存済みの命令と一致しません。再読み込みしてください。": "This does not match the saved order. Please reload.",
-  "スライム倒し": "Slime hunting"
+  "スライム倒し": "Slime hunting",
+  "画面表示": "Display",
+  "全画面表示": "Full screen",
+  "F11キーでも切り替えできます。表示状態は次回起動時にも引き継ぎます。": "You can also press F11 to switch. Your display settings are kept for the next launch.",
+  "Escキーでも全画面表示を終了できます。": "You can also press Esc to exit full screen.",
+  "表示倍率": "Zoom",
+  "標準に戻す": "Reset to 100%",
+  "画面設定を読み込めませんでした。": "Could not load display settings.",
+  "画面設定を変更できませんでした。": "Could not change display settings.",
+  "拡大": "Zoom in",
+  "縮小": "Zoom out"
 }

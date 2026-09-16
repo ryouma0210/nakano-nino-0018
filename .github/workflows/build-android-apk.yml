@@ -38,7 +38,12 @@ jobs:
           java-version: 17
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          # Keep the command-line tools version used by the existing Java 17 build.
+          cmdline-tools-version: '12266719'
+          # The default includes the retired "tools" package, which sdkmanager cannot find.
+          packages: platform-tools
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
