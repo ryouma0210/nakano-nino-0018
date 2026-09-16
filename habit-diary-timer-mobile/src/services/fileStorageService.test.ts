@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fileStorageService, type RestoreStoredFile, type StoredFile } from "./fileStorageService";
+import { IDBFactory, IDBKeyRange, IDBObjectStore } from "fake-indexeddb";
+import type { RestoreStoredFile, StoredFile } from "./fileStorageService";
+
+let fileStorageService: typeof import("./fileStorageService").fileStorageService;
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" },
@@ -37,8 +40,12 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetAllMocks();
+  vi.resetModules();
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+  ({ fileStorageService } = await import("./fileStorageService"));
   mocks.platform.OS = "android";
   mocks.info.mockResolvedValue({ exists: true, isDirectory: true });
   mocks.mkdir.mockResolvedValue(undefined);
@@ -302,8 +309,6 @@ describe("native file imports", () => {
   });
 });
 
-type SelectedWebFile = { name: string; size: number; data: string };
-
 function createWebPicker() {
   mocks.platform.OS = "web";
   const listeners = new Map<string, () => unknown>();
@@ -312,7 +317,7 @@ function createWebPicker() {
     accept: "",
     multiple: false,
     style: { display: "" },
-    files: [] as SelectedWebFile[],
+    files: [] as File[],
     click: vi.fn(),
     remove: vi.fn(),
     addEventListener: vi.fn((event: string, listener: () => unknown) => {
@@ -330,16 +335,7 @@ function createWebPicker() {
   vi.stubGlobal("localStorage", {
     getItem: vi.fn((key: string) => storage.get(key) ?? null),
     setItem,
-  });
-  vi.stubGlobal("FileReader", class {
-    result: string | null = null;
-    onload: (() => void) | null = null;
-    readAsDataURL(file: SelectedWebFile) {
-      queueMicrotask(() => {
-        this.result = `data:video/mp4;base64,${file.data}`;
-        this.onload?.();
-      });
-    }
+    removeItem: vi.fn((key: string) => { storage.delete(key); }),
   });
   return {
     input,
@@ -360,7 +356,6 @@ describe("web file imports", () => {
     const maintenanceChanged = vi.fn();
     const unsubscribe = fileStorageService.subscribeMaintenance(maintenanceChanged);
     const restored = { name: "restored.mp4", size: 3, purpose: "training" as const, mimeType: "video/mp4", data: "b25l" };
-    const restoredFile: StoredFile = { name: restored.name, size: 3, purpose: "training", uri: "data:video/mp4;base64,b25l" };
     const restoredReady = deferred<void>();
     const finishMaintenance = deferred<void>();
     const maintenance = fileStorageService.withExclusiveFiles(async () => {
@@ -370,6 +365,8 @@ describe("web file imports", () => {
       return fileStorageService.list();
     });
     await restoredReady.promise;
+    const [restoredFile] = await fileStorageService.list();
+    expect(await (await fileStorageService.getBlob(restoredFile))?.text()).toBe("one");
     try {
       expect(fileStorageService.getMaintenanceState()).toEqual({ active: true, revision: initialRevision });
       await expect(fileStorageService.pickAndStore()).rejects.toThrow("ファイルを処理中です。");
@@ -403,18 +400,21 @@ describe("web file imports", () => {
     expect(web.input.multiple).toBe(true);
     expect(web.input.click).toHaveBeenCalledOnce();
     web.input.files = [
-      { name: "first.mp4", size: 3, data: "b25l" },
-      { name: "second.mp4", size: 3, data: "dHdv" },
+      new File(["one"], "first.mp4", { type: "video/mp4" }),
+      new File(["two"], "second.mp4", { type: "video/mp4" }),
     ];
     await web.emit("change");
 
     await expect(result).resolves.toEqual({ stored: 2, failed: [] });
     const allFiles = await fileStorageService.list();
     expect(allFiles).toHaveLength(3);
-    expect(await fileStorageService.list("punishment")).toEqual(expect.arrayContaining([
-      expect.objectContaining({ uri: "data:video/mp4;base64,b25l", size: 3, purpose: "punishment" }),
-      expect.objectContaining({ uri: "data:video/mp4;base64,dHdv", size: 3, purpose: "punishment" }),
-    ]));
+    const imported = await fileStorageService.list("punishment");
+    expect(imported).toHaveLength(2);
+    expect(imported.every((file) => file.uri.startsWith("blob:") && file.size === 3)).toBe(true);
+    expect(await Promise.all(imported.map(async (file) => (await fileStorageService.getBlob(file))?.text())))
+      .toEqual(["one", "two"]);
+    expect(web.setItem).not.toHaveBeenCalled();
+    expect(web.storage.has(webStorageKey)).toBe(false);
     expect(onProgress.mock.calls.map(([progress]) => progress)).toEqual([
       { completed: 0, total: 2 }, { completed: 1, total: 2 }, { completed: 2, total: 2 },
     ]);
@@ -438,23 +438,24 @@ describe("web file imports", () => {
     web.storage.set(webStorageKey, JSON.stringify([
       { name: "existing.mp4", uri: "data:video/mp4;base64,b2xk", size: 3, purpose: "training" },
     ]));
-    web.setItem.mockImplementation((key, value) => {
-      if (value.includes("bGFyZ2U=")) throw new Error("QuotaExceededError");
-      web.storage.set(key, value);
+    const originalAdd = IDBObjectStore.prototype.add;
+    vi.spyOn(IDBObjectStore.prototype, "add").mockImplementation(function (this: IDBObjectStore, value, key) {
+      if (value.name?.endsWith("too-large.mp4")) throw new DOMException("QuotaExceededError", "QuotaExceededError");
+      return originalAdd.call(this, value, key);
     });
     const result = fileStorageService.pickAndStore();
     web.input.files = [
-      { name: "first.mp4", size: 3, data: "b25l" },
-      { name: "too-large.mp4", size: 1000000, data: "bGFyZ2U=" },
-      { name: "last.mp4", size: 3, data: "dHdv" },
+      new File(["one"], "first.mp4", { type: "video/mp4" }),
+      new File(["large"], "too-large.mp4", { type: "video/mp4" }),
+      new File(["two"], "last.mp4", { type: "video/mp4" }),
     ];
 
     await web.emit("change");
 
     await expect(result).resolves.toEqual({ stored: 2, failed: ["too-large.mp4"] });
-    expect((await fileStorageService.list()).map((file) => file.uri).sort()).toEqual([
-      "data:video/mp4;base64,b2xk", "data:video/mp4;base64,b25l", "data:video/mp4;base64,dHdv",
-    ].sort());
+    const remaining = await fileStorageService.list();
+    const contents = await Promise.all(remaining.map(async (file) => (await fileStorageService.getBlob(file))?.text()));
+    expect(contents.sort()).toEqual(["old", "one", "two"]);
     expect(web.input.remove).toHaveBeenCalledOnce();
   });
 
@@ -468,10 +469,12 @@ describe("web file imports", () => {
 
     await fileStorageService.remove(selected);
 
-    expect(JSON.parse(web.storage.get(webStorageKey) ?? "[]")).toEqual([sameRoom, otherRoom]);
+    expect(web.storage.has(webStorageKey)).toBe(false);
     const remaining = await fileStorageService.list();
     expect(remaining).toHaveLength(2);
-    expect(remaining).toEqual(expect.arrayContaining([sameRoom, otherRoom]));
+    expect(remaining.map(({ name, purpose }) => ({ name, purpose }))).toEqual(expect.arrayContaining([
+      { name: sameRoom.name, purpose: sameRoom.purpose }, { name: otherRoom.name, purpose: otherRoom.purpose },
+    ]));
   });
 });
 
@@ -670,7 +673,7 @@ describe("prepared file restoration", () => {
     expect(nativeFiles.has(oldFile)).toBe(false);
   });
 
-  it("preserves browser media when replacement exceeds localStorage quota", async () => {
+  it("restores binary browser media even when localStorage writes have no space", async () => {
     const web = createWebPicker();
     const initial = [{ name: "old.mp4", size: 3, purpose: "training", uri: "data:video/mp4;base64,b2xk" }];
     web.storage.set(webStorageKey, JSON.stringify(initial));
@@ -679,9 +682,13 @@ describe("prepared file restoration", () => {
     ]);
     expect(web.setItem).not.toHaveBeenCalled();
     web.setItem.mockImplementation(() => { throw new Error("QuotaExceededError"); });
-    await expect(prepared.activate()).rejects.toThrow("QuotaExceededError");
+    await prepared.activate();
+    expect((await fileStorageService.list())[0].name).toBe("new.mp4");
     await prepared.rollback();
-    expect(await fileStorageService.list()).toEqual(initial);
+    const [old] = await fileStorageService.list();
+    expect(old.name).toBe("old.mp4");
+    expect(await (await fileStorageService.getBlob(old))?.text()).toBe("old");
+    expect(web.setItem).not.toHaveBeenCalled();
   });
 
   it("rolls browser media back when subsequent data restoration fails", async () => {
@@ -695,6 +702,8 @@ describe("prepared file restoration", () => {
     expect((await fileStorageService.list())[0].name).toBe("new.mp4");
     await prepared.rollback();
     await prepared.rollback();
-    expect(await fileStorageService.list()).toEqual(initial);
+    const [old] = await fileStorageService.list();
+    expect(old.name).toBe("old.mp4");
+    expect(await (await fileStorageService.getBlob(old))?.text()).toBe("old");
   });
 });

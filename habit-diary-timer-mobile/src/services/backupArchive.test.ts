@@ -82,6 +82,25 @@ describe("streamed backup ZIP format", () => {
     expect(await readBackupArchive(bytesReader(await archive([])))).toEqual([]);
   });
 
+  it("maps Blob views to entry boundaries and prevents exposing neighbouring files", async () => {
+    const bytes = await archive([source("files/first", "secret-before"), source("files/second", "second-body")]);
+    const blob = new Blob([new Uint8Array(bytes)]);
+    const slice = vi.fn((offset: number, length: number, mimeType?: string) => blob.slice(offset, offset + length, mimeType));
+    const entries = await readBackupArchive({ ...bytesReader(bytes), slice });
+    const entry = entries[1];
+    const body = entry.slice!(0, entry.size, "text/plain");
+    expect(await body.text()).toBe("second-body");
+    expect(body.type).toBe("text/plain");
+    expect(await entry.slice!(7, 4).text()).toBe("body");
+    expect(entry.slice!(entry.size, 0).size).toBe(0);
+    for (const [offset, length] of [[-1, 1], [0, entry.size + 1], [entry.size, 1], [0.5, 1], [0, Infinity]]) {
+      expect(() => entry.slice!(offset, length)).toThrow("range");
+    }
+    expect(slice).toHaveBeenCalledTimes(3);
+    const [nativeEntry] = await readBackupArchive(bytesReader(bytes));
+    expect(nativeEntry.slice).toBeUndefined();
+  });
+
   it("accepts central directory entries in a different order from their local files", async () => {
     const bytes = await archive();
     const offset = directoryOffset(bytes);

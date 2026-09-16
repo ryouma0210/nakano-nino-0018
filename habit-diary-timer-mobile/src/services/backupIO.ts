@@ -8,9 +8,9 @@ export const IO_CHUNK_SIZE = 256 * 1024;
 export type BackupSource = RandomAccessReader & { close: () => void };
 export const invalidBackupMessage = "バックアップファイルが壊れているか、対応していない形式です。";
 
-function bounds(size: number, offset: number, length: number) {
+function bounds(size: number, offset: number, length: number, limit = IO_CHUNK_SIZE) {
   if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0
-    || length > IO_CHUNK_SIZE || offset + length > size) throw new Error(invalidBackupMessage);
+    || length > limit || offset + length > size) throw new Error(invalidBackupMessage);
 }
 
 function cooperativeYield() {
@@ -51,6 +51,10 @@ export async function openBackupSource(uri: string, blob?: Blob): Promise<Backup
     const content = blob ?? await (await fetch(uri)).blob();
     return {
       size: content.size, close() {},
+      slice(offset, length, mimeType) {
+        bounds(content.size, offset, length, content.size);
+        return content.slice(offset, offset + length, mimeType);
+      },
       async read(offset, length) {
         bounds(content.size, offset, length);
         return new Uint8Array(await content.slice(offset, offset + length).arrayBuffer());
@@ -112,6 +116,24 @@ export async function copyBackupEntry(source: RandomAccessReader, target: Archiv
   for (let offset = 0; offset < source.size; offset += IO_CHUNK_SIZE) {
     await target.write(await source.read(offset, Math.min(IO_CHUNK_SIZE, source.size - offset)));
   }
+}
+
+/** Keep Web attachments binary. Blob-backed archives can expose a view of the file directly. */
+export async function backupEntryBlob(source: RandomAccessReader, mimeType: string): Promise<Blob> {
+  if (!Number.isSafeInteger(source.size) || source.size < 0) throw new Error(invalidBackupMessage);
+  if (source.slice) {
+    const blob = source.slice(0, source.size, mimeType);
+    if (blob.size !== source.size) throw new Error(invalidBackupMessage);
+    return blob;
+  }
+  const parts: Blob[] = [];
+  for (let offset = 0; offset < source.size; offset += IO_CHUNK_SIZE) {
+    const length = Math.min(IO_CHUNK_SIZE, source.size - offset);
+    const bytes = await source.read(offset, length);
+    if (bytes.length !== length) throw new Error(invalidBackupMessage);
+    parts.push(new Blob([new Uint8Array(bytes)]));
+  }
+  return new Blob(parts, { type: mimeType });
 }
 
 export async function backupEntryBase64(source: RandomAccessReader) {

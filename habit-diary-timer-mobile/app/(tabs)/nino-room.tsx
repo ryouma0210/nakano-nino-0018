@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,9 @@ import {
 
 type Panel = "outfits" | null;
 type MediaMode = "image" | "video";
+// Desktop windows can be much wider than the portrait artwork. Fit the entire
+// image/video inside the available height instead of cropping it to fill width.
+const outfitFit = Platform.OS === "web" ? "contain" : "cover";
 
 export default function NinoRoomScreen() {
   const insets = useSafeAreaInsets();
@@ -131,7 +135,7 @@ export default function NinoRoomScreen() {
         ) : (
           <Image
             source={selectedOutfit.source}
-            resizeMode="cover"
+            resizeMode={outfitFit}
             style={styles.backgroundMedia}
           />
         )}
@@ -141,6 +145,7 @@ export default function NinoRoomScreen() {
         pointerEvents="box-none"
         style={[
           styles.overlay,
+          Platform.OS === "web" && styles.webOverlay,
           {
             paddingTop: Math.max(10, insets.top),
             paddingBottom: Math.max(10, insets.bottom),
@@ -273,7 +278,7 @@ function NinoOutfitVideo({ source }: { source: number }) {
     <VideoView
       player={player}
       nativeControls={false}
-      contentFit="cover"
+      contentFit={outfitFit}
       style={styles.backgroundMedia}
     />
   );
@@ -327,6 +332,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "space-between",
     paddingHorizontal: 14,
+  },
+  webOverlay: {
+    width: "100%",
+    maxWidth: 960,
+    alignSelf: "center",
   },
   topBar: {
     zIndex: 3,

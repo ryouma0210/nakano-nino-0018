@@ -377,50 +377,52 @@ export function TrainingVideo({
   );
 
   const rhythmGauge = (
-    <View style={[styles.rhythmFrame, started && styles.fullscreenRhythm]}>
-      <View style={styles.rhythmTitle}>
-        <View style={styles.rhythmTitleGroup}>
-          <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
-          <AppText style={styles.rhythmElapsedText}>
-            経過時間 {secondsToClock(sessionElapsedSeconds)}
-          </AppText>
+    <View style={[styles.rhythmWrap, started && styles.fullscreenRhythm]}>
+      <View style={styles.rhythmFrame}>
+        <View style={styles.rhythmTitle}>
+          <View style={styles.rhythmTitleGroup}>
+            <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
+            <AppText style={styles.rhythmElapsedText}>
+              経過時間 {secondsToClock(sessionElapsedSeconds)}
+            </AppText>
+          </View>
+          <AppText style={styles.rhythmSubText}>ピンクのポイントで消滅</AppText>
         </View>
-        <AppText style={styles.rhythmSubText}>ピンクのポイントで消滅</AppText>
-      </View>
-      <View
-        accessibilityLabel="動画に同期したリズムゲージ"
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-        style={styles.track}
-      >
-        <View style={styles.line} />
-        <View style={styles.hitPoint} />
-        {Array.from({ length: markerCount }, (_, index) => {
-          const offset = markerOffsets[index];
-          if (started && !gaugeStarted) return null;
-          if (started && gaugeElapsed < offset * 5) return null;
-          const phase = (gaugeProgress - offset + 1) % 1;
-          const markerWidth = started ? 74 : 52;
-          const markerCenter = markerWidth / 2;
-          const travelWidth = Math.max(0, trackWidth - markerWidth - 4);
-          const left = markerCenter + (1 - phase) * travelWidth;
-          const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
-          return (
-            <View
-              key={index}
-              style={[
-                styles.rhythmMarker,
-                started && styles.fullscreenRhythmMarker,
-                { left, opacity },
-              ]}
-            >
-              <Image
-                source={require("../../assets/ui/rhythm-heart.png")}
-                style={styles.rhythmMarkerImage}
-                resizeMode="contain"
-              />
-            </View>
-          );
-        })}
+        <View
+          accessibilityLabel="動画に同期したリズムゲージ"
+          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+          style={styles.track}
+        >
+          <View style={styles.line} />
+          <View style={styles.hitPoint} />
+          {Array.from({ length: markerCount }, (_, index) => {
+            const offset = markerOffsets[index];
+            if (started && !gaugeStarted) return null;
+            if (started && gaugeElapsed < offset * 5) return null;
+            const phase = (gaugeProgress - offset + 1) % 1;
+            const markerWidth = started ? 74 : 52;
+            const markerCenter = markerWidth / 2;
+            const travelWidth = Math.max(0, trackWidth - markerWidth - 4);
+            const left = markerCenter + (1 - phase) * travelWidth;
+            const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.rhythmMarker,
+                  started && styles.fullscreenRhythmMarker,
+                  { left, opacity },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/ui/rhythm-heart.png")}
+                  style={styles.rhythmMarkerImage}
+                  resizeMode="contain"
+                />
+              </View>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -623,9 +625,15 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
   },
-  rhythmFrame: {
+  rhythmWrap: {
     marginHorizontal: 14,
     marginTop: 14,
+  },
+  rhythmFrame: {
+    // Keep the travel distance readable without changing the rhythm timing.
+    width: "100%",
+    maxWidth: 430,
+    alignSelf: "center",
     borderWidth: 1,
     borderColor: "#777",
     backgroundColor: "#151515",

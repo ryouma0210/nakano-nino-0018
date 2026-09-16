@@ -19,6 +19,8 @@ export type RandomAccessReader = {
   size: number;
   /** May return fewer bytes than requested, but never more. */
   read: (offset: number, length: number) => Promise<Uint8Array>;
+  /** Optional immutable binary view, without loading the selected range into JS memory. */
+  slice?: (offset: number, length: number, mimeType?: string) => Blob;
 };
 
 export type ArchiveWriter = { write: (chunk: Uint8Array) => Promise<void> };
@@ -319,6 +321,12 @@ export async function readBackupArchive(reader: RandomAccessReader): Promise<Bac
   return parsed.map((entry) => ({
     name: entry.name,
     size: entry.size,
+    ...(reader.slice ? {
+      slice: (offset: number, length: number, mimeType?: string) => {
+        checkRange(entry.size, offset, length);
+        return reader.slice!(entry.dataOffset + offset, length, mimeType);
+      },
+    } : {}),
     read: async (offset: number, length: number) => {
       checkRange(entry.size, offset, length);
       if (length > BACKUP_ARCHIVE_CHUNK_SIZE) invalid("entry reads must use bounded chunks");
