@@ -1948,5 +1948,14 @@
   "画面設定を読み込めませんでした。": "Could not load display settings.",
   "画面設定を変更できませんでした。": "Could not change display settings.",
   "拡大": "Zoom in",
-  "縮小": "Zoom out"
+  "縮小": "Zoom out",
+  "前へ": "Previous",
+  "次へ": "Next",
+  "左右にスワイプして切り替え": "Swipe left or right to switch files",
+  "処理中...": "Processing...",
+  "完全バックアップはZIP形式、セーブデータのみはJSON形式で保存します。": "Complete backups are saved as ZIP files; save data backups are saved as JSON files.",
+  "旧形式のバックアップが大きすぎます。この端末では読み込めません。元の端末で新しい完全バックアップを作成してください。": "This backup uses an older format and is too large to open on this device. Create a new complete backup on the original device.",
+  "バックアップのセーブデータが大きすぎます。": "The save data in this backup is too large.",
+  "バックアップファイルが壊れているか、対応していない形式です。": "The backup file is damaged or uses an unsupported format.",
+  "復元前のデータに戻せませんでした。アプリを閉じず、バックアップを保管してください。": "Could not recover the data from before the restore. Keep the app open and keep your backup file."
 }

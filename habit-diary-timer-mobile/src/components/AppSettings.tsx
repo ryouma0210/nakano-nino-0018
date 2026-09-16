@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Switch, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -16,7 +16,7 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { contractService, dailyOrderService } from "@/services/gameRoomService";
 import { useAppModal } from "@/components/AppModalProvider";
 import { toDateTimeKey } from "@/utils/date";
-import { backupService, type BackupKind, type BackupPayload, type BackupExportInfo } from "@/services/backupService";
+import { backupService, type BackupKind, type PickedBackup, type BackupExportInfo } from "@/services/backupService";
 
 type PartialResetKey =
   | "records"
@@ -37,6 +37,14 @@ const partialResetItems: {
   { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画" },
 ];
 
+async function disposeBackup(backup: PickedBackup | null) {
+  try {
+    await backup?.dispose();
+  } catch (error) {
+    console.warn("Could not remove temporary backup files", error);
+  }
+}
+
 export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   const { settings, updateAudioSettings } = useAppAudio();
   const { showNotice, showError } = useAppModal();
@@ -45,7 +53,10 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   const [partialResetConfirmation, setPartialResetConfirmation] = useState(false);
   const [partialSelection, setPartialSelection] = useState<PartialResetKey[]>([]);
   const [showResetOptions, setShowResetOptions] = useState(false);
-  const [pendingRestore, setPendingRestore] = useState<BackupPayload | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<PickedBackup | null>(null);
+  const pendingRestoreRef = useRef<PickedBackup | null>(null);
+  const operationBusyRef = useRef(false);
+  const mountedRef = useRef(true);
   const [backupBusy, setBackupBusy] = useState(false);
   const [lastBackup, setLastBackup] = useState<BackupExportInfo | null>(null);
   const [backupHistoryStatus, setBackupHistoryStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -53,6 +64,15 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
     fileStorageService.totalSize().then(setCacheSize);
   }, []);
   useEffect(loadSize, [loadSize]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const pending = pendingRestoreRef.current;
+      pendingRestoreRef.current = null;
+      void disposeBackup(pending);
+    };
+  }, []);
   useFocusEffect(loadSize);
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -69,13 +89,27 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   }, []));
 
   function resetAll() {
+    if (operationBusyRef.current) return;
     setResetConfirmation(true);
   }
 
+  function beginOperation() {
+    if (operationBusyRef.current || !mountedRef.current) return false;
+    operationBusyRef.current = true;
+    setBackupBusy(true);
+    return true;
+  }
+
+  function finishOperation() {
+    operationBusyRef.current = false;
+    if (mountedRef.current) setBackupBusy(false);
+  }
+
   async function exportBackup(kind: BackupKind) {
+    if (!beginOperation()) return;
     try {
-      setBackupBusy(true);
       const result = await backupService.export(kind);
+      if (!mountedRef.current) return;
       if (result.historySaved) {
         setLastBackup(result.info);
         setBackupHistoryStatus("ready");
@@ -89,41 +123,67 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           : "バックアップを書き出しましたが、日時を記録できませんでした。保存先にファイルがあることを確認してください。",
       );
     } catch (error) {
-      showError("バックアップに失敗しました", error);
+      if (mountedRef.current) showError("バックアップに失敗しました", error);
     } finally {
-      setBackupBusy(false);
+      finishOperation();
     }
   }
 
   async function selectRestoreFile() {
+    if (!beginOperation()) return;
+    let picked: PickedBackup | null = null;
     try {
-      const payload = await backupService.pick();
-      if (payload) setPendingRestore(payload);
+      picked = await backupService.pick();
+      if (!picked || !mountedRef.current) return;
+      const previous = pendingRestoreRef.current;
+      pendingRestoreRef.current = picked;
+      setPendingRestore(picked);
+      picked = null;
+      await disposeBackup(previous);
     } catch (error) {
-      showError("バックアップファイルを読み込めませんでした", error);
+      if (mountedRef.current) showError("バックアップファイルを読み込めませんでした", error);
+    } finally {
+      await disposeBackup(picked);
+      finishOperation();
+    }
+  }
+
+  async function cancelRestore() {
+    if (!beginOperation()) return;
+    const pending = pendingRestoreRef.current;
+    pendingRestoreRef.current = null;
+    setPendingRestore(null);
+    try {
+      await disposeBackup(pending);
+    } finally {
+      finishOperation();
     }
   }
 
   async function executeRestore() {
-    if (!pendingRestore) return;
+    const pending = pendingRestoreRef.current;
+    if (!pending || !beginOperation()) return;
+    // The service owns the selected files once restoration starts.
+    pendingRestoreRef.current = null;
+    setPendingRestore(null);
     try {
-      setBackupBusy(true);
-      const kind = await backupService.restore(pendingRestore);
+      const kind = await backupService.restore(pending);
       await updateAudioSettings(await settingsService.load());
+      if (!mountedRef.current) return;
       loadSize();
       showNotice(
         "復元完了",
         kind === "complete" ? "セーブデータと格納ファイルを復元しました。" : "セーブデータを復元しました。",
       );
     } catch (error) {
-      showError("バックアップの復元に失敗しました", error);
+      if (mountedRef.current) showError("バックアップの復元に失敗しました", error);
     } finally {
-      setPendingRestore(null);
-      setBackupBusy(false);
+      finishOperation();
     }
   }
 
   async function executeReset() {
+    if (!beginOperation()) return;
     try {
       await fileStorageService.withExclusiveFiles(async () => {
         execute("DELETE FROM timer_histories");
@@ -153,10 +213,13 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
       });
     } catch (error) {
       showError("全データ初期化に失敗しました", error);
+    } finally {
+      finishOperation();
     }
   }
 
   function togglePartial(key: PartialResetKey) {
+    if (operationBusyRef.current) return;
     setPartialSelection((current) =>
       current.includes(key)
         ? current.filter((item) => item !== key)
@@ -165,6 +228,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   }
 
   async function executePartialReset() {
+    if (!beginOperation()) return;
     try {
       await fileStorageService.withExclusiveFiles(async () => {
         const selected = new Set(partialSelection);
@@ -216,6 +280,8 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
       });
     } catch (error) {
       showError("一部データ初期化に失敗しました", error);
+    } finally {
+      finishOperation();
     }
   }
 
@@ -304,6 +370,12 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
         <AppText variant="muted">
           APP版とWEB版の間でデータを移行できます。復元すると現在のデータを上書きします。
         </AppText>
+        {backupBusy ? (
+          <View style={styles.processingRow} accessibilityLiveRegion="polite">
+            <ActivityIndicator color="#fff" />
+            <AppText>処理中...</AppText>
+          </View>
+        ) : null}
         <PrimaryButton
           title="セーブデータのみバックアップ"
           disabled={backupBusy}
@@ -317,6 +389,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           onPress={() => exportBackup("complete")}
         />
         <AppText variant="muted">セーブデータに加えて、格納した画像・動画・音声も保存します。</AppText>
+        <AppText variant="muted">完全バックアップはZIP形式、セーブデータのみはJSON形式で保存します。</AppText>
         <PrimaryButton
           title="バックアップから復元"
           tone="secondary"
@@ -338,6 +411,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
       <PrimaryButton
         title="初期化する"
         tone="danger"
+        disabled={backupBusy}
         onPress={() => setShowResetOptions((current) => !current)}
       />
       {showResetOptions ? (
@@ -350,6 +424,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
               return (
                 <Pressable
                   key={item.key}
+                  disabled={backupBusy}
                   onPress={() => togglePartial(item.key)}
                   style={styles.resetOption}
                 >
@@ -366,13 +441,14 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
             <PrimaryButton
               title="選択したデータを初期化"
               tone="danger"
-              disabled={partialSelection.length === 0}
+              disabled={backupBusy || partialSelection.length === 0}
               onPress={() => setPartialResetConfirmation(true)}
             />
           </Card>
           <PrimaryButton
             title="全データを初期化"
             tone="danger"
+            disabled={backupBusy}
             onPress={resetAll}
           />
         </>
@@ -410,7 +486,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           : "現在のセーブデータを、バックアップの内容で上書きします。格納ファイルは変更しません。"}
         confirmLabel="復元を実行"
         confirmTone="danger"
-        onCancel={() => setPendingRestore(null)}
+        onCancel={cancelRestore}
         onConfirm={executeRestore}
       />
       <ConfirmModal
@@ -476,6 +552,7 @@ function VolumeRow({
 }
 
 const styles = StyleSheet.create({
+  processingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   partialResetCard: { borderColor: "#ff3b45" },
   partialResetText: { color: "#ff3b45" },
   partialResetDescription: { color: "#d96a70" },
