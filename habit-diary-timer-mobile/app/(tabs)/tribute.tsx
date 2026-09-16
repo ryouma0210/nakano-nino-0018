@@ -36,7 +36,7 @@ function parseAmount(value: string) {
 
 function monthLabel(month: string, language: AppLanguage = "ja") {
   const [year, monthNumber] = month.split("-");
-  const locale = language === "en" ? "en-US" : language === "ko" ? "ko-KR" : "ja-JP";
+  const locale = language === "en" ? "en-US" : language === "ko" ? "ko-KR" : language === "zh" ? "zh-CN" : "ja-JP";
   return new Intl.DateTimeFormat(locale, { year: "numeric", month: "long" })
     .format(new Date(Number(year), Number(monthNumber) - 1, 1));
 }

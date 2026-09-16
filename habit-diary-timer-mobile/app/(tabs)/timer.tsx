@@ -88,15 +88,21 @@ export default function TimerScreen() {
   const gaugeSpeed = useRef<number>(gaugeSpeeds[0].value);
   const lastGaugeTick = useRef(0);
   const nextSpeedChangeAt = useRef(0);
-  const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
+  const {
+    playEffect,
+    playLoopAudio,
+    stopLoopAudio,
+    setSessionAudioActive,
+    settings,
+  } = useAppAudio();
   const { showNotice, showError } = useAppModal();
 
   useEffect(
     () => () => {
-      stopEffect("trainingStart");
+      stopLoopAudio();
       setSessionAudioActive(false);
     },
-    [setSessionAudioActive, stopEffect],
+    [setSessionAudioActive, stopLoopAudio],
   );
   useEffect(() => {
     contractService.load().then((contract) => {
@@ -189,15 +195,15 @@ export default function TimerScreen() {
     if (!running || remaining !== 0 || sessionRecorded.current) return;
     sessionRecorded.current = true;
     try {
-      achievementRepository.recordPunishment(totalSeconds);
+      achievementRepository.recordPunishment(totalSeconds, "completed");
     } catch (error) {
       showError("お仕置き記録の保存に失敗しました", error);
     }
-    stopEffect("trainingStart");
+    stopLoopAudio();
     setSessionAudioActive(false);
     playEffect("complete");
     setRunning(false);
-  }, [playEffect, remaining, running, setSessionAudioActive, showError, stopEffect, totalSeconds]);
+  }, [playEffect, remaining, running, setSessionAudioActive, showError, stopLoopAudio, totalSeconds]);
 
   function start() {
     const enteredMinutes = Number(minutes);
@@ -229,7 +235,7 @@ export default function TimerScreen() {
     setMarkerOffsets(createRandomMarkerOffsets(markerCount));
     sessionRecorded.current = false;
     setSessionAudioActive(true);
-    playEffect("trainingStart");
+    playLoopAudio("nippleScratch");
     setRunning(true);
   }
 
@@ -237,13 +243,13 @@ export default function TimerScreen() {
     const elapsedSeconds = totalSeconds - remaining;
     try {
       if (!sessionRecorded.current)
-        achievementRepository.recordPunishment(elapsedSeconds);
+        achievementRepository.recordPunishment(elapsedSeconds, "stopped");
     } catch (error) {
       showError("お仕置き記録の保存に失敗しました", error);
       return;
     }
     sessionRecorded.current = true;
-    stopEffect("trainingStart");
+    stopLoopAudio();
     setSessionAudioActive(false);
     setRunning(false);
     showNotice(

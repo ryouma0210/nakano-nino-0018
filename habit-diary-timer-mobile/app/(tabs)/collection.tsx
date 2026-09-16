@@ -187,7 +187,7 @@ export default function CollectionScreen() {
             {contract.allowChastity ? <AppText>・{chastityContractRule}</AppText> : null}
             <View style={styles.ruleDivider} />
             <AppText variant="label">契約上の追加ルール</AppText>
-            {additionalContractRules(contract).map((rule) => (
+            {additionalContractRules().map((rule) => (
               <AppText key={rule}>・{rule}</AppText>
             ))}
           </>

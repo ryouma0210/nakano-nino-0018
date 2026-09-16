@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, StyleSheet, View } from "react-native";
+import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";

@@ -20,6 +20,7 @@ import { useAppModal } from "@/components/AppModalProvider";
 import {
   additionalContractRules,
   chastityContractRule,
+  contractReleaseDescription,
   requiredContractRuleTexts,
 } from "@/utils/contract";
 
@@ -171,7 +172,7 @@ export default function ContractScreen() {
               onPress={updateSignature}
             />
             <AppText style={styles.contractText}>
-              この契約は解除できません。
+              {contractReleaseDescription}
             </AppText>
           </Card>
           <Card style={styles.contractCard}>
@@ -185,12 +186,7 @@ export default function ContractScreen() {
               <AppText style={styles.contractText}>・{chastityContractRule}</AppText>
             ) : null}
             <View style={styles.ruleDivider} />
-            <AppText variant="label" style={styles.contractText}>
-              契約上の追加ルール
-            </AppText>
-            {additionalContractRules(contract).map((rule) => (
-              <AppText key={rule} style={styles.contractText}>・{rule}</AppText>
-            ))}
+            <ContractAdditionalRules />
           </Card>
         </>
       ) : (
@@ -221,6 +217,8 @@ export default function ContractScreen() {
                 </View>
               </Pressable>
             ))}
+            <View style={styles.ruleDivider} />
+            <ContractAdditionalRules />
           </Card>
           <Card style={styles.contractCard}>
             <TextField
@@ -251,7 +249,7 @@ export default function ContractScreen() {
       <ConfirmModal
         visible={contractConfirmation}
         title="本当に契約しますか？"
-        message="一度奴隷になると、契約を解除できません。契約内容をもう一度確認してください。"
+        message="契約中は追加ルールが適用されます。解除は館の外の紫のクリスタルで行えます。契約内容をもう一度確認してください。"
         confirmLabel="契約にサインする"
         confirmTone="danger"
         onCancel={() => setContractConfirmation(false)}
@@ -261,6 +259,19 @@ export default function ContractScreen() {
         }}
       />
     </Screen>
+  );
+}
+
+function ContractAdditionalRules() {
+  return (
+    <View style={styles.additionalRules}>
+      <AppText variant="label" style={styles.contractText}>
+        契約後に追加される機能・効果
+      </AppText>
+      {additionalContractRules().map((rule) => (
+        <AppText key={rule} style={styles.contractText}>・{rule}</AppText>
+      ))}
+    </View>
   );
 }
 
@@ -293,5 +304,6 @@ const styles = StyleSheet.create({
   contractCard: { borderColor: "#b875ff" },
   contractText: { color: "#c99aff" },
   contractMutedText: { color: "#9e72c9" },
+  additionalRules: { gap: 10 },
   ruleDivider: { height: 1, backgroundColor: "#704699", marginVertical: 4 },
 });

@@ -97,7 +97,7 @@ export default function Index() {
             onPress={() => router.replace("/(tabs)")}
           />
           <PrimaryButton
-            title="設定"
+            title="アプリ設定"
             onPress={() => router.push("/sound-settings")}
           />
           <PrimaryButton

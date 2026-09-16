@@ -1,11 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +8,7 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
+import { Screen } from "@/components/Screen";
 import { useAppModal } from "@/components/AppModalProvider";
 import { defeatChecklistMessages, roomMessages } from "@/constants/messages";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -20,7 +16,83 @@ import { contractService } from "@/services/gameRoomService";
 import { defeatRepository } from "@/repositories/roomRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 
+type DefeatAccess =
+  | { status: "loading" | "locked" | "error" }
+  | { status: "ready"; savedChecks: string[] | undefined };
+
 export default function DefeatScreen() {
+  const { showError } = useAppModal();
+  const [access, setAccess] = useState<DefeatAccess>({ status: "loading" });
+  const loadVersion = useRef(0);
+
+  const reload = useCallback(async () => {
+    const request = ++loadVersion.current;
+    setAccess({ status: "loading" });
+    try {
+      const contract = await contractService.load();
+      if (request !== loadVersion.current) return;
+      if (!contract.signedAt) {
+        setAccess({ status: "locked" });
+        return;
+      }
+      const savedChecks = defeatRepository.find();
+      setAccess({ status: "ready", savedChecks });
+    } catch (error) {
+      if (request !== loadVersion.current) return;
+      setAccess({ status: "error" });
+      showError("敗北部屋", error);
+    }
+  }, [showError]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+      return () => {
+        loadVersion.current += 1;
+        setAccess({ status: "loading" });
+      };
+    }, [reload]),
+  );
+
+  if (access.status === "ready") {
+    return <DefeatContent savedChecks={access.savedChecks} />;
+  }
+
+  return (
+    <Screen>
+      <AppText variant="title">敗北部屋</AppText>
+      {access.status === "loading" ? (
+        <AppText>読み込み中...</AppText>
+      ) : access.status === "locked" ? (
+        <>
+          <Card>
+            <AppText>この部屋は契約後に利用できます。</AppText>
+          </Card>
+          <PrimaryButton
+            title="契約部屋へ"
+            onPress={() => router.replace("/(tabs)/contract")}
+          />
+        </>
+      ) : (
+        <>
+          <AppText>処理中にエラーが発生しました。</AppText>
+          <PrimaryButton
+            title="再読み込み"
+            tone="secondary"
+            onPress={() => { void reload(); }}
+          />
+        </>
+      )}
+      <PrimaryButton
+        title="タスクへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)/tasks")}
+      />
+    </Screen>
+  );
+}
+
+function DefeatContent({ savedChecks }: { savedChecks: string[] | undefined }) {
   const insets = useSafeAreaInsets();
   const { showNotice, showError } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } =
@@ -34,31 +106,17 @@ export default function DefeatScreen() {
       player.play();
     },
   );
-  const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [completed, setCompleted] = useState(false);
+  const [checked, setChecked] = useState<Set<string>>(() => new Set(savedChecks ?? []));
+  const [completed, setCompleted] = useState(Boolean(savedChecks));
   const [fullscreen, setFullscreen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
       defeatPlayer.play();
-      contractService.load().then((contract) => {
-        if (!active) return;
-        if (!contract.signedAt) {
-          router.replace("/(tabs)");
-          return;
-        }
-        const saved = defeatRepository.find();
-        if (active) {
-          setChecked(new Set(saved ?? []));
-          setCompleted(Boolean(saved));
-        }
-      });
       const audioEnabled = Boolean(settings?.soundEnabled);
       setSessionAudioActive(audioEnabled);
       if (audioEnabled) playEffect("defeatLoop");
       return () => {
-        active = false;
         stopEffect("defeatLoop");
         setSessionAudioActive(false);
       };

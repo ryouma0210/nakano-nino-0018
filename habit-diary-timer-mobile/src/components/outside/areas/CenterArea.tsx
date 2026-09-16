@@ -1,11 +1,13 @@
 import { Image } from "expo-image";
-import { ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
+import { ImageSourcePropType, StyleSheet, View } from "react-native";
+import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 
 const centerBackground = require("../../../../assets/characters/outside-pixels/outside-map-center-crossroad-v2.png");
 const routeOverlay = require("../../../../assets/characters/outside-pixels/outside-crossroad-route-overlay.png");
 
 type Props = {
   crystalSource: ImageSourcePropType;
+  questCrystalSource: ImageSourcePropType;
   warningSignSource: ImageSourcePropType;
   crystalScaleX: number;
   onMoveLeft: () => void;
@@ -13,6 +15,7 @@ type Props = {
   onMoveForward: () => void;
   onReturnHome: () => void;
   onOpenCrystal: () => void;
+  onOpenQuests: () => void;
   onOpenWarningSign: () => void;
 };
 
@@ -30,6 +33,11 @@ export function CenterArea(props: Props) {
           <Image source={props.crystalSource} style={styles.crystalImage} contentFit="contain" />
         </View>
       </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="クエストを確認" hitSlop={18} style={styles.questCrystalTap} onPress={props.onOpenQuests}>
+        <View style={[styles.crystal, { transform: [{ scaleX: props.crystalScaleX }] }]}>
+          <Image source={props.questCrystalSource} style={styles.crystalImage} contentFit="contain" />
+        </View>
+      </Pressable>
       <Pressable hitSlop={16} style={styles.warningSignTap} onPress={props.onOpenWarningSign}>
         <Image source={props.warningSignSource} style={styles.warningSignImage} contentFit="contain" />
       </Pressable>
@@ -45,6 +53,7 @@ const styles = StyleSheet.create({
   rightExit: { position: "absolute", top: "40%", right: 0, width: "24%", height: "22%", zIndex: 4 },
   homeExit: { position: "absolute", left: "40%", bottom: 0, width: "20%", height: "22%", zIndex: 4 },
   crystalTap: { position: "absolute", left: "10%", top: "58%", width: "14%", height: "14%", zIndex: 5, alignItems: "center", justifyContent: "center" },
+  questCrystalTap: { position: "absolute", left: "76%", top: "58%", width: "14%", height: "14%", zIndex: 5, alignItems: "center", justifyContent: "center" },
   crystal: { width: "100%", height: "100%" },
   crystalImage: { width: "100%", height: "100%" },
   warningSignTap: { position: "absolute", left: "58%", top: "22%", width: "20%", height: "22%", zIndex: 5 },

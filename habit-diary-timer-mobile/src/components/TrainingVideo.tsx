@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Image, Modal, Platform, StyleSheet, View } from "react-native";
+import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
@@ -15,6 +16,7 @@ import { secondsToClock } from "@/utils/date";
 import { useAppAudio } from "@/audio/AudioProvider";
 import type { StoredFile } from "@/services/fileStorageService";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { trainingLevels as modes } from "@/features/training/trainingOutcome";
 
 const defaultVideos = [
   require("../../assets/videos/habits_1.mp4"),
@@ -61,12 +63,6 @@ function createRandomMarkerOffsets(
   const firstOffset = offsets[0] ?? 0;
   return offsets.map((offset) => offset - firstOffset);
 }
-
-const modes = [
-  { key: "easy", label: "イージー", rate: 1, targetSeconds: 5 * 60 },
-  { key: "normal", label: "ノーマル", rate: 3, targetSeconds: 7 * 60 },
-  { key: "hard", label: "ハード", rate: 5, targetSeconds: 10 * 60 },
-] as const;
 
 const warmupComments = trainingStageMessages.warmup;
 const trainingComments = trainingStageMessages.training;

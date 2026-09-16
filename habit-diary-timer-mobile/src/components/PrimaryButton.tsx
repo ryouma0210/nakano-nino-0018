@@ -103,8 +103,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#d9202a",
   },
   punishment: {
-    borderColor: "#ff3b45",
-    backgroundColor: "#7b2cbf",
+    borderColor: "#fff",
+    backgroundColor: "#000",
   },
   defeat: {
     borderColor: "#fff",

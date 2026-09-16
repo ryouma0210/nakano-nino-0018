@@ -28,7 +28,9 @@ function numberSetting(key: string) {
 
 export function recordOutsideAchievement(event: OutsideAchievementEvent, stage?: SuccubusStage) {
   saveSetting(countKey(event), String(numberSetting(countKey(event)) + 1));
-  if ((event === "victory" || event === "defeat") && stage) saveSetting(stageKey(event, stage), "1");
+  if ((event === "victory" || event === "defeat") && stage) {
+    saveSetting(stageKey(event, stage), String(numberSetting(stageKey(event, stage)) + 1));
+  }
 }
 
 type OutsideStats = Record<OutsideAchievementEvent, number> & {
