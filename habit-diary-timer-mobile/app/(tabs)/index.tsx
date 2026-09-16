@@ -5,7 +5,6 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
-import { lightTheme } from "@/constants/theme";
 
 const rooms = [
   ["部屋に移動（廊下）", "/(tabs)/rooms"],
@@ -57,12 +56,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 12 },
-  kicker: {
-    color: lightTheme.danger,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 3,
-  },
   rule: { height: 1, backgroundColor: "#fff" },
   rooms: { gap: 12 },
   roomRow: { flexDirection: "row", alignItems: "center" },

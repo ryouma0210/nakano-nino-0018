@@ -13,6 +13,8 @@ import { slaveContractService } from "@/services/slaveContractService";
 import { lightTheme } from "@/constants/theme";
 import { toDateKey } from "@/utils/date";
 import { downloadHtmlAsPdf } from "@/utils/htmlPdfDownload";
+import { useAppAudio } from "@/audio/AudioProvider";
+import { translateText, translateWithValues, type AppLanguage } from "@/i18n";
 
 const ownerName = "中野二乃";
 
@@ -114,26 +116,35 @@ function createPdfFileName(contractDate: string, releaseDate: string, contractor
   return `奴隷契約書_${contract}_${release}_${name}.pdf`;
 }
 
-function createContractHtml(contractorName: string, contractDate: string, releaseDate: string) {
+function contractIntroduction(contractorName: string, language: AppLanguage) {
+  return translateWithValues(
+    "本書は、ご主人様である　{0}　様（以下「御主人様」と）、\nご主人様の奴隷である　{1}　（以下「私」と）の間に\n交わされた契約の内容等について定めたものです。",
+    [ownerName, contractorName],
+    language,
+  );
+}
+
+function createContractHtml(contractorName: string, contractDate: string, releaseDate: string, language: AppLanguage) {
+  const t = (value: string) => escapeHtml(translateText(value, language));
   const safeName = escapeHtml(contractorName);
-  const safeContractDate = escapeHtml(formatContractDate(contractDate));
-  const safeReleaseDate = escapeHtml(formatContractDate(releaseDate));
+  const safeContractDate = t(formatContractDate(contractDate));
+  const safeReleaseDate = t(formatContractDate(releaseDate));
   const articleHtml = articles
     .map(
       (article) => `
         <section class="article">
-          <div class="article-title">${article.title}</div>
-          <div class="article-body">${toHtmlLines(article.body)}</div>
+          <div class="article-title">${t(article.title)}</div>
+          <div class="article-body">${toHtmlLines(translateText(article.body, language))}</div>
         </section>
       `,
     )
     .join("");
 
   return `<!doctype html>
-<html lang="ja">
+<html lang="${language === "zh" ? "zh-Hans" : language}">
   <head>
     <meta charset="utf-8" />
-    <title>奴隷契約書</title>
+    <title>${t("奴隷契約書")}</title>
     <style>
       @page { size: A4 portrait; margin: 0; }
       * { box-sizing: border-box; }
@@ -141,7 +152,7 @@ function createContractHtml(contractorName: string, contractDate: string, releas
         margin: 0;
         background: #ffffff;
         color: #111111;
-        font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+        font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", "Noto Serif KR", "Noto Serif SC", serif;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -205,21 +216,19 @@ function createContractHtml(contractorName: string, contractDate: string, releas
   </head>
   <body>
     <main class="page">
-      <div class="monthly">月額：一万円</div>
-      <h1>奴隷契約書</h1>
+      <div class="monthly">${t("月額：一万円")}</div>
+      <h1>${t("奴隷契約書")}</h1>
       <p class="intro">
-        本書は、ご主人様である　${ownerName}　様（以下「御主人様」と）、<br />
-        ご主人様の奴隷である　${safeName}　（以下「私」と）の間に<br />
-        交わされた契約の内容等について定めたものです。
+        ${toHtmlLines(contractIntroduction(contractorName, language))}
       </p>
       ${articleHtml}
       <div class="date-lines">
-        契約日：<span class="underline">${safeContractDate}</span><br />
-        解約日：<span class="underline">${safeReleaseDate}</span>
+        ${t("契約日：")}<span class="underline">${safeContractDate}</span><br />
+        ${t("解約日：")}<span class="underline">${safeReleaseDate}</span>
       </div>
       <div class="signature">
-        御主人様：${ownerName}　様<br />
-        契約者名：<span class="signature-line">${safeName}</span>
+        ${t(`御主人様：${ownerName}　様`)}<br />
+        ${t("契約者名：")}<span class="signature-line">${safeName}</span>
       </div>
     </main>
   </body>
@@ -251,6 +260,8 @@ async function savePdfToDevice(uri: string, fileName: string) {
 }
 
 export default function SlaveContractScreen() {
+  const { settings } = useAppAudio();
+  const language = settings?.language ?? "ja";
   const [contractorName, setContractorName] = useState("マゾ");
   const [contractDate, setContractDate] = useState(() => toDateKey());
   const [releaseMonths, setReleaseMonths] = useState(1);
@@ -309,8 +320,8 @@ export default function SlaveContractScreen() {
     [outputContractDate, outputName, outputReleaseDate],
   );
   const html = useMemo(
-    () => createContractHtml(outputName, outputContractDate, outputReleaseDate),
-    [outputContractDate, outputName, outputReleaseDate],
+    () => createContractHtml(outputName, outputContractDate, outputReleaseDate, language),
+    [outputContractDate, outputName, outputReleaseDate, language],
   );
 
   const changeReleaseMonths = (diff: number) => {
@@ -391,10 +402,8 @@ export default function SlaveContractScreen() {
       <View style={styles.paper}>
         <AppText style={styles.monthly}>月額：一万円</AppText>
         <AppText style={styles.paperTitle}>奴隷契約書</AppText>
-        <AppText style={styles.paperBody}>
-          本書は、ご主人様である　{ownerName}　様（以下「御主人様」と）、{"\n"}
-          ご主人様の奴隷である　{outputName}　（以下「私」と）の間に{"\n"}
-          交わされた契約の内容等について定めたものです。
+        <AppText style={styles.paperBody} localize={false}>
+          {contractIntroduction(outputName, language)}
         </AppText>
 
         {articles.map((article) => (

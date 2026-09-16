@@ -1,3 +1,5 @@
+import { contractReleaseDescription } from "./contract";
+
 export type ConfigurableMessage = {
   text: string;
   withName: boolean;  /** true: 設定名を先頭に付ける、false: 名前を付けない */
@@ -253,7 +255,7 @@ export const roomMessages: Record<string, RoomMessages> = {
   contract: {
     lines: [
       namedMessage("二ノ様の奴隷になりますか？"),
-      plainMessage("一度奴隷になると、契約を解除できません。"),
+      plainMessage(contractReleaseDescription),
     ],
   },
   // 週間報告部屋：app/(tabs)/report.tsx
@@ -321,11 +323,14 @@ export const punishmentSessionMessages = [
   plainMessage("何、緩めているの？ちゃんとリズム通りにしなさい♡"),
   plainMessage("死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡死ね♡"),
   plainMessage("精子死ね♡チンポ死ね♡金玉死ね♡マゾ死ね♡"),
-  namedMessage("まさかこんなのでお漏らししないわよね♡"),
+  namedMessage("まさかこんなのでお漏らししないわよね・・・？♡"),
+  namedMessage("お漏らせ♡死ね♡お漏らせ♡死ね♡お漏らせ♡死ね♡"),
   plainMessage("ギブアップしたい？ダメに決まっているでしょｗ最後まで耐えてみなさい♡"),
   plainMessage("もっと正確に強く狙いなさい♡"),
   namedMessage("痛がるだけじゃダメ。きちんと回数を声に出して数えなさい♡"),
   plainMessage("私が終わりと言うまで、お仕置きは続くわよ♡"),
+  plainMessage("乳首も集中して♡カリカリカリカリ♡"),
+  plainMessage("痛いのに♡乳首気持ちいい♡痛いの気持ちいい♡"),
 ] as const;
 
 // 準備部屋の動画ループコメント：app/(tabs)/preparation.tsx

@@ -4,6 +4,7 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
+    "i18n:audit": "node scripts/audit-i18n.mjs",
     "start": "expo start",
     "tunnel": "expo start -c --tunnel",
     "android": "expo start --android",

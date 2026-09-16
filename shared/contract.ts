@@ -1,8 +1,3 @@
-export type SharedContractSettings = {
-  maxPunishmentMinutes: number;
-  note: string;
-};
-
 export const requiredContractRuleTexts = [
   "私の命令は絶対服従すること。",
   "私の許可なしに射精しないこと。",
@@ -13,16 +8,15 @@ export const requiredContractRuleTexts = [
 export const chastityContractRule =
   "調教を受ける際は、貞操帯を着用すること。（任意）";
 
-export function additionalContractRules(contract: SharedContractSettings) {
-  const notes = contract.note
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^[・●✅□\-\s]+/, "").trim())
-    .filter(Boolean);
+export const contractReleaseDescription =
+  "契約中は追加ルールが適用されます。解除は館の外の紫のクリスタルで行えます。";
+
+export function additionalContractRules() {
   return [
-    `お仕置きは最低${contract.maxPunishmentMinutes}分受けること。`,
     "敗北部屋を解放する。",
     "ループ音声を解放する。",
-    "各画面に契約者向けコメントを追加する。（赤文字表記）",
-    ...notes,
+    "お仕置き部屋のタイマーは最低30分になります。",
+    "各画面に契約者向けコメントを追加（赤文字表記）",
+    "館の外では状態異常「服従」が追加（詳細は看板で確認）",
   ];
 }

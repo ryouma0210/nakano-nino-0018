@@ -113,7 +113,7 @@ export type TimerHistory = {
 
 export type AppSettings = {
   playerName: string;
-  language: "ja" | "en" | "ko";
+  language: "ja" | "en" | "ko" | "zh";
   darkMode: boolean;
   backgroundMusicEnabled: boolean;
   notificationsEnabled: boolean;

@@ -23,6 +23,73 @@ async function ensurePurposeDirectory(purpose: FilePurpose) {
 }
 
 export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose };
+export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; mimeType: string; data: string };
+export type FileImportResult = { stored: number; failed: string[] };
+export type FileImportProgress = { completed: number; total: number };
+export type FileDeleteResult = { removed: StoredFile[]; failed: StoredFile[] };
+type ProgressHandler = (progress: FileImportProgress) => void;
+type FileImportState = { importing: boolean; progress: FileImportProgress | null; result: FileImportResult | null };
+type FileDeleteState = { deleting: boolean; progress: FileImportProgress | null; result: FileDeleteResult | null };
+let importState: FileImportState = { importing: false, progress: null, result: null };
+let deleteState: FileDeleteState = { deleting: false, progress: null, result: null };
+const importListeners = new Set<() => void>();
+const deleteListeners = new Set<() => void>();
+let maintenanceState = { active: false, revision: 0 };
+const maintenanceListeners = new Set<() => void>();
+const filesBusyMessage = "ファイルを処理中です。完了してからもう一度お試しください。";
+
+function updateImportState(update: Partial<FileImportState>) {
+  importState = { ...importState, ...update };
+  importListeners.forEach((listener) => listener());
+}
+
+function updateDeleteState(update: Partial<FileDeleteState>) {
+  deleteState = { ...deleteState, ...update };
+  deleteListeners.forEach((listener) => listener());
+}
+
+function updateMaintenanceState(active: boolean) {
+  maintenanceState = { active, revision: maintenanceState.revision + (active ? 0 : 1) };
+  maintenanceListeners.forEach((listener) => listener());
+}
+
+let importSequence = 0;
+
+function storedFileName(name: string) {
+  const safeName = name.replace(/[\\/:*?"<>|]/g, "_");
+  return `${Date.now()}_${importSequence++}_${safeName}`;
+}
+
+async function storeSelectedFiles<T extends { name: string }>(
+  files: readonly T[],
+  storeFile: (file: T) => Promise<void>,
+  onProgress?: ProgressHandler,
+): Promise<FileImportResult> {
+  const result: FileImportResult = { stored: 0, failed: [] };
+  onProgress?.({ completed: 0, total: files.length });
+  // Copy one at a time to avoid loading several large videos into memory.
+  for (const [index, file] of files.entries()) {
+    try {
+      await storeFile(file);
+      result.stored++;
+    } catch {
+      result.failed.push(file.name);
+    }
+    onProgress?.({ completed: index + 1, total: files.length });
+  }
+  return result;
+}
+
+function mimeTypeForName(name: string) {
+  const extension = name.split(".").pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+    mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg",
+    pdf: "application/pdf",
+  };
+  return types[extension ?? ""] ?? "application/octet-stream";
+}
 
 function webAvailable() {
   return Platform.OS === "web" && typeof document !== "undefined" && typeof localStorage !== "undefined";
@@ -37,56 +104,68 @@ function webReadFiles(): StoredFile[] {
 }
 
 function webWriteFiles(files: StoredFile[]) {
-  try {
-    localStorage.setItem(webStorageKey, JSON.stringify(files));
-  } catch (error) {
-    console.error("ファイル格納の保存に失敗しました。", error);
-  }
+  // Quota errors must reach the caller; an unsuccessful write is not a save.
+  localStorage.setItem(webStorageKey, JSON.stringify(files));
 }
 
-function webPickFiles(purpose: FilePurpose): Promise<boolean> {
-  return new Promise((resolve) => {
+function readWebFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("ファイルを読み込めませんでした。"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("ファイルを読み込めませんでした。"));
+    reader.onabort = () => reject(new Error("ファイルを読み込めませんでした。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function webPickFiles(purpose: FilePurpose, onProgress?: ProgressHandler): Promise<FileImportResult | null> {
+  return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*,video/*,audio/*";
-    input.multiple = false;
+    input.multiple = true;
     input.style.display = "none";
     document.body.appendChild(input);
 
     let settled = false;
-    function finish(value: boolean) {
+    function finish(value: FileImportResult | null) {
       if (settled) return;
       settled = true;
       input.remove();
       resolve(value);
     }
 
-    input.addEventListener("change", () => {
-      const file = input.files?.[0];
-      if (!file) {
-        finish(false);
+    input.addEventListener("cancel", () => finish(null), { once: true });
+    input.addEventListener("change", async () => {
+      const selectedFiles = Array.from(input.files ?? []);
+      if (selectedFiles.length === 0) {
+        finish(null);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
+      const result = await storeSelectedFiles(selectedFiles, async (file) => {
+        const uri = await readWebFile(file);
         const files = webReadFiles();
-        const safeName = file.name.replace(/[\\/:*?"<>|]/g, "_");
         files.push({
-          name: `${Date.now()}_${safeName}`,
-          uri: String(reader.result ?? ""),
+          name: storedFileName(file.name),
+          uri,
           size: file.size,
           purpose,
         });
         webWriteFiles(files);
-        finish(true);
-      };
-      reader.onerror = () => finish(false);
-      reader.readAsDataURL(file);
-    });
+      }, onProgress);
+      finish(result);
+    }, { once: true });
 
-    window.setTimeout(() => {
+    // Keep the picker within the button's user activation on the web.
+    try {
       input.click();
-    }, 0);
+    } catch (error) {
+      input.remove();
+      reject(error);
+    }
   });
 }
 
@@ -104,6 +183,35 @@ async function readFiles(directory: string, purpose: FilePurpose) {
 }
 
 export const fileStorageService = {
+  getImportState: () => importState,
+  getDeleteState: () => deleteState,
+  getMaintenanceState: () => maintenanceState,
+
+  subscribeImports(listener: () => void) {
+    importListeners.add(listener);
+    return () => { importListeners.delete(listener); };
+  },
+
+  subscribeDeletes(listener: () => void) {
+    deleteListeners.add(listener);
+    return () => { deleteListeners.delete(listener); };
+  },
+
+  subscribeMaintenance(listener: () => void) {
+    maintenanceListeners.add(listener);
+    return () => { maintenanceListeners.delete(listener); };
+  },
+
+  async withExclusiveFiles<T>(operation: () => Promise<T>): Promise<T> {
+    if (importState.importing || deleteState.deleting || maintenanceState.active) throw new Error(filesBusyMessage);
+    updateMaintenanceState(true);
+    try {
+      return await operation();
+    } finally {
+      updateMaintenanceState(false);
+    }
+  },
+
   async list(purpose?: FilePurpose): Promise<StoredFile[]> {
     if (webAvailable()) {
       return webReadFiles()
@@ -119,23 +227,71 @@ export const fileStorageService = {
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 
-  async pickAndStore(purpose: FilePurpose = "training") {
-    if (webAvailable()) return webPickFiles(purpose);
-    await ensurePurposeDirectory(purpose);
-    const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: false });
-    if (result.canceled) return false;
-    const asset = result.assets[0];
-    const safeName = asset.name.replace(/[\\/:*?"<>|]/g, "_");
-    await FileSystem.copyAsync({ from: asset.uri, to: `${purposeDirectory(purpose)}${Date.now()}_${safeName}` });
-    return true;
+  async pickAndStore(purpose: FilePurpose = "training", onProgress?: ProgressHandler): Promise<FileImportResult | null> {
+    // The import can outlive its screen when the user switches footer sections.
+    if (maintenanceState.active) throw new Error(filesBusyMessage);
+    if (importState.importing || deleteState.deleting) return null;
+    updateImportState({ importing: true, progress: null, result: null });
+    const reportProgress: ProgressHandler = (progress) => {
+      updateImportState({ progress });
+      onProgress?.(progress);
+    };
+    try {
+      let stored: FileImportResult | null;
+      if (webAvailable()) {
+        stored = await webPickFiles(purpose, reportProgress);
+      } else {
+        const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: true });
+        if (result.canceled) return null;
+        await ensurePurposeDirectory(purpose);
+        stored = await storeSelectedFiles(result.assets, async (asset) => {
+          const destination = `${purposeDirectory(purpose)}${storedFileName(asset.name)}`;
+          try {
+            await FileSystem.copyAsync({ from: asset.uri, to: destination });
+          } catch (error) {
+            // Remove a partial copy without affecting any successfully stored files.
+            await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => {});
+            throw error;
+          }
+        }, reportProgress);
+      }
+      updateImportState({ result: stored });
+      return stored;
+    } finally {
+      updateImportState({ importing: false, progress: null });
+    }
   },
 
-  async remove(uri: string) {
+  async remove(file: StoredFile) {
     if (webAvailable()) {
-      webWriteFiles(webReadFiles().filter((file) => file.uri !== uri));
+      // Identical file contents share a data URL, but are separate stored entries.
+      webWriteFiles(webReadFiles().filter((entry) => entry.name !== file.name || entry.purpose !== file.purpose));
       return;
     }
-    await FileSystem.deleteAsync(uri, { idempotent: true });
+    await FileSystem.deleteAsync(file.uri, { idempotent: true });
+  },
+
+  async removeMany(files: readonly StoredFile[]): Promise<FileDeleteResult | null> {
+    if (maintenanceState.active) throw new Error(filesBusyMessage);
+    if (importState.importing || deleteState.deleting) return null;
+    const result: FileDeleteResult = { removed: [], failed: [] };
+    const uniqueFiles = [...new Map(files.map((file) => [`${file.purpose}:${file.name}`, file])).values()];
+    updateDeleteState({ deleting: true, progress: { completed: 0, total: uniqueFiles.length }, result: null });
+    try {
+      for (const [index, file] of uniqueFiles.entries()) {
+        try {
+          await this.remove(file);
+          result.removed.push(file);
+        } catch {
+          result.failed.push(file);
+        }
+        updateDeleteState({ progress: { completed: index + 1, total: uniqueFiles.length } });
+      }
+      updateDeleteState({ result });
+      return result;
+    } finally {
+      updateDeleteState({ deleting: false, progress: null });
+    }
   },
 
   async clear() {
@@ -149,6 +305,40 @@ export const fileStorageService = {
 
   async totalSize() {
     return (await this.list()).reduce((sum, file) => sum + file.size, 0);
+  },
+
+  async exportForBackup(): Promise<BackupStoredFile[]> {
+    const files = await this.list();
+    return Promise.all(files.map(async (file) => {
+      const dataUrl = webAvailable() ? file.uri.match(/^data:([^;]+);base64,(.*)$/s) : null;
+      return {
+        name: file.name,
+        size: file.size,
+        purpose: file.purpose,
+        mimeType: dataUrl?.[1] ?? mimeTypeForName(file.name),
+        data: dataUrl?.[2] ?? await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 }),
+      };
+    }));
+  },
+
+  async restoreFromBackup(files: BackupStoredFile[]) {
+    await this.clear();
+    if (webAvailable()) {
+      webWriteFiles(files.map((file) => ({
+        name: file.name,
+        size: file.size,
+        purpose: file.purpose,
+        uri: `data:${file.mimeType};base64,${file.data}`,
+      })));
+      return;
+    }
+    for (const file of files) {
+      await ensurePurposeDirectory(file.purpose);
+      const safeName = file.name.replace(/[\\/:*?"<>|]/g, "_");
+      await FileSystem.writeAsStringAsync(`${purposeDirectory(file.purpose)}${safeName}`, file.data, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    }
   },
 };
 

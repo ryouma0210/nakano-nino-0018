@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import {
-  Image,
-  Platform,
-  type ImageSourcePropType,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Image, Platform, type ImageSourcePropType, StyleSheet, View } from "react-native";
+import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";

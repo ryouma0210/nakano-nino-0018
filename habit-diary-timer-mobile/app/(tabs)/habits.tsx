@@ -19,6 +19,7 @@ import { pointRepository } from "@/repositories/rewardRepository";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
+import { trainingOutcomeTag } from "@/features/training/trainingOutcome";
 
 const trainingJudgementGroups = [
   { comments: [
@@ -87,7 +88,7 @@ export default function HabitsScreen() {
         title: "調教完了記録",
         body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒\n判定: ${judgement}`,
         recordType: "diary",
-        tags: `調教,完了,射精記録,${result.difficulty}`,
+        tags: `調教,完了,射精記録,${result.difficulty},${trainingOutcomeTag(result.elapsedSeconds, result.targetSeconds)}`,
         durationSeconds: result.elapsedSeconds,
       });
       pointRepository.award(`training:${recordDate}`, 5, "本日初回の調教を完了");
@@ -200,7 +201,7 @@ export default function HabitsScreen() {
             {trainingResult && trainingResult.elapsedSeconds < trainingResult.targetSeconds ? (
               <PrimaryButton
                 title="お仕置き部屋へ"
-                tone="danger"
+                tone="punishment"
                 onPress={() => {
                   setTrainingResult(null);
                   router.replace("/(tabs)/timer");

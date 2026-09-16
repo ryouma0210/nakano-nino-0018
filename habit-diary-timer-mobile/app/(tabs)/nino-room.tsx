@@ -169,10 +169,6 @@ export default function NinoRoomScreen() {
             onPress={() => setPanel("outfits")}
           />
           <CircleButton
-            title="外へ"
-            onPress={() => router.push("/(tabs)/outside")}
-          />
-          <CircleButton
             title="戻る"
             onPress={() => router.replace("/(tabs)")}
           />
