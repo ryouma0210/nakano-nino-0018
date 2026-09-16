@@ -21,11 +21,11 @@ execFileSync(
 const indexPath = path.join(outputDirectory, "index.html");
 const indexHtml = fs.readFileSync(indexPath, "utf8");
 const appEnv = process.env.EXPO_PUBLIC_APP_ENV ?? process.env.NINO_APP_ENV ?? "stg";
-const mobileShellStyle = `
+const desktopShellHtml = `
     <script id="nino-desktop-env">
       window.__NINO_APP_ENV__ = ${JSON.stringify(appEnv)};
     </script>
-    <style id="nino-desktop-mobile-shell">
+    <style id="nino-desktop-layout">
       html,
       body {
         background: #050505;
@@ -40,16 +40,17 @@ const mobileShellStyle = `
       }
 
       #root {
-        width: min(100vw, 430px);
-        max-width: 430px;
+        width: 100%;
+        min-width: 0;
         height: 100vh;
+        height: 100dvh;
         background: #050505;
         overflow: hidden;
         position: relative;
       }
 
       #root > * {
-        max-width: 430px;
+        min-width: 0;
       }
 
       #root * {
@@ -76,7 +77,7 @@ const mobileShellStyle = `
         left: 50% !important;
         right: auto !important;
         transform: translateX(-50%) !important;
-        max-width: 430px !important;
+        max-width: 100% !important;
       }
     </style>
     <script id="nino-desktop-web-sound-guard">
@@ -210,11 +211,12 @@ const mobileShellStyle = `
 const cleanedIndexHtml = indexHtml
   .replace(/\s*<script id="nino-desktop-env">[\s\S]*?<\/script>/g, "")
   .replace(/\s*<style id="nino-desktop-mobile-shell">[\s\S]*?<\/style>/g, "")
+  .replace(/\s*<style id="nino-desktop-layout">[\s\S]*?<\/style>/g, "")
   .replace(/\s*<script id="nino-desktop-web-sound-guard">[\s\S]*?<\/script>/g, "");
 
 fs.writeFileSync(
   indexPath,
-  cleanedIndexHtml.replace("</head>", `${mobileShellStyle}\n  </head>`),
+  cleanedIndexHtml.replace("</head>", `${desktopShellHtml}\n  </head>`),
 );
 
 function listFiles(directory) {

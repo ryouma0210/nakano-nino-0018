@@ -1,5 +1,5 @@
 import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
-import { Keyboard, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +7,8 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";
 import { translateText } from "@/i18n";
+import { useDesktopLayout } from "@/hooks/useDesktopLayout";
+import { DESKTOP_SIDEBAR_WIDTH } from "@/utils/desktopLayout";
 
 type Destination = "home" | "tasks" | "rooms" | "nino-room" | "outside" | "record" | "management" | "mypage";
 
@@ -83,19 +85,20 @@ function selectedDestination(pathname: string, section: string | undefined): Des
 export function BottomNavigationLayout({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const keyboardVisible = useKeyboardVisible();
+  const { isDesktop } = useDesktopLayout();
   const isOutside = pathname.split("/").filter(Boolean).at(-1) === "outside";
-  const showNavigation = !keyboardVisible && !isOutside;
+  const showNavigation = !isOutside && (isDesktop || !keyboardVisible);
   return (
-    <BottomNavigationVisibleContext.Provider value={showNavigation}>
-      <View style={styles.layout}>
+    <BottomNavigationVisibleContext.Provider value={showNavigation && !isDesktop}>
+      <View style={[styles.layout, isDesktop && styles.desktopLayout]}>
         <View style={styles.content}>{children}</View>
-        {showNavigation ? <BottomNavigation /> : null}
+        {showNavigation ? <BottomNavigation sidebar={isDesktop} /> : null}
       </View>
     </BottomNavigationVisibleContext.Provider>
   );
 }
 
-function BottomNavigation() {
+function BottomNavigation({ sidebar }: { sidebar: boolean }) {
   const { settings, playEffect } = useAppAudio();
   const language = settings?.language ?? "ja";
   const insets = useSafeAreaInsets();
@@ -111,6 +114,52 @@ function BottomNavigation() {
     router.replace(destination.href);
   }
 
+  const items = destinations.map((destination) => {
+        const active = selected === destination.id;
+        const label = !sidebar && language !== "ja" && destination.id === "outside" ? "外へ" : destination.label;
+        return (
+          <Pressable
+            key={destination.id}
+            accessibilityRole="tab"
+            accessibilityLabel={translateText(destination.accessibilityLabel, language)}
+            accessibilityState={{ selected: active }}
+            onPress={() => navigate(destination)}
+            style={({ pressed }) => [
+              styles.item, sidebar && styles.sidebarItem,
+              active && styles.selectedItem, sidebar && active && styles.selectedSidebarItem,
+              pressed && styles.pressedItem,
+            ]}
+          >
+            <Ionicons name={destination.icon} size={21} color={active ? "#ffbad4" : "#c3b7bd"} accessible={false} />
+            <AppText
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.9}
+              localize={false}
+              style={[styles.label, sidebar && styles.sidebarLabel, active && styles.selectedLabel]}
+            >
+              {translateText(label, language)}
+            </AppText>
+          </Pressable>
+        );
+      });
+
+  if (sidebar) {
+    return (
+      <ScrollView
+        accessibilityRole="tablist"
+        style={styles.sidebar}
+        contentContainerStyle={[
+          styles.sidebarContent,
+          { paddingTop: Math.max(24, insets.top), paddingBottom: Math.max(16, insets.bottom), paddingLeft: Math.max(12, insets.left) },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {items}
+      </ScrollView>
+    );
+  }
+
   return (
     <View
       accessibilityRole="tablist"
@@ -123,38 +172,20 @@ function BottomNavigation() {
         },
       ]}
     >
-      {destinations.map((destination) => {
-        const active = selected === destination.id;
-        const label = language !== "ja" && destination.id === "outside" ? "外へ" : destination.label;
-        return (
-          <Pressable
-            key={destination.id}
-            accessibilityRole="tab"
-            accessibilityLabel={translateText(destination.accessibilityLabel, language)}
-            accessibilityState={{ selected: active }}
-            onPress={() => navigate(destination)}
-            style={({ pressed }) => [styles.item, active && styles.selectedItem, pressed && styles.pressedItem]}
-          >
-            <Ionicons name={destination.icon} size={21} color={active ? "#ffbad4" : "#c3b7bd"} accessible={false} />
-            <AppText
-              numberOfLines={2}
-              adjustsFontSizeToFit
-              minimumFontScale={0.9}
-              localize={false}
-              style={[styles.label, active && styles.selectedLabel]}
-            >
-              {translateText(label, language)}
-            </AppText>
-          </Pressable>
-        );
-      })}
+      {items}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   layout: { flex: 1, backgroundColor: lightTheme.background },
-  content: { flex: 1, minHeight: 0 },
+  desktopLayout: { flexDirection: "row-reverse", minWidth: 0, minHeight: 0 },
+  content: { flex: 1, minHeight: 0, minWidth: 0 },
+  sidebar: {
+    width: DESKTOP_SIDEBAR_WIDTH, flexGrow: 0, flexShrink: 0, minHeight: 0,
+    backgroundColor: "#110c10", borderRightWidth: 1, borderRightColor: "#583242",
+  },
+  sidebarContent: { gap: 8, paddingHorizontal: 12 },
   footer: {
     flexDirection: "row",
     flexShrink: 0,
@@ -178,7 +209,14 @@ const styles = StyleSheet.create({
     borderTopColor: "transparent",
   },
   selectedItem: { backgroundColor: "#351322", borderTopColor: "#ef7caa" },
+  sidebarItem: {
+    flex: undefined, flexGrow: 0, flexShrink: 0, flexBasis: "auto", flexDirection: "row", justifyContent: "flex-start",
+    minHeight: 58, gap: 12, paddingHorizontal: 12, paddingVertical: 12,
+    borderTopWidth: 0, borderLeftWidth: 3, borderLeftColor: "transparent",
+  },
+  selectedSidebarItem: { borderLeftColor: "#ef7caa" },
   pressedItem: { backgroundColor: "#482335" },
   label: { width: "100%", minHeight: 28, textAlign: "center", fontSize: 11, lineHeight: 14, fontWeight: "600", color: "#c3b7bd" },
+  sidebarLabel: { flex: 1, width: undefined, minHeight: 0, textAlign: "left", fontSize: 14, lineHeight: 20 },
   selectedLabel: { fontWeight: "800", color: "#ffbad4" },
 });

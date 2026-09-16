@@ -1,14 +1,16 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const util = require("node:util");
 const { pathToFileURL } = require("node:url");
+const { normalizeWindowState, normalizeZoom, windowShortcut } = require("./window-state.cjs");
 
-const MIN_ZOOM = 0.75;
-const MAX_ZOOM = 2;
 const STATIC_SERVER_PORT = 48218;
 let mainWindow;
+let normalWindowMaximized = false;
+let windowFullScreenPreference = false;
+let changingFullScreen = false;
 let staticServer;
 let staticServerUrl;
 
@@ -57,38 +59,87 @@ function loadWindowState() {
   try {
     return JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
   } catch {
-    return { width: 520, height: 900, zoom: 1 };
+    return {};
   }
 }
 
 function saveWindowState() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const bounds = mainWindow.getBounds();
-  const state = {
-    ...bounds,
-    maximized: mainWindow.isMaximized(),
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  try {
+    const state = {
+      ...mainWindow.getNormalBounds(),
+      maximized: normalWindowMaximized,
+      fullScreen: windowFullScreenPreference,
+      zoom: mainWindow.webContents.getZoomFactor(),
+    };
+    const destination = settingsPath();
+    fs.writeFileSync(`${destination}.tmp`, JSON.stringify(state, null, 2));
+    fs.renameSync(`${destination}.tmp`, destination);
+    return true;
+  } catch (error) {
+    appendLog("window:save-error", error);
+    return false;
+  }
+}
+
+function getWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) throw new Error("Window is unavailable.");
+  return {
     zoom: mainWindow.webContents.getZoomFactor(),
+    fullScreen: mainWindow.isFullScreen(),
   };
-  fs.writeFileSync(settingsPath(), JSON.stringify(state, null, 2));
 }
 
 function setZoom(nextZoom) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+  getWindowState();
+  if (!Number.isFinite(nextZoom)) throw new TypeError("Zoom must be a finite number.");
+  const zoom = normalizeZoom(nextZoom);
   mainWindow.webContents.setZoomFactor(zoom);
-  saveWindowState();
   mainWindow.webContents.send("window:zoom-changed", zoom);
+  if (!saveWindowState()) throw new Error("Window settings could not be saved.");
+  return getWindowState();
+}
+
+function setFullScreen(enabled) {
+  getWindowState();
+  if (typeof enabled !== "boolean") throw new TypeError("Full screen must be a boolean.");
+  if (enabled && !mainWindow.isFullScreen()) normalWindowMaximized = mainWindow.isMaximized();
+  const previous = windowFullScreenPreference;
+  windowFullScreenPreference = enabled;
+  changingFullScreen = true;
+  try {
+    mainWindow.setFullScreen(enabled);
+    if (!enabled && normalWindowMaximized) mainWindow.maximize();
+  } catch (error) {
+    windowFullScreenPreference = previous;
+    throw error;
+  } finally {
+    changingFullScreen = false;
+  }
+  mainWindow.webContents.send("window:fullscreen-changed", mainWindow.isFullScreen());
+  if (!saveWindowState()) throw new Error("Window settings could not be saved.");
+  return getWindowState();
 }
 
 function createWindow() {
-  const state = loadWindowState();
+  const saved = loadWindowState();
+  const validCoordinate = (value) => Number.isFinite(value) && Math.abs(value) <= 2147483647;
+  const previousPosition = saved && validCoordinate(saved.x) && validCoordinate(saved.y);
+  const workArea = previousPosition ? screen.getDisplayMatching({
+    x: Math.round(saved.x), y: Math.round(saved.y),
+    width: Number.isFinite(saved.width) && saved.width > 0 ? Math.min(32768, Math.max(1, Math.round(saved.width))) : 1280,
+    height: Number.isFinite(saved.height) && saved.height > 0 ? Math.min(32768, Math.max(1, Math.round(saved.height))) : 860,
+  }).workArea : screen.getPrimaryDisplay().workArea;
+  const state = normalizeWindowState(saved, workArea);
+  normalWindowMaximized = state.maximized;
+  windowFullScreenPreference = state.fullScreen;
   mainWindow = new BrowserWindow({
     width: state.width,
     height: state.height,
     x: state.x,
     y: state.y,
-    minWidth: 390,
-    minHeight: 640,
+    minWidth: Math.min(390, workArea.width),
+    minHeight: Math.min(640, workArea.height),
     backgroundColor: "#050505",
     autoHideMenuBar: true,
     webPreferences: {
@@ -99,8 +150,41 @@ function createWindow() {
     },
   });
 
+  mainWindow.on("maximize", () => {
+    if (!changingFullScreen && !mainWindow.isFullScreen()) normalWindowMaximized = true;
+    saveWindowState();
+  });
+  mainWindow.on("unmaximize", () => {
+    if (!changingFullScreen && !mainWindow.isFullScreen()) normalWindowMaximized = false;
+    saveWindowState();
+  });
+  for (const eventName of ["enter-full-screen", "leave-full-screen"]) {
+    mainWindow.on(eventName, () => {
+      saveWindowState();
+      mainWindow.webContents.send("window:fullscreen-changed", mainWindow.isFullScreen());
+    });
+  }
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (!mainWindow.isFocused()) return;
+    const shortcut = windowShortcut(input);
+    if (!shortcut) return;
+    event.preventDefault();
+    try {
+      if (shortcut === "fullscreen") {
+        if (!input.isAutoRepeat) setFullScreen(!mainWindow.isFullScreen());
+      } else {
+        const zoom = mainWindow.webContents.getZoomFactor();
+        setZoom(shortcut === "zoom-reset" ? 1 : zoom + (shortcut === "zoom-in" ? 0.1 : -0.1));
+      }
+    } catch (error) {
+      appendLog("window:shortcut-error", error);
+    }
+  });
+  mainWindow.webContents.setZoomFactor(state.zoom);
   if (state.maximized) mainWindow.maximize();
-  mainWindow.webContents.setZoomFactor(state.zoom ?? 1);
+  if (state.fullScreen) {
+    try { setFullScreen(true); } catch (error) { appendLog("window:restore-error", error); }
+  }
   appendLog("app:start", {
     version: app.getVersion(),
     userData: app.getPath("userData"),
@@ -141,6 +225,7 @@ function createWindow() {
   mainWindow.loadURL(staticServerUrl);
 
   mainWindow.on("close", saveWindowState);
+  mainWindow.on("closed", () => { mainWindow = null; });
 }
 
 function contentType(filePath) {
@@ -239,30 +324,30 @@ app.whenReady().then(async () => {
     });
     await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(visibleErrorHtml("起動エラー", error.stack ?? error.message ?? error))}`);
   }
-  globalShortcut.register("F11", () => {
-    mainWindow?.setFullScreen(!mainWindow.isFullScreen());
-  });
-  globalShortcut.register("CommandOrControl+=", () =>
-    setZoom((mainWindow?.webContents.getZoomFactor() ?? 1) + 0.1),
-  );
-  globalShortcut.register("CommandOrControl+-", () =>
-    setZoom((mainWindow?.webContents.getZoomFactor() ?? 1) - 0.1),
-  );
-  globalShortcut.register("CommandOrControl+0", () => setZoom(1));
 });
 
-ipcMain.handle("window:set-zoom", (_event, zoom) => setZoom(zoom));
-ipcMain.handle("window:get-state", () => ({
-  zoom: mainWindow?.webContents.getZoomFactor() ?? 1,
-  fullScreen: mainWindow?.isFullScreen() ?? false,
-}));
-ipcMain.handle("window:toggle-fullscreen", () => {
-  mainWindow?.setFullScreen(!mainWindow.isFullScreen());
+function isMainWindowSender(event) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed()
+    && !mainWindow.webContents.isDestroyed()
+    && event.sender === mainWindow.webContents
+    && event.senderFrame === mainWindow.webContents.mainFrame);
+}
+
+function handleWindowIpc(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isMainWindowSender(event)) throw new Error("Window IPC sender is not allowed.");
+    return handler(...args);
+  });
+}
+
+handleWindowIpc("window:set-zoom", setZoom);
+handleWindowIpc("window:get-state", getWindowState);
+handleWindowIpc("window:set-fullscreen", setFullScreen);
+handleWindowIpc("window:toggle-fullscreen", () => setFullScreen(!getWindowState().fullScreen));
+ipcMain.on("renderer:error", (event, error) => {
+  if (isMainWindowSender(event)) appendLog("renderer:error", error);
 });
-ipcMain.on("renderer:error", (_event, error) => {
-  appendLog("renderer:error", error);
-});
-ipcMain.handle("log:write", (_event, label, payload) => {
+handleWindowIpc("log:write", (label, payload) => {
   appendLog(label, payload);
 });
 
@@ -283,8 +368,8 @@ function listStoredFiles() {
     return { name, path: filePath, url: pathToFileURL(filePath).href, size: stat.size };
   });
 }
-ipcMain.handle("files:list", () => listStoredFiles());
-ipcMain.handle("files:pick", async () => {
+handleWindowIpc("files:list", () => listStoredFiles());
+handleWindowIpc("files:pick", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openFile", "multiSelections"],
     filters: [{ name: "画像・動画", extensions: ["png", "jpg", "jpeg", "webp", "gif", "mp4", "m4a", "wav"] }],
@@ -296,7 +381,7 @@ ipcMain.handle("files:pick", async () => {
   }
   return listStoredFiles();
 });
-ipcMain.handle("files:remove", (_event, filePath) => {
+handleWindowIpc("files:remove", (filePath) => {
   const resolved = path.resolve(filePath);
   const root = path.resolve(storedFilesDirectory());
   if (!resolved.startsWith(`${root}${path.sep}`)) throw new Error("削除対象が格納フォルダ外です。");
@@ -306,6 +391,5 @@ ipcMain.handle("files:remove", (_event, filePath) => {
 
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
   staticServer?.close();
 });
