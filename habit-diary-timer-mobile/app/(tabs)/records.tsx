@@ -28,8 +28,11 @@ import {
   preparationRepository,
 } from "@/repositories/roomRepository";
 import { useAppModal } from "@/components/AppModalProvider";
+import { useAppAudio } from "@/audio/AudioProvider";
+import { translateWeekday } from "@/i18n";
 
 export default function RecordsScreen() {
+  const { settings } = useAppAudio();
   const { showError } = useAppModal();
   const [journals, setJournals] = useState<Journal[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -277,8 +280,8 @@ export default function RecordsScreen() {
         </View>
         <View style={styles.weekRow}>
           {["日", "月", "火", "水", "木", "金", "土"].map((day, index) => (
-            <AppText key={day} style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}>
-              {day}
+            <AppText key={day} localize={false} style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}>
+              {translateWeekday(index, settings?.language ?? "ja")}
             </AppText>
           ))}
         </View>

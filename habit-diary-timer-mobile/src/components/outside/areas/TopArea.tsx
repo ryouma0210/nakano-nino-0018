@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 
 const topBackground = require("../../../../assets/characters/outside-pixels/outside-map-top.png");
 const returnArrow = require("../../../../assets/characters/outside-pixels/outside-return-arrow-v2.png");

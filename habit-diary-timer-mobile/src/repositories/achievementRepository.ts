@@ -1,6 +1,7 @@
 import { execute, query, queryOne } from "@/database/client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import { journalRepository } from "@/repositories/journalRepository";
+import type { TimerCompletionStatus } from "@/types/models";
 
 type CycleDates = { start_date: string; end_date: string };
 type TrainingJournal = { duration_seconds: number | null; body: string };
@@ -12,13 +13,13 @@ function daysBetweenInclusive(start: string, end: string) {
 }
 
 export const achievementRepository = {
-  recordPunishment(actualSeconds: number) {
+  recordPunishment(actualSeconds: number, status: TimerCompletionStatus = "completed") {
     if (actualSeconds <= 0) return;
     const now = toDateTimeKey();
     execute(
       `INSERT INTO timer_histories(timer_name, started_at, ended_at, actual_duration_seconds, completion_status, pause_count, created_at)
-       VALUES('お仕置き', ?, ?, ?, 'completed', 0, ?)`,
-      [now, now, Math.floor(actualSeconds), now],
+       VALUES('お仕置き', ?, ?, ?, ?, 0, ?)`,
+      [now, now, Math.floor(actualSeconds), status, now],
     );
     journalRepository.create({
       recordDate: toDateKey(),

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -17,7 +17,6 @@ import {
   type ProfileExperience,
   type ProfileSettings,
 } from "@/services/profileService";
-import { roomMessages } from "@/constants/messages";
 import { lightTheme } from "@/constants/theme";
 import { secondsToClock } from "@/utils/date";
 
@@ -149,6 +148,8 @@ const weaknessOptions = [
   "汗",
 ] as const;
 
+const knownWeaknesses = new Set<string>(weaknessOptions);
+
 function loadProfileStats() {
   return {
     achievements: achievementRepository.summary(),
@@ -207,12 +208,6 @@ function punishmentTolerance(minutes: number) {
   return "未判定";
 }
 
-function yesNoLabel(value: ProfileExperience, yesLabel = "あり", noLabel = "なし") {
-  if (value === "yes") return yesLabel;
-  if (value === "no") return noLabel;
-  return "未設定";
-}
-
 function numericValue(value: string) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
@@ -234,17 +229,49 @@ function masturbationTimeLabel(value: string) {
 }
 
 export default function MyPageScreen() {
+  const insets = useSafeAreaInsets();
   const { showNotice, showError } = useAppModal();
   const { settings, updateAudioSettings } = useAppAudio();
   const [profile, setProfile] = useState<ProfileSettings>(defaultProfile);
   const [stats, setStats] = useState(loadProfileStats);
   const [playerName, setPlayerName] = useState("");
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [weaknessModalVisible, setWeaknessModalVisible] = useState(false);
+  const [weaknessDraft, setWeaknessDraft] = useState<string[]>([]);
+  const [weaknessSaving, setWeaknessSaving] = useState(false);
+  const [weaknessError, setWeaknessError] = useState(false);
+  const savingRef = useRef(false);
+  const saveOperation = useRef<Promise<unknown> | null>(null);
+  const loadVersion = useRef(0);
 
-  const reload = useCallback(() => {
-    setStats(loadProfileStats());
-    profileService.load().then(setProfile);
-  }, []);
-  useFocusEffect(reload);
+  const reload = useCallback(async () => {
+    const version = ++loadVersion.current;
+    setProfileLoading(true);
+    setProfileReady(false);
+    try {
+      // A focus refresh must see any save still finishing after navigation.
+      await saveOperation.current?.catch(() => undefined);
+      if (version !== loadVersion.current) return;
+      const saved = await profileService.load();
+      if (version !== loadVersion.current) return;
+      setStats(loadProfileStats());
+      setProfile(saved);
+      setProfileReady(true);
+    } catch (error) {
+      if (version === loadVersion.current) showError("マイページ", error);
+    } finally {
+      if (version === loadVersion.current) setProfileLoading(false);
+    }
+  }, [showError]);
+  useFocusEffect(useCallback(() => {
+    void reload();
+    return () => {
+      loadVersion.current += 1;
+      setWeaknessModalVisible(false);
+    };
+  }, [reload]));
 
   useEffect(() => {
     if (settings) setPlayerName(settings.playerName);
@@ -254,52 +281,77 @@ export default function MyPageScreen() {
   const rank = evaluateRank(score);
   const weakCount = profile.weaknesses.length;
   const weakRank = weaknessRank(weakCount);
-  const profileLines = useMemo(() => {
-    const lines = [];
-    if (profile.sexualExperience !== "unknown")
-      lines.push({
-        text: `性経験は「${yesNoLabel(profile.sexualExperience, "ヤリチン", "童貞")}」として登録しておくわ。`,
-        withName: false,
-      });
-    if (weakCount > 0)
-      lines.push({
-        text: `弱点${weakCount}個。判定は「${weakRank}」ね。自覚できて偉いじゃない♡`,
-        withName: false,
-      });
-    return lines;
-  }, [profile.sexualExperience, weakCount, weakRank]);
+  const weaknessChoices = Array.from(new Set([...weaknessOptions, ...profile.weaknesses]));
+  const profileEditable = profileReady && !profileSaving && !weaknessSaving;
 
   function updateProfile(partial: Partial<ProfileSettings>) {
     setProfile((current) => ({ ...current, ...partial }));
   }
 
   function toggleWeakness(value: string) {
-    updateProfile({
-      weaknesses: profile.weaknesses.includes(value)
-        ? profile.weaknesses.filter((item) => item !== value)
-        : [...profile.weaknesses, value],
-    });
+    if (savingRef.current) return;
+    setWeaknessDraft((current) => current.includes(value)
+      ? current.filter((item) => item !== value)
+      : [...current, value]);
+  }
+
+  function openWeaknessRecord() {
+    if (!profileReady || savingRef.current) return;
+    Keyboard.dismiss();
+    setWeaknessDraft([...profile.weaknesses]);
+    setWeaknessError(false);
+    setWeaknessModalVisible(true);
+  }
+
+  function closeWeaknessRecord() {
+    if (!savingRef.current) setWeaknessModalVisible(false);
+  }
+
+  async function completeWeaknessRecord() {
+    if (!profileReady || savingRef.current) return;
+    savingRef.current = true;
+    setWeaknessSaving(true);
+    setWeaknessError(false);
+    try {
+      const operation = profileService.saveWeaknesses(weaknessDraft);
+      saveOperation.current = operation;
+      const weaknesses = await operation;
+      setProfile((current) => ({ ...current, weaknesses }));
+      setWeaknessModalVisible(false);
+    } catch (error) {
+      console.error("Weakness record could not be saved", error);
+      setWeaknessError(true);
+    } finally {
+      saveOperation.current = null;
+      savingRef.current = false;
+      setWeaknessSaving(false);
+    }
   }
 
   async function saveProfile() {
+    if (!profileReady || savingRef.current) return;
+    savingRef.current = true;
+    setProfileSaving(true);
     try {
-      await profileService.save(profile);
+      const operation = profileService.save(profile);
+      saveOperation.current = operation;
+      await operation;
       showNotice("保存しました", "マイページのステータスを更新しました。");
     } catch (error) {
       showError("マイページの保存に失敗しました", error);
+    } finally {
+      saveOperation.current = null;
+      savingRef.current = false;
+      setProfileSaving(false);
     }
   }
 
   return (
     <Screen>
       <AppText variant="title">マイページ</AppText>
-      <RoomConversation
-        characterSource={require("../../assets/characters/settings-nino.png")}
-        roomName="マイページ"
-        lines={[...(roomMessages.mypage.lines ?? []), ...profileLines]}
-        contractLines={roomMessages.mypage.contractLines}
-      />
-
+      {profileLoading ? <AppText variant="muted">読み込み中...</AppText> : !profileReady ? (
+        <PrimaryButton title="再読み込み" tone="secondary" onPress={() => { void reload(); }} />
+      ) : null}
       <Card style={styles.rankCard}>
         <AppText variant="subtitle">二ノの評価制度</AppText>
         <View style={styles.rankRow}>
@@ -341,6 +393,7 @@ export default function MyPageScreen() {
         <AppText variant="subtitle">自分のステータス</AppText>
         <BinaryRow
           label="性経験の有無"
+          disabled={!profileEditable}
           value={profile.sexualExperience}
           yesLabel="ヤリチン"
           noLabel="童貞"
@@ -348,32 +401,38 @@ export default function MyPageScreen() {
         />
         <BinaryRow
           label="恋愛経験"
+          disabled={!profileEditable}
           value={profile.romanceExperience}
           onChange={(value) => updateProfile({ romanceExperience: value })}
         />
         <BinaryRow
           label="アナル経験"
+          disabled={!profileEditable}
           value={profile.analExperience}
           onChange={(value) => updateProfile({ analExperience: value })}
         />
         <BinaryRow
           label="乳首経験"
+          disabled={!profileEditable}
           value={profile.nippleExperience}
           onChange={(value) => updateProfile({ nippleExperience: value })}
         />
         <BinaryRow
           label="露出経験"
+          disabled={!profileEditable}
           value={profile.exposureExperience}
           onChange={(value) => updateProfile({ exposureExperience: value })}
         />
         <BinaryRow
           label="特殊性癖の有無"
+          disabled={!profileEditable}
           value={profile.specialFetish}
           onChange={(value) => updateProfile({ specialFetish: value })}
         />
         <View style={styles.inputGrid}>
           <TextField
             label="勃起時のおちんぽの長さ（cm）"
+            editable={profileEditable}
             value={profile.erectionLengthCm}
             onChangeText={(value) => updateProfile({ erectionLengthCm: value })}
             keyboardType="numeric"
@@ -381,6 +440,7 @@ export default function MyPageScreen() {
           />
           <TextField
             label="オナニー頻度（回/1週間）"
+            editable={profileEditable}
             value={profile.masturbationPerWeek}
             onChangeText={(value) => updateProfile({ masturbationPerWeek: value })}
             keyboardType="numeric"
@@ -388,6 +448,7 @@ export default function MyPageScreen() {
           />
           <TextField
             label="オナニー時間（分）"
+            editable={profileEditable}
             value={profile.masturbationMinutes}
             onChangeText={(value) => updateProfile({ masturbationMinutes: value })}
             keyboardType="numeric"
@@ -395,6 +456,7 @@ export default function MyPageScreen() {
           />
           <TextField
             label="シコティッシュ枚数"
+            editable={profileEditable}
             value={profile.tissueCount}
             onChangeText={(value) => updateProfile({ tissueCount: value })}
             keyboardType="numeric"
@@ -407,33 +469,25 @@ export default function MyPageScreen() {
           <Metric label="時間判定" value={masturbationTimeLabel(profile.masturbationMinutes)} />
           <Metric label="ティッシュ" value={numericValue(profile.tissueCount) === null ? "未設定" : `${numericValue(profile.tissueCount)}枚`} />
         </View>
-        <PrimaryButton title="ステータスを保存" onPress={saveProfile} />
+        <PrimaryButton title={profileSaving ? "保存中..." : "ステータスを保存"} disabled={!profileReady || profileSaving || weaknessSaving} onPress={saveProfile} />
       </Card>
 
       <Card style={styles.weaknessCard}>
         <AppText variant="subtitle">弱点</AppText>
-        <View style={styles.weaknessGrid}>
-          {weaknessOptions.map((item) => {
-            const active = profile.weaknesses.includes(item);
-            return (
-              <Pressable
-                key={item}
-                onPress={() => toggleWeakness(item)}
-                style={styles.weaknessChip}
-              >
-                <AppText style={styles.weaknessCheck}>{active ? "✅" : "☐"}</AppText>
-                <AppText style={[styles.weaknessText, active && styles.weaknessTextActive]}>
-                  {item}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </View>
+        <PrimaryButton title="弱点記録" disabled={!profileReady || profileSaving || weaknessSaving} onPress={openWeaknessRecord} />
+        {profile.weaknesses.length ? (
+          <View style={styles.weaknessGrid}>
+            {Array.from(new Set(profile.weaknesses)).map((item) => (
+              <View key={item} style={styles.weaknessChip}>
+                <AppText localize={knownWeaknesses.has(item)} style={[styles.weaknessText, styles.weaknessTextActive]}>{item}</AppText>
+              </View>
+            ))}
+          </View>
+        ) : <AppText variant="muted">弱点はまだ登録されていません。</AppText>}
         <View style={styles.weaknessSummary}>
           <Metric label="チェック数" value={`${weakCount}個`} />
           <Metric label="変態度" value={weakRank} />
         </View>
-        <PrimaryButton title="弱点を保存" onPress={saveProfile} />
       </Card>
 
       <Card>
@@ -460,6 +514,59 @@ export default function MyPageScreen() {
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
       />
+      <Modal
+        visible={weaknessModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={closeWeaknessRecord}
+      >
+        <View style={[
+          styles.weaknessModalBackdrop,
+          {
+            paddingTop: Math.max(16, insets.top + 12),
+            paddingBottom: Math.max(16, insets.bottom + 12),
+            paddingLeft: Math.max(16, insets.left + 12),
+            paddingRight: Math.max(16, insets.right + 12),
+          },
+        ]}>
+          <View style={styles.weaknessModal} accessibilityViewIsModal>
+            <AppText variant="subtitle">弱点記録</AppText>
+            <ScrollView style={styles.weaknessModalScroll} contentContainerStyle={styles.weaknessGrid} keyboardShouldPersistTaps="handled">
+              {weaknessChoices.map((item) => {
+                const selected = weaknessDraft.includes(item);
+                return (
+                  <Pressable
+                    key={item}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected, disabled: weaknessSaving }}
+                    disabled={weaknessSaving}
+                    onPress={() => toggleWeakness(item)}
+                    style={[styles.weaknessChip, styles.weaknessChoice, selected && styles.weaknessChipSelected]}
+                  >
+                    <AppText style={styles.weaknessCheck} accessible={false}>{selected ? "✅" : "☐"}</AppText>
+                    <AppText localize={knownWeaknesses.has(item)} style={[styles.weaknessText, selected && styles.weaknessTextActive]}>{item}</AppText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.weaknessSelectionCount}>
+              <AppText variant="muted">チェック数</AppText>
+              <AppText>{weaknessDraft.length}個</AppText>
+            </View>
+            {weaknessError ? <AppText style={styles.weaknessSaveError}>弱点を保存できませんでした。</AppText> : null}
+            <View style={styles.weaknessModalActions}>
+              <View style={styles.weaknessModalAction}>
+                <PrimaryButton title="キャンセル" tone="secondary" disabled={weaknessSaving} onPress={closeWeaknessRecord} />
+              </View>
+              <View style={styles.weaknessModalAction}>
+                <PrimaryButton title={weaknessSaving ? "保存中..." : "完了"} disabled={weaknessSaving} onPress={completeWeaknessRecord} />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -470,12 +577,14 @@ function BinaryRow({
   yesLabel = "あり",
   noLabel = "なし",
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: ProfileExperience;
   yesLabel?: string;
   noLabel?: string;
   onChange: (value: ProfileExperience) => void;
+  disabled?: boolean;
 }) {
   return (
     <View style={styles.binaryRow}>
@@ -483,11 +592,13 @@ function BinaryRow({
       <View style={styles.binaryButtons}>
         <ChoiceButton
           title={noLabel}
+          disabled={disabled}
           active={value === "no"}
           onPress={() => onChange("no")}
         />
         <ChoiceButton
           title={yesLabel}
+          disabled={disabled}
           active={value === "yes"}
           onPress={() => onChange("yes")}
         />
@@ -500,13 +611,15 @@ function ChoiceButton({
   title,
   active,
   onPress,
+  disabled = false,
 }: {
   title: string;
   active: boolean;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.choice, active && styles.choiceActive]}>
+    <Pressable disabled={disabled} accessibilityState={{ disabled }} onPress={onPress} style={[styles.choice, active && styles.choiceActive, disabled && styles.choiceDisabled]}>
       <AppText style={[styles.choiceText, active && styles.choiceTextActive]}>
         {title}
       </AppText>
@@ -560,6 +673,7 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#1f5fae",
   },
+  choiceDisabled: { opacity: 0.55 },
   choiceText: { color: lightTheme.muted, fontWeight: "900" },
   choiceTextActive: { color: "#fff" },
   inputGrid: { gap: 10 },
@@ -585,12 +699,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   weaknessText: {
+    flexShrink: 1,
     color: "#fff",
     fontSize: 13,
     fontWeight: "900",
     lineHeight: 20,
   },
   weaknessTextActive: { color: "#ff69b4" },
+  weaknessChipSelected: { borderColor: "#ff69b4", backgroundColor: "#251322" },
+  weaknessChoice: { minHeight: 44 },
+  weaknessModalBackdrop: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.85)" },
+  weaknessModal: { width: "100%", maxWidth: 560, height: "100%", maxHeight: 720, minHeight: 0, padding: 16, gap: 14, borderWidth: 1, borderColor: "#ff69b4", borderRadius: 8, backgroundColor: "#111" },
+  weaknessModalScroll: { flex: 1, minHeight: 0 },
+  weaknessSelectionCount: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  weaknessSaveError: { color: "#ffb5bd" },
+  weaknessModalActions: { flexDirection: "row", gap: 10 },
+  weaknessModalAction: { flex: 1 },
   weaknessSummary: {
     flexDirection: "row",
     flexWrap: "wrap",

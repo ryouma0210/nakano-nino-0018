@@ -231,7 +231,7 @@ export function ManagementRoom({
                     settings?.playerName.trim() ?? "",
                   )
                 : "指示を準備中"}
-              よ。
+              {(settings?.language ?? "ja") === "ja" ? "よ。" : ""}
             </AppText>
             <AppText>実施完了次第、完了ボタンを押してね。</AppText>
             <PrimaryButton
