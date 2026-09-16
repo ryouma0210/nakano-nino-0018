@@ -7,6 +7,8 @@ import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { contractService } from "@/services/gameRoomService";
+import { useDesktopLayout } from "@/hooks/useDesktopLayout";
+import { desktopCharacterHeight } from "@/utils/desktopLayout";
 
 export type ConversationLine = {
   text: string;
@@ -38,6 +40,7 @@ export function RoomConversation({
   characterFit = "contain",
 }: Props) {
   const { playEffect, settings } = useAppAudio();
+  const { isDesktop, height } = useDesktopLayout();
   const [index, setIndex] = useState(0);
   const [contractSigned, setContractSigned] = useState(false);
 
@@ -99,6 +102,7 @@ export function RoomConversation({
       onPress={next}
       style={({ pressed }) => [
         styles.panel,
+        isDesktop && styles.desktopPanel,
         isContractRoom && styles.contractPanel,
         pressed && styles.pressed,
       ]}
@@ -106,7 +110,7 @@ export function RoomConversation({
       accessibilityLabel="会話を進める"
     >
       <View style={[styles.roomBar, isContractRoom && styles.contractBorder]}>
-        <AppText style={[styles.roomLabel, isContractRoom && styles.contractText]}>{roomName}</AppText>
+        <AppText style={[styles.roomLabel, isDesktop && styles.desktopRoomLabel, isContractRoom && styles.contractText]}>{roomName}</AppText>
         <AppText style={styles.counter}>
           {safeIndex + 1} / {visibleLines.length}
         </AppText>
@@ -115,9 +119,11 @@ export function RoomConversation({
       <View
         style={[
           styles.stage,
-          characterAspectRatio
-            ? { aspectRatio: characterAspectRatio }
-            : styles.stageFallbackHeight,
+          isDesktop
+            ? { height: desktopCharacterHeight(height) }
+            : characterAspectRatio
+              ? { aspectRatio: characterAspectRatio }
+              : styles.stageFallbackHeight,
         ]}
       >
         {characterVideoSource ? (
@@ -211,6 +217,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#000",
   },
+  desktopPanel: { width: "100%", maxWidth: 380, alignSelf: "center" },
   pressed: { opacity: 0.9 },
   roomBar: {
     flexDirection: "row",
@@ -221,6 +228,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#fff",
   },
   roomLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 2 },
+  desktopRoomLabel: { flex: 1, minWidth: 0, marginRight: 8 },
   counter: { color: lightTheme.muted, fontSize: 12 },
   stage: {
     // Match local artwork's aspect ratio at render time so portrait images can

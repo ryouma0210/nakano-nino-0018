@@ -30,7 +30,13 @@ window.addEventListener("unhandledrejection", (event) => {
 contextBridge.exposeInMainWorld("ninoDesktop", {
   getWindowState: () => ipcRenderer.invoke("window:get-state"),
   setZoom: (zoom) => ipcRenderer.invoke("window:set-zoom", zoom),
+  setFullScreen: (enabled) => ipcRenderer.invoke("window:set-fullscreen", enabled),
   toggleFullScreen: () => ipcRenderer.invoke("window:toggle-fullscreen"),
+  onFullScreenChanged: (listener) => {
+    const handler = (_event, fullScreen) => listener(fullScreen);
+    ipcRenderer.on("window:fullscreen-changed", handler);
+    return () => ipcRenderer.removeListener("window:fullscreen-changed", handler);
+  },
   onZoomChanged: (listener) => {
     const handler = (_event, zoom) => listener(zoom);
     ipcRenderer.on("window:zoom-changed", handler);

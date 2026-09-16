@@ -6,8 +6,10 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
 import { homeSummaryService, type HomeSummary } from "@/services/homeSummaryService";
+import { useDesktopLayout } from "@/hooks/useDesktopLayout";
 
 export default function TasksScreen() {
+  const { isDesktop } = useDesktopLayout();
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [summaryError, setSummaryError] = useState(false);
   const loadVersion = useRef(0);
@@ -98,6 +100,7 @@ export default function TasksScreen() {
             {visibleTasks.length ? (
               <>
                 <AppText variant="label">今日の項目</AppText>
+                <View style={[styles.taskList, isDesktop && styles.desktopTaskList]}>
                 {visibleTasks.map((task) => {
                   const completed = task.eligible && task.completed;
                   const pending = task.eligible && !task.completed;
@@ -109,6 +112,7 @@ export default function TasksScreen() {
                       onPress={() => router.push(task.href)}
                       style={({ pressed }) => [
                         styles.taskRow,
+                        isDesktop && styles.desktopTaskRow,
                         completed && styles.completedTask,
                         pending && styles.pendingTask,
                         !task.eligible && styles.inactiveTask,
@@ -136,6 +140,7 @@ export default function TasksScreen() {
                     </Pressable>
                   );
                 })}
+                </View>
               </>
             ) : null}
             {pendingTasks.length === 0 ? (
@@ -167,6 +172,9 @@ const styles = StyleSheet.create({
   progressTrack: { height: 6, backgroundColor: "#36232d", borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: "#dd7ca2" },
   taskRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 11, minHeight: 58, borderRadius: 6 },
+  taskList: { gap: 12 },
+  desktopTaskList: { flexDirection: "row", flexWrap: "wrap" },
+  desktopTaskRow: { width: "48%", flexGrow: 1, minHeight: 76, padding: 16 },
   pendingTask: { backgroundColor: "#f7dfe1" },
   pendingTaskPressed: { backgroundColor: "#ecc5c9" },
   pendingText: { color: "#702e36" },
