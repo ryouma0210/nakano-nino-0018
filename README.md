@@ -593,6 +593,7 @@ Google DriveアップロードにはRepository secret `GDRIVE_RCLONE_CONFIG_BASE
 | 音が小さい | 効果音音量と端末メディア音量を確認。元音源の音量差にも注意 |
 | ファイルを保存できない | Androidでは写真・動画へのアクセス許可と端末空き容量を確認。WEB／Windowsではダウンロード保存先とブラウザのダウンロード許可を確認 |
 | APKビルドがJava heap spaceで失敗 | WorkflowのGradleメモリ設定と同時worker数を確認 |
+| Android SDK設定が `Failed to find package 'tools'` で失敗 | `setup-android` の `packages` に `platform-tools` を明示し、取得できない旧 `tools` パッケージを除外する |
 | Google Driveアップロード失敗 | `GDRIVE_RCLONE_CONFIG_BASE64` とrclone remote名 `gdrive` を確認 |
 
 ## キャラクター画像
