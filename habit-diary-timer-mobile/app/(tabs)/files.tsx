@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Image as NativeImage, Modal, Platform, Pressable as NativePressable, StyleSheet, View } from "react-native";
+import { Image as NativeImage, Platform, Pressable as NativePressable, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
 import {
@@ -10,7 +10,6 @@ import {
   type VideoThumbnail as GeneratedVideoThumbnail,
 } from "expo-video";
 import { Image as ExpoImage } from "expo-image";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -19,7 +18,8 @@ import { TextField } from "@/components/TextField";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
-import { useAppAudio } from "@/audio/AudioProvider";
+import { FileGalleryViewer } from "@/features/files/FileGalleryViewer";
+import { useCompletionNotice } from "@/features/files/useCompletionNotice";
 import { useAppModal } from "@/components/AppModalProvider";
 import {
   fileStorageService,
@@ -55,6 +55,8 @@ export default function FilesScreen() {
     fileStorageService.getMaintenanceState,
   );
   const filesBusy = importing || deleting || maintenance.active;
+  const showImportNotice = useCompletionNotice(importResult);
+  const showDeleteNotice = useCompletionNotice(deleteResult);
   const listLocked = deleting || maintenance.active;
   const focusedRef = useRef(false);
   const [purposeFilter, setPurposeFilter] = useState<FilePurposeFilter>("all");
@@ -217,7 +219,7 @@ export default function FilesScreen() {
     try {
       const result = await fileStorageService.removeMany(targets);
       if (!result) return;
-      if (!focusedRef.current) {
+      if (!focusedRef.current && result.failed.length > 0) {
         showNotice("ファイル削除", [
           `${result.removed.length}件のファイルを削除しました。`,
           ...(result.failed.length > 0 ? [
@@ -256,9 +258,9 @@ export default function FilesScreen() {
           {importProgress ? `格納中：${importProgress.completed}/${importProgress.total}件` : "ファイルを選択してください。"}
         </AppText>
       ) : null}
-      {importResult ? (
+      {importResult && (showImportNotice || importResult.failed.length > 0) ? (
         <Card>
-          <AppText accessibilityLiveRegion="polite">{`${importResult.stored}件のファイルを格納しました。`}</AppText>
+          {showImportNotice ? <AppText accessibilityLiveRegion="polite">{`${importResult.stored}件のファイルを格納しました。`}</AppText> : null}
           {importResult.failed.length > 0 ? (
             <>
               <AppText>{`${importResult.failed.length}件のファイルを格納できませんでした。`}</AppText>
@@ -378,9 +380,9 @@ export default function FilesScreen() {
           </AppText>
         ) : null}
       </Card>
-      {deleteResult ? (
+      {deleteResult && (showDeleteNotice || deleteResult.failed.length > 0) ? (
         <Card style={styles.displaySettings}>
-          <AppText accessibilityLiveRegion="polite">{`${deleteResult.removed.length}件のファイルを削除しました。`}</AppText>
+          {showDeleteNotice ? <AppText accessibilityLiveRegion="polite">{`${deleteResult.removed.length}件のファイルを削除しました。`}</AppText> : null}
           {deleteResult.failed.length > 0 ? (
             <>
               <AppText>{`${deleteResult.failed.length}件のファイルを削除できませんでした。`}</AppText>
@@ -464,7 +466,7 @@ export default function FilesScreen() {
         onPress={() => router.replace("/(tabs)")}
       />
       {selected ? (
-        <FileViewer file={selected} onClose={() => setSelected(null)} />
+        <FileGalleryViewer files={visibleFiles} selectedKey={storedFileKey(selected)} onSelect={setSelected} onClose={() => setSelected(null)} />
       ) : null}
       <ConfirmModal
         visible={pendingDelete !== null}
@@ -565,69 +567,6 @@ function VideoThumbnailPreview({ uri }: { uri: string }) {
   );
 }
 
-function FileViewer({
-  file,
-  onClose,
-}: {
-  file: StoredFile;
-  onClose: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const { setSessionAudioActive } = useAppAudio();
-  const video = /\.mp4$/i.test(file.name);
-  const player = useVideoPlayer(
-    video ? { uri: file.uri } : null,
-    (instance) => {
-      instance.loop = true;
-      if (video) instance.play();
-    },
-  );
-
-  useEffect(() => {
-    if (!video) return;
-    setSessionAudioActive(true);
-    return () => setSessionAudioActive(false);
-  }, [setSessionAudioActive, video]);
-
-  return (
-    <Modal
-      visible
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <View
-        style={[
-          styles.viewer,
-          {
-            paddingTop: Math.max(12, insets.top),
-            paddingBottom: Math.max(12, insets.bottom),
-          },
-        ]}
-      >
-        <AppText variant="subtitle" localize={false}>{displayedFileName(file)}</AppText>
-        <View style={styles.viewerMedia}>
-          {video ? (
-            <VideoView
-              player={player}
-              style={styles.fullMedia}
-              nativeControls
-              contentFit="contain"
-            />
-          ) : (
-            <NativeImage
-              source={{ uri: file.uri }}
-              style={styles.fullMedia}
-              resizeMode="contain"
-            />
-          )}
-        </View>
-        <PrimaryButton title="閉じる" tone="secondary" onPress={onClose} />
-      </View>
-    </Modal>
-  );
-}
-
 const styles = StyleSheet.create({
   uploadButtons: { flexDirection: "row", gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
@@ -703,8 +642,5 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 2,
   },
-  viewer: { flex: 1, gap: 12, paddingHorizontal: 10, backgroundColor: "#000" },
-  viewerMedia: { flex: 1, alignItems: "center", justifyContent: "center" },
-  fullMedia: { width: "100%", height: "100%", backgroundColor: "#000" },
 });
 

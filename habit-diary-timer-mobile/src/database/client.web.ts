@@ -37,6 +37,8 @@ const UNIQUE_COLUMNS: Record<string, string[]> = {
 
 let cache: Store | null = null;
 let lastInsertRowId = 0;
+type TransactionState = { dirty: boolean; failed: boolean; error?: unknown };
+let currentTransaction: TransactionState | null = null;
 
 function storage() {
   return globalThis.localStorage;
@@ -62,6 +64,10 @@ function loadStore(): Store {
 }
 
 function saveStore() {
+  if (currentTransaction) {
+    currentTransaction.dirty = true;
+    return;
+  }
   try {
     const store = loadStore();
     const names = Object.keys(store);
@@ -395,5 +401,72 @@ export function execute(sql: string, params: BindParams = []): ExecuteResult {
 }
 
 export function transaction(work: () => void) {
-  work();
+  if (currentTransaction) {
+    try {
+      work();
+    } catch (error) {
+      // Even if the caller catches a nested error, its partial writes cannot be committed.
+      currentTransaction.failed = true;
+      currentTransaction.error ??= error;
+      throw error;
+    }
+    return;
+  }
+
+  const persisted = snapshotDatabaseStorage();
+  const previousId = lastInsertRowId;
+  let previousStore = cache;
+  const state: TransactionState = { dirty: false, failed: false };
+  currentTransaction = state;
+  try {
+    // Loading a legacy database can migrate it. Defer that write along with other changes.
+    previousStore = structuredClone(loadStore());
+    work();
+    if (state.failed) throw state.error;
+    currentTransaction = null;
+    if (state.dirty) saveStore();
+  } catch (error) {
+    currentTransaction = null;
+    cache = previousStore;
+    lastInsertRowId = previousId;
+    try {
+      restoreDatabaseStorage(persisted);
+    } catch (rollbackError) {
+      throw new AggregateError([error, rollbackError], "WEB DB rollback failed");
+    }
+    throw error;
+  } finally {
+    currentTransaction = null;
+  }
+}
+
+function databaseStorageKeys() {
+  const target = storage();
+  const keys: string[] = [];
+  for (let index = 0; index < target.length; index++) {
+    const key = target.key(index);
+    if (key === STORAGE_KEY || key?.startsWith(STORAGE_PREFIX)) keys.push(key);
+  }
+  return keys;
+}
+
+function snapshotDatabaseStorage() {
+  const target = storage();
+  const result = new Map<string, string>();
+  for (const key of databaseStorageKeys()) {
+    const value = target.getItem(key);
+    if (value !== null) result.set(key, value);
+  }
+  return result;
+}
+
+function restoreDatabaseStorage(previous: Map<string, string>) {
+  const target = storage();
+  // Remove new tables and changed values first, freeing quota before restoring older values.
+  for (const key of databaseStorageKeys()) {
+    if (!previous.has(key) || previous.get(key) !== target.getItem(key)) target.removeItem(key);
+  }
+  for (const [key, value] of previous) {
+    if (target.getItem(key) !== value) target.setItem(key, value);
+  }
 }
