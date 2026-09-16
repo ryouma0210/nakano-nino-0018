@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import { Platform } from "react-native";
+import appConfig from "../../app.json";
 import { execute, query, transaction } from "@/database/client";
 import { fileStorageService, mimeTypeForName, type BackupStoredFile, type RestoreStoredFile } from "@/services/fileStorageService";
 import { readBackupArchive, writeBackupArchive, type RandomAccessReader } from "./backupArchive";
@@ -52,7 +53,7 @@ async function createPayload(kind: BackupKind): Promise<BackupPayload> {
     version: BACKUP_VERSION,
     kind,
     createdAt: new Date().toISOString(),
-    appVersion: "1.0.0",
+    appVersion: appConfig.expo.version,
     database: Object.fromEntries(tables.map((table) => [table, query<Record<string, unknown>>(`SELECT * FROM ${table}`)])),
     asyncStorage: await collectStorage(),
     ...(kind === "complete" ? { files: [] } : {}),
