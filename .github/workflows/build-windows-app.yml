@@ -65,11 +65,23 @@ jobs:
       - name: Build Windows application
         run: npm run build:windows
 
+      - name: Resolve Windows installer
+        id: installer
+        shell: pwsh
+        run: |
+          $package = Get-Content -LiteralPath "package.json" -Raw | ConvertFrom-Json
+          $installerName = "$($package.build.productName) Setup $($package.version).exe"
+          $installerPath = Join-Path "release" $installerName
+          if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+            throw "Windows installer was not built: $installerPath"
+          }
+          "path=nino-room-windows/release/$installerName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Upload Windows installer as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: nino-${{ github.ref_name }}-windows
-          path: nino-room-windows/release/Nino Room Setup 1.0.0.exe
+          path: ${{ steps.installer.outputs.path }}
           if-no-files-found: error
 
       - name: Install rclone
@@ -93,6 +105,8 @@ jobs:
 
       - name: Upload Windows installer to Google Drive
         shell: pwsh
+        env:
+          WINDOWS_INSTALLER_PATH: ${{ steps.installer.outputs.path }}
         run: |
-          rclone copyto "nino-room-windows/release/Nino Room Setup 1.0.0.exe" "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
+          rclone copyto "$env:WINDOWS_INSTALLER_PATH" "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
         working-directory: .

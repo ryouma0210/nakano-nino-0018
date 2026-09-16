@@ -9,7 +9,7 @@
 | 項目 | 内容 |
 |---|---|
 | アプリ名 | Nino Room |
-| アプリバージョン | 1.0.0 |
+| アプリバージョン（スマホ・WEB・Windows共通） | 1.1.0 |
 | パッケージID | `jp.local.habitdiarytimer` |
 | Framework | Expo SDK 57 / React Native 0.86 |
 | Language | TypeScript |
@@ -631,6 +631,8 @@ habit-diary-timer-mobile/assets/characters/
 - 機種ごとの検証済み一覧はまだありません。
 - 端末メーカー固有の省電力制御や動画コーデック差までは保証していません。
 # 品質チェック
+
+修正を配布する際は、スマホ・WEB・Windowsのバージョンを揃えて更新します。通常の不具合修正では末尾の番号を上げます（例：1.1.0 → 1.1.1）。モバイルの `app.json`、両アプリの `package.json`・`package-lock.json`、このREADMEの表を更新し、Androidの `versionCode` とiOSの `buildNumber` も前回より増やします。バックアップ内のアプリバージョンとWindowsの配布ファイル名は設定から取得します。
 
 モバイル版では `npm run typecheck`、`npm run lint`、`npm test` を変更前後に実行します。
 Windows版では `npm run typecheck` と `npm run lint` を実行します。Windows版の開発依存は再現可能なビルドのため固定しています。
