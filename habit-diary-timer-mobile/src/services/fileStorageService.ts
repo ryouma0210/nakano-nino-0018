@@ -24,6 +24,14 @@ async function ensurePurposeDirectory(purpose: FilePurpose) {
 
 export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose };
 export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; mimeType: string; data: string };
+export type RestoreStoredFile = Omit<BackupStoredFile, "data"> & (
+  { uri: string; data?: never } | { data: string; uri?: never }
+);
+export type PreparedFileRestore = {
+  activate: () => Promise<void>;
+  rollback: () => Promise<void>;
+  finalize: () => Promise<void>;
+};
 export type FileImportResult = { stored: number; failed: string[] };
 export type FileImportProgress = { completed: number; total: number };
 export type FileDeleteResult = { removed: StoredFile[]; failed: StoredFile[] };
@@ -80,7 +88,7 @@ async function storeSelectedFiles<T extends { name: string }>(
   return result;
 }
 
-function mimeTypeForName(name: string) {
+export function mimeTypeForName(name: string) {
   const extension = name.split(".").pop()?.toLowerCase();
   const types: Record<string, string> = {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
@@ -174,12 +182,160 @@ async function readFiles(directory: string, purpose: FilePurpose) {
   if (!info.exists) return [];
   const names = await FileSystem.readDirectoryAsync(directory);
   const files = await Promise.all(names.map(async (name) => {
-    const uri = `${directory}${name}`;
+    const uri = `${directory}${encodeURIComponent(name)}`;
     const fileInfo = await FileSystem.getInfoAsync(uri);
     if (fileInfo.exists && fileInfo.isDirectory) return null;
     return { name, uri, purpose, size: fileInfo.exists && "size" in fileInfo ? fileInfo.size : 0 };
   }));
   return files.filter((file): file is StoredFile => file !== null);
+}
+
+let restoreSequence = 0;
+const invalidRestoreFilesMessage = "格納ファイルのデータが不正です。";
+
+function validateRestoreFiles(files: readonly RestoreStoredFile[]) {
+  const names = new Set<string>();
+  for (const file of files) {
+    // Preserve names verbatim. Replacing separators can merge two unrelated files.
+    if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
+      || /[\\/\u0000-\u001f]/.test(file.name)
+      || !["training", "punishment"].includes(file.purpose)
+      || !Number.isSafeInteger(file.size) || file.size < 0
+      || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+      || (typeof file.data === "string") === (typeof file.uri === "string")
+      || (typeof file.uri === "string" && !file.uri.startsWith("file://") && !file.uri.startsWith("content://"))) {
+      throw new Error(invalidRestoreFilesMessage);
+    }
+    const key = `${file.purpose}:${file.name}`;
+    if (names.has(key)) throw new Error(invalidRestoreFilesMessage);
+    names.add(key);
+    // Legacy backups contain base64. Reject invalid or truncated data before touching live files.
+    if (typeof file.data === "string") {
+      const padding = file.data.endsWith("==") ? 2 : file.data.endsWith("=") ? 1 : 0;
+      const firstPadding = file.data.indexOf("=");
+      if (file.data.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(file.data)
+        || (firstPadding >= 0 && firstPadding !== file.data.length - padding)
+        || file.data.length / 4 * 3 - padding !== file.size) throw new Error(invalidRestoreFilesMessage);
+    }
+  }
+}
+
+async function cleanupRestoreDirectory(uri: string) {
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch (error) {
+    // Cleanup failure must not turn a completed restoration into a reported failure.
+    console.warn("Could not clean up a file restore directory", error);
+  }
+}
+
+async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<PreparedFileRestore> {
+  validateRestoreFiles(files);
+  if (webAvailable()) {
+    const previous = webReadFiles();
+    const restored = files.map((file): StoredFile => {
+      if (typeof file.data !== "string") throw new Error(invalidRestoreFilesMessage);
+      return { name: file.name, size: file.size, purpose: file.purpose, uri: `data:${file.mimeType};base64,${file.data}` };
+    });
+    let state: "prepared" | "active" | "closed" = "prepared";
+    return {
+      async activate() {
+        if (state !== "prepared") return;
+        // localStorage.setItem is atomic: quota errors leave the previous value intact.
+        webWriteFiles(restored);
+        state = "active";
+      },
+      async rollback() {
+        if (state === "closed") return;
+        if (state === "active") webWriteFiles(previous);
+        state = "closed";
+      },
+      async finalize() { state = "closed"; },
+    };
+  }
+
+  const token = `${Date.now()}-${restoreSequence++}-${Math.random().toString(36).slice(2)}`;
+  const stageDirectory = `${FileSystem.documentDirectory}private-room-files-restore-${token}/`;
+  const previousDirectory = `${FileSystem.documentDirectory}private-room-files-previous-${token}/`;
+  try {
+    await FileSystem.makeDirectoryAsync(stageDirectory, { intermediates: true });
+    for (const purpose of ["training", "punishment"] as const) {
+      await FileSystem.makeDirectoryAsync(`${stageDirectory}${purpose}/`, { intermediates: true });
+    }
+    for (const file of files) {
+      // Encoding one path segment also preserves literal %, #, and ? in legacy names.
+      const destination = `${stageDirectory}${file.purpose}/${encodeURIComponent(file.name)}`;
+      if (typeof file.uri === "string") {
+        await FileSystem.copyAsync({ from: file.uri, to: destination });
+      } else {
+        await FileSystem.writeAsStringAsync(destination, file.data, { encoding: FileSystem.EncodingType.Base64 });
+      }
+      const info = await FileSystem.getInfoAsync(destination);
+      if (!info.exists || info.isDirectory || info.size !== file.size) throw new Error(invalidRestoreFilesMessage);
+    }
+  } catch (error) {
+    await cleanupRestoreDirectory(stageDirectory);
+    throw error;
+  }
+
+  let state: "prepared" | "active" | "recovering" | "closed" = "prepared";
+  let previousMoved = false;
+  let installed = false;
+  let installationAttempted = false;
+
+  async function rollback() {
+    if (state === "closed") return;
+    state = "recovering";
+    if (previousMoved) {
+      // Never delete the original directory if rollback itself fails. It remains recoverable.
+      const previousInfo = await FileSystem.getInfoAsync(previousDirectory);
+      if (!previousInfo.exists || !previousInfo.isDirectory) throw new Error(invalidRestoreFilesMessage);
+      await FileSystem.deleteAsync(uploadDirectory, { idempotent: true });
+      await FileSystem.moveAsync({ from: previousDirectory, to: uploadDirectory });
+      previousMoved = false;
+    } else if (installed || installationAttempted) {
+      await FileSystem.deleteAsync(uploadDirectory, { idempotent: true });
+    }
+    installed = false;
+    installationAttempted = false;
+    state = "closed";
+    await cleanupRestoreDirectory(stageDirectory);
+  }
+
+  return {
+    async activate() {
+      if (state !== "prepared") return;
+      try {
+        const liveInfo = await FileSystem.getInfoAsync(uploadDirectory);
+        if (liveInfo.exists) {
+          if (!liveInfo.isDirectory) throw new Error(invalidRestoreFilesMessage);
+          await FileSystem.moveAsync({ from: uploadDirectory, to: previousDirectory });
+          previousMoved = true;
+        }
+        installationAttempted = true;
+        await FileSystem.moveAsync({ from: stageDirectory, to: uploadDirectory });
+        installed = true;
+        state = "active";
+      } catch (error) {
+        try {
+          await rollback();
+        } catch (rollbackError) {
+          // Retain both the original backup directory and this handle for a retry.
+          console.warn("Could not roll back a file restore", rollbackError);
+        }
+        throw error;
+      }
+    },
+    rollback,
+    async finalize() {
+      if (state === "closed" || state === "recovering") return;
+      if (state === "active") await cleanupRestoreDirectory(previousDirectory);
+      // A failed activation with an unfinished rollback must keep the original files.
+      if (state === "prepared" && previousMoved) return;
+      state = "closed";
+      await cleanupRestoreDirectory(stageDirectory);
+    },
+  };
 }
 
 export const fileStorageService = {
@@ -307,38 +463,17 @@ export const fileStorageService = {
     return (await this.list()).reduce((sum, file) => sum + file.size, 0);
   },
 
-  async exportForBackup(): Promise<BackupStoredFile[]> {
-    const files = await this.list();
-    return Promise.all(files.map(async (file) => {
-      const dataUrl = webAvailable() ? file.uri.match(/^data:([^;]+);base64,(.*)$/s) : null;
-      return {
-        name: file.name,
-        size: file.size,
-        purpose: file.purpose,
-        mimeType: dataUrl?.[1] ?? mimeTypeForName(file.name),
-        data: dataUrl?.[2] ?? await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 }),
-      };
-    }));
-  },
+  prepareRestore,
 
   async restoreFromBackup(files: BackupStoredFile[]) {
-    await this.clear();
-    if (webAvailable()) {
-      webWriteFiles(files.map((file) => ({
-        name: file.name,
-        size: file.size,
-        purpose: file.purpose,
-        uri: `data:${file.mimeType};base64,${file.data}`,
-      })));
-      return;
+    const prepared = await prepareRestore(files);
+    try {
+      await prepared.activate();
+    } catch (error) {
+      await prepared.rollback();
+      throw error;
     }
-    for (const file of files) {
-      await ensurePurposeDirectory(file.purpose);
-      const safeName = file.name.replace(/[\\/:*?"<>|]/g, "_");
-      await FileSystem.writeAsStringAsync(`${purposeDirectory(file.purpose)}${safeName}`, file.data, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-    }
+    await prepared.finalize();
   },
 };
 
