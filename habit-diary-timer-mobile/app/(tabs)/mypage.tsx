@@ -479,7 +479,7 @@ export default function MyPageScreen() {
           <View style={styles.weaknessGrid}>
             {Array.from(new Set(profile.weaknesses)).map((item) => (
               <View key={item} style={styles.weaknessChip}>
-                <AppText localize={knownWeaknesses.has(item)} style={[styles.weaknessText, styles.weaknessTextActive]}>{item}</AppText>
+                <AppText localize={knownWeaknesses.has(item)} textBreakStrategy="simple" style={[styles.weaknessText, styles.weaknessTextActive]}>{item}</AppText>
               </View>
             ))}
           </View>
@@ -546,7 +546,7 @@ export default function MyPageScreen() {
                     style={[styles.weaknessChip, styles.weaknessChoice, selected && styles.weaknessChipSelected]}
                   >
                     <AppText style={styles.weaknessCheck} accessible={false}>{selected ? "✅" : "☐"}</AppText>
-                    <AppText localize={knownWeaknesses.has(item)} style={[styles.weaknessText, selected && styles.weaknessTextActive]}>{item}</AppText>
+                    <AppText localize={knownWeaknesses.has(item)} textBreakStrategy="simple" style={[styles.weaknessText, selected && styles.weaknessTextActive]}>{item}</AppText>
                   </Pressable>
                 );
               })}
@@ -678,10 +678,14 @@ const styles = StyleSheet.create({
   choiceTextActive: { color: "#fff" },
   inputGrid: { gap: 10 },
   profileSummary: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  weaknessGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  weaknessGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 8 },
   weaknessChip: {
-    minWidth: 96,
-    maxWidth: "100%",
+    // Give Text a definite column width instead of shrinking an intrinsic-width
+    // chip. Android can otherwise measure the final glyph outside its bounds.
+    width: "48%",
+    minWidth: 0,
+    minHeight: 44,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -693,13 +697,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#050505",
   },
   weaknessCheck: {
+    width: 20,
+    flexShrink: 0,
+    textAlign: "center",
     color: "#fff",
     fontSize: 13,
     fontWeight: "900",
     lineHeight: 20,
   },
   weaknessText: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     color: "#fff",
     fontSize: 13,
     fontWeight: "900",
