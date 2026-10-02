@@ -11,21 +11,31 @@ import { useAppAudio, type LoopAudioName } from "@/audio/AudioProvider";
 import { lightTheme } from "@/constants/theme";
 import { contractService } from "@/services/gameRoomService";
 
-const loopAudios: { key: LoopAudioName; title: string; description: string }[] = [
+const loopAudios: { key: LoopAudioName; title: string }[] = [
+  {
+    key: "bokkisiro",
+    title: "勃起しろ",
+  },
   {
     key: "earLick",
-    title: "耳舐め音声",
-    description: "耳舐め音声をループ再生します。",
+    title: "耳舐め",
   },
   {
     key: "nippleScratch",
-    title: "乳首カリカリの音声",
-    description: "乳首カリカリ音声をループ再生します。",
+    title: "乳首カリカリ",
+  },
+  {
+    key: "sineW",
+    title: "死ね",
+  },
+  {
+    key: "ikunaSine",
+    title: "逝くな×死ね",
   },
 ];
 
 export default function LoopAudioScreen() {
-  const { loopAudioName, playLoopAudio, stopLoopAudio, settings } = useAppAudio();
+  const { loopAudioNames, playLoopAudio, stopLoopAudio, settings } = useAppAudio();
 
   useFocusEffect(
     useCallback(() => {
@@ -51,9 +61,16 @@ export default function LoopAudioScreen() {
       />
       <Card>
         <AppText variant="subtitle">再生する音声</AppText>
+        <AppText variant="muted">複数の音声を同時に再生できます。</AppText>
         <AppText variant="muted">
           画面を移動しても流れ続けます。停止する場合は「停止」を押してください。
         </AppText>
+        <PrimaryButton
+          title="すべて停止"
+          tone="danger"
+          disabled={loopAudioNames.length === 0}
+          onPress={() => stopLoopAudio()}
+        />
         {!settings?.soundEnabled ? (
           <AppText style={styles.warning}>
             効果音がOFFです。設定で効果音をONにしてください。
@@ -61,20 +78,20 @@ export default function LoopAudioScreen() {
         ) : null}
         <View style={styles.options}>
           {loopAudios.map((audio) => {
-            const selected = loopAudioName === audio.key;
+            const selected = loopAudioNames.includes(audio.key);
             return (
               <View key={audio.key} style={styles.option}>
                 <View style={styles.optionText}>
                   <AppText style={styles.optionTitle}>{audio.title}</AppText>
-                  <AppText variant="muted">{selected ? "再生中" : audio.description}</AppText>
+                  {selected ? <AppText variant="muted">再生中</AppText> : null}
                 </View>
                 <PrimaryButton
                   title={selected ? "停止" : "再生"}
                   tone={selected ? "danger" : "primary"}
-                  disabled={!settings?.soundEnabled}
+                  disabled={!selected && !settings?.soundEnabled}
                   onPress={() => {
                     if (selected) {
-                      stopLoopAudio();
+                      stopLoopAudio(audio.key);
                       return;
                     }
                     playLoopAudio(audio.key);
@@ -111,4 +128,3 @@ const styles = StyleSheet.create({
   optionTitle: { color: "#fff", fontWeight: "900" },
   warning: { color: lightTheme.danger, fontWeight: "900" },
 });
-

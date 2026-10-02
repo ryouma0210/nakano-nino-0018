@@ -474,7 +474,7 @@ export default function MyPageScreen() {
 
       <Card style={styles.weaknessCard}>
         <AppText variant="subtitle">弱点</AppText>
-        <PrimaryButton title="弱点記録" disabled={!profileReady || profileSaving || weaknessSaving} onPress={openWeaknessRecord} />
+        <PrimaryButton title="弱点記録" tone="save" disabled={!profileReady || profileSaving || weaknessSaving} onPress={openWeaknessRecord} />
         {profile.weaknesses.length ? (
           <View style={styles.weaknessGrid}>
             {Array.from(new Set(profile.weaknesses)).map((item) => (

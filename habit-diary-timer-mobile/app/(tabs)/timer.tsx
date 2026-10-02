@@ -236,6 +236,8 @@ export default function TimerScreen() {
     sessionRecorded.current = false;
     setSessionAudioActive(true);
     playLoopAudio("nippleScratch");
+    playLoopAudio("sineW");
+    playLoopAudio("ikunaSine");
     setRunning(true);
   }
 

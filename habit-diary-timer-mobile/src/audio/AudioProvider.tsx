@@ -1,12 +1,12 @@
-/* eslint-disable react-hooks/immutability */
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
+import { createLoopPlayback } from "./loopPlayback";
 
 type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
-export type LoopAudioName = "earLick" | "nippleScratch";
+export type LoopAudioName = "earLick" | "nippleScratch" | "ikunaSine" | "bokkisiro" | "sineW";
 export type BgmMode = "default" | "outsideBright" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
   settings: AppSettings | null;
@@ -15,9 +15,9 @@ type AudioContextValue = {
   stopEffect: (name: EffectName) => void;
   bgmMode: BgmMode;
   setBgmMode: (mode: BgmMode) => void;
-  loopAudioName: LoopAudioName | null;
+  loopAudioNames: readonly LoopAudioName[];
   playLoopAudio: (name: LoopAudioName) => void;
-  stopLoopAudio: () => void;
+  stopLoopAudio: (name?: LoopAudioName) => void;
   setSessionAudioActive: (active: boolean) => void;
 };
 
@@ -28,7 +28,7 @@ const AudioContext = createContext<AudioContextValue>({
   stopEffect: () => {},
   bgmMode: "default",
   setBgmMode: () => {},
-  loopAudioName: null,
+  loopAudioNames: [],
   playLoopAudio: () => {},
   stopLoopAudio: () => {},
   setSessionAudioActive: () => {},
@@ -43,7 +43,7 @@ const outsideCharmBgmSource = require("../../assets/audio/yuuwakubgm.m4a");
 export function AudioProvider({ children }: PropsWithChildren) {
   // Expo Go is used only for layout checks. Creating every native audio player
   // at startup can overwhelm the emulator audio device and leave the UI black.
-  if (__DEV__) return <SilentAudioProvider>{children}</SilentAudioProvider>;
+  if (__DEV__ && Platform.OS !== "web") return <SilentAudioProvider>{children}</SilentAudioProvider>;
   return <ActiveAudioProvider>{children}</ActiveAudioProvider>;
 }
 
@@ -69,7 +69,7 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     stopEffect: () => {},
     bgmMode,
     setBgmMode,
-    loopAudioName: null,
+    loopAudioNames: [],
     playLoopAudio: () => {},
     stopLoopAudio: () => {},
     setSessionAudioActive: () => {},
@@ -81,7 +81,7 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
 function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
-  const [loopAudioName, setLoopAudioName] = useState<LoopAudioName | null>(null);
+  const [loopAudioNames, setLoopAudioNames] = useState<LoopAudioName[]>([]);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
   const bgm = useAudioPlayer(bgmSource);
@@ -107,6 +107,20 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
   const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
   const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
+  const ikunaSineLoop = useAudioPlayer(require("../../assets/audio/ikuna-sine.m4a"));
+  const bokkisiroLoop = useAudioPlayer(require("../../assets/audio/bokkisiro.m4a"));
+  const sineWLoop = useAudioPlayer(require("../../assets/audio/sine-w.m4a"));
+  const loopPlayers = useMemo(() => ({
+    earLick: earLickLoop,
+    nippleScratch: nippleScratchLoop,
+    ikunaSine: ikunaSineLoop,
+    bokkisiro: bokkisiroLoop,
+    sineW: sineWLoop,
+  }), [bokkisiroLoop, earLickLoop, ikunaSineLoop, nippleScratchLoop, sineWLoop]);
+  const loopPlayback = useMemo(() => createLoopPlayback(Object.values(loopPlayers)), [loopPlayers]);
+
+  // useAudioPlayer releases each player; invalidate pending starts on unmount too.
+  useEffect(() => () => loopPlayback.cancelPending(), [loopPlayback]);
 
   useEffect(() => {
     if (typeof setAudioModeAsync === "function") {
@@ -167,10 +181,10 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       player.loop = true;
       player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
     });
-    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && !loopAudioName) {
+    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && loopAudioNames.length === 0) {
       bgms[bgmMode].play();
     }
-  }, [appIsActive, bgm, bgmMode, loopAudioName, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
+  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -198,34 +212,27 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     player.seekTo(0).catch(console.error);
   }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
-  const stopLoopAudio = useCallback(() => {
-    earLickLoop.pause();
-    nippleScratchLoop.pause();
-    earLickLoop.seekTo(0).catch(console.error);
-    nippleScratchLoop.seekTo(0).catch(console.error);
-    setLoopAudioName(null);
-    setSessionAudioActive(false);
-  }, [earLickLoop, nippleScratchLoop]);
+  const stopLoopAudio = useCallback((name?: LoopAudioName) => {
+    loopPlayback.stop(name ? loopPlayers[name] : undefined);
+    setLoopAudioNames((current) => name ? current.filter((item) => item !== name) : []);
+  }, [loopPlayback, loopPlayers]);
 
   const playLoopAudio = useCallback((name: LoopAudioName) => {
     if (!settings?.soundEnabled) return;
-    const nextPlayer = name === "earLick" ? earLickLoop : nippleScratchLoop;
-    const otherPlayer = name === "earLick" ? nippleScratchLoop : earLickLoop;
-    otherPlayer.pause();
-    otherPlayer.seekTo(0).catch(console.error);
-    nextPlayer.loop = true;
-    nextPlayer.volume = settings.soundVolume;
-    setSessionAudioActive(true);
-    setLoopAudioName(name);
-    nextPlayer.seekTo(0).then(() => nextPlayer.play()).catch(console.error);
-  }, [earLickLoop, nippleScratchLoop, settings]);
+    setLoopAudioNames((current) => current.includes(name) ? current : [...current, name]);
+    loopPlayback.play(loopPlayers[name], settings.soundVolume);
+  }, [loopPlayback, loopPlayers, settings]);
 
   useEffect(() => {
-    if (!settings || !loopAudioName) return;
-    const player = loopAudioName === "earLick" ? earLickLoop : nippleScratchLoop;
-    player.volume = settings.soundVolume;
-    if (!settings.soundEnabled) stopLoopAudio();
-  }, [earLickLoop, loopAudioName, nippleScratchLoop, settings, stopLoopAudio]);
+    if (!settings || loopAudioNames.length === 0) return;
+    if (!settings.soundEnabled) {
+      stopLoopAudio();
+      return;
+    }
+    loopAudioNames.forEach((name) => {
+      loopPlayers[name].volume = settings.soundVolume;
+    });
+  }, [loopAudioNames, loopPlayers, settings, stopLoopAudio]);
 
   const value = useMemo(
     () => ({
@@ -235,12 +242,12 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       stopEffect,
       bgmMode,
       setBgmMode,
-      loopAudioName,
+      loopAudioNames,
       playLoopAudio,
       stopLoopAudio,
       setSessionAudioActive,
     }),
-    [bgmMode, loopAudioName, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioNames, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
 }
