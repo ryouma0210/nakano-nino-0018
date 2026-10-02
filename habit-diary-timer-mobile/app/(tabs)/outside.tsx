@@ -6,6 +6,7 @@ import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { contractService } from "@/services/gameRoomService";
 import { AppText } from "@/components/AppText";
+import { LocalizedPressable } from "@/components/LocalizedPressable";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { pointRepository, rewardRepository } from "@/repositories/rewardRepository";
@@ -27,6 +28,7 @@ import { lossStageComments } from "@/features/outside/lossDialogue";
 import { recordOutsideAchievement } from "@/features/outside/achievements";
 import { claimQuest, dailyQuestViews, storyQuestViews, type QuestView } from "@/features/outside/quests";
 import { CenterArea, LeftArea, RightArea, TopArea } from "@/components/outside/areas";
+import { useOutsideKeyboardControls } from "@/features/outside/useOutsideKeyboardControls";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
@@ -44,6 +46,9 @@ type MapStep = 0 | 1 | 2;
 type BattleAilments = { bound: boolean; weakened: boolean; illusion: boolean; feared: boolean };
 const noBattleAilments: BattleAilments = { bound: false, weakened: false, illusion: false, feared: false };
 const LOSS_MEMORY_STORAGE_KEY = "nino-room:outside-loss-memories";
+const advanceKeyboardProps = Platform.OS === "web" ? { dataSet: { outsideAdvance: "true" } } : {};
+const movementKeyboardProps = Platform.OS === "web" ? { dataSet: { outsideMovement: "true" } } : {};
+const messageTapGuide = Platform.OS === "web" ? "タップ / Enter ▼" : "タップ ▼";
 type LossMemoryKind = Exclude<LossEventKind, "tail">;
 
 const crystalPosition: MapPosition = { x: 17, y: 65 };
@@ -452,6 +457,8 @@ export default function OutsideScreen() {
   const [displayedCharmTurns, setDisplayedCharmTurns] = useState(0);
   const [displayedTemptationGauge, setDisplayedTemptationGauge] = useState(0);
   const [displayedBattleAilments, setDisplayedBattleAilments] = useState<BattleAilments>(noBattleAilments);
+  const mapModalOpen = crystalOpen || questCrystalOpen || warningSignOpen || statusModalOpen || playerStatusModalOpen;
+  const canMove = phase === "explore" && mapStep === 0 && !isMovingArea && !mapModalOpen;
 
   const resetToCrossroad = useCallback(() => {
     setPhase("explore");
@@ -747,7 +754,7 @@ export default function OutsideScreen() {
   }
 
   function movePlayer(direction: Direction) {
-    if (phase !== "explore" || mapStep > 0) return;
+    if (!canMove) return;
     setPlayerFacing(direction);
     const step = 7;
     const next = { ...mapPosition };
@@ -1536,6 +1543,14 @@ export default function OutsideScreen() {
     setBattleAwaitingChoice(true);
   }
 
+  let advanceMessage: (() => void) | undefined;
+  if (!mapModalOpen && !isMovingArea) {
+    if (phase === "explore" && message) advanceMessage = handleMapMessagePress;
+    else if (phase === "battle" && !battleAwaitingChoice) advanceMessage = handleBattleMessagePress;
+    else if (phase === "loss" && lossEventIndex < 19) advanceMessage = advanceLossScene;
+  }
+  useOutsideKeyboardControls(canMove, movePlayer, advanceMessage);
+
   if (phase === "battle" || phase === "result" || phase === "loss") {
     return (
       <View style={styles.root}>
@@ -1543,7 +1558,7 @@ export default function OutsideScreen() {
           <View style={[styles.battleStage, phase === "loss" && styles.lossBattleStage]}>
             {phase === "loss" ? (
               <>
-                <Pressable style={styles.lossStage} onPress={advanceLossScene}>
+                <Pressable {...advanceKeyboardProps} style={styles.lossStage} onPress={advanceLossScene}>
                   <NativeImage
                     key={`loss-${isLossReplay ? "replay" : "battle"}-${activeSuccubusStage}-${battle.lastLossKind}-${lossImageIndex}`}
                     source={lossEventImages[lossImageIndex] ?? lossEventImages[0]}
@@ -1557,13 +1572,13 @@ export default function OutsideScreen() {
                     <AppText style={[styles.levelDownFlash, { left: `${levelDownFlash.left}%`, top: `${levelDownFlash.top}%` }]}>レベルダウン⤵⤵⤵</AppText>
                   ) : null}
                 </Pressable>
-                <Pressable style={styles.lossMessageBox} onPress={advanceLossScene}>
+                <Pressable {...advanceKeyboardProps} style={styles.lossMessageBox} onPress={advanceLossScene}>
                   <View style={styles.rowBetween}>
                     <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
                     <AppText style={styles.phase}>LOSS</AppText>
                   </View>
                   <AppText style={[styles.message, styles.gameOverMessage]}>{lossMessage}</AppText>
-                  {lossEventIndex < 19 ? <AppText style={styles.tapGuide}>タップ ▼</AppText> : null}
+                  {lossEventIndex < 19 ? <AppText style={styles.tapGuide}>{messageTapGuide}</AppText> : null}
                 </Pressable>
               </>
             ) : (
@@ -1672,6 +1687,7 @@ export default function OutsideScreen() {
                   </View>
                 ) : (
                   <Pressable
+                    {...advanceKeyboardProps}
                     style={styles.battleStageMessage}
                     onPress={handleBattleMessagePress}
                     onLayout={(event) => setBattleMessageHeight(event.nativeEvent.layout.height)}
@@ -1686,7 +1702,7 @@ export default function OutsideScreen() {
                     <AppText style={[styles.message, pendingGameOver ? styles.pendingGameOverMessage : null]}>
                       {message}
                     </AppText>
-                    <AppText style={styles.tapGuide}>タップ ▼</AppText>
+                    {phase === "battle" ? <AppText style={styles.tapGuide}>{messageTapGuide}</AppText> : null}
                   </Pressable>
                 )}
                 {damageFlash ? (
@@ -1749,7 +1765,7 @@ export default function OutsideScreen() {
           paddingBottom: Math.max(8, insets.bottom),
         },
       ]}>
-        <View key={`outside-area-${mapArea}`} style={styles.fullMap}>
+        <View key={`outside-area-${mapArea}`} style={[styles.fullMap, Platform.OS === "web" && styles.webFullMap]}>
           {mapArea === "center" ? (
             <CenterArea
               crystalSource={pixelSprites.crystal}
@@ -1826,42 +1842,43 @@ export default function OutsideScreen() {
               ))
             : null}
           {!crystalOpen && !warningSignOpen && message ? (
-            <Pressable style={styles.mapMessageBox} onPress={handleMapMessagePress}>
+            <Pressable {...advanceKeyboardProps} style={styles.mapMessageBox} onPress={handleMapMessagePress}>
               {isSuccubusMapQuip ? (
                 <AppText style={styles.battleMessageName}>二ノサキュバス</AppText>
               ) : null}
               <AppText style={[styles.mapMessage, /回復|全回復|浄化/.test(message) && styles.recoveryMessage]}>{message}</AppText>
-              <AppText style={styles.mapTapGuide}>タップ ▼</AppText>
+              <AppText style={styles.mapTapGuide}>{messageTapGuide}</AppText>
             </Pressable>
           ) : null}
         </View>
-        <View style={styles.outsideBottomRow}>
+        <View style={[styles.outsideBottomRow, Platform.OS === "web" && styles.webOutsideBottomRow]}>
           <View style={styles.statusPanel}>
-            <Pressable style={styles.mapInfoButton} onPress={() => setPlayerStatusModalOpen(true)}>
-              <AppText style={styles.mapInfoButtonText}>自分のステータス</AppText>
+            <Pressable style={[styles.mapInfoButton, Platform.OS === "web" && styles.webMapInfoButton]} onPress={() => setPlayerStatusModalOpen(true)}>
+              <AppText style={[styles.mapInfoButtonText, Platform.OS === "web" && styles.webMapInfoButtonText]}>自分のステータス</AppText>
             </Pressable>
             {hasMapStatus ? (
-              <Pressable style={styles.mapInfoButton} onPress={() => setStatusModalOpen(true)}>
-                <AppText style={styles.mapInfoButtonText}>状態異常を確認</AppText>
+              <Pressable style={[styles.mapInfoButton, Platform.OS === "web" && styles.webMapInfoButton]} onPress={() => setStatusModalOpen(true)}>
+                <AppText style={[styles.mapInfoButtonText, Platform.OS === "web" && styles.webMapInfoButtonText]}>状態異常を確認</AppText>
               </Pressable>
             ) : null}
           </View>
-          <View style={styles.operationPanel}>
-            <AppText style={styles.mapHintTitle}>操作</AppText>
-            <View style={[styles.dpad, Platform.OS === "web" && styles.webDpad]}>
-              <Pressable style={[styles.dpadButton, styles.dpadUp, Platform.OS === "web" && styles.webDpadUp]} onPress={() => movePlayer("up")}>
-                <AppText style={styles.dpadText}>⌃</AppText>
-              </Pressable>
-              <Pressable style={[styles.dpadButton, styles.dpadLeft, Platform.OS === "web" && styles.webDpadLeft]} onPress={() => movePlayer("left")}>
-                <AppText style={styles.dpadText}>‹</AppText>
-              </Pressable>
-              <Pressable style={[styles.dpadButton, styles.dpadRight, Platform.OS === "web" && styles.webDpadRight]} onPress={() => movePlayer("right")}>
-                <AppText style={styles.dpadText}>›</AppText>
-              </Pressable>
-              <Pressable style={[styles.dpadButton, styles.dpadDown, Platform.OS === "web" && styles.webDpadDown]} onPress={() => movePlayer("down")}>
-                <AppText style={styles.dpadText}>⌄</AppText>
-              </Pressable>
+          <View style={[styles.operationPanel, Platform.OS === "web" && styles.webOperationPanel]}>
+            <AppText style={[styles.mapHintTitle, Platform.OS === "web" && styles.webMapHintTitle]}>操作</AppText>
+            <View style={[styles.dpad, Platform.OS === "web" && styles.webDpad, !canMove && styles.dpadDisabled]}>
+              <LocalizedPressable {...movementKeyboardProps} accessibilityRole="button" accessibilityLabel="上へ移動" disabled={!canMove} style={[styles.dpadButton, styles.dpadUp, Platform.OS === "web" && styles.webDpadButton, Platform.OS === "web" && styles.webDpadUp]} onPress={() => movePlayer("up")}>
+                <AppText style={[styles.dpadText, Platform.OS === "web" && styles.webDpadText]}>↑</AppText>
+              </LocalizedPressable>
+              <LocalizedPressable {...movementKeyboardProps} accessibilityRole="button" accessibilityLabel="左へ移動" disabled={!canMove} style={[styles.dpadButton, styles.dpadLeft, Platform.OS === "web" && styles.webDpadButton, Platform.OS === "web" && styles.webDpadLeft]} onPress={() => movePlayer("left")}>
+                <AppText style={[styles.dpadText, Platform.OS === "web" && styles.webDpadText]}>←</AppText>
+              </LocalizedPressable>
+              <LocalizedPressable {...movementKeyboardProps} accessibilityRole="button" accessibilityLabel="右へ移動" disabled={!canMove} style={[styles.dpadButton, styles.dpadRight, Platform.OS === "web" && styles.webDpadButton, Platform.OS === "web" && styles.webDpadRight]} onPress={() => movePlayer("right")}>
+                <AppText style={[styles.dpadText, Platform.OS === "web" && styles.webDpadText]}>→</AppText>
+              </LocalizedPressable>
+              <LocalizedPressable {...movementKeyboardProps} accessibilityRole="button" accessibilityLabel="下へ移動" disabled={!canMove} style={[styles.dpadButton, styles.dpadDown, Platform.OS === "web" && styles.webDpadButton, Platform.OS === "web" && styles.webDpadDown]} onPress={() => movePlayer("down")}>
+                <AppText style={[styles.dpadText, Platform.OS === "web" && styles.webDpadText]}>↓</AppText>
+              </LocalizedPressable>
             </View>
+            {Platform.OS === "web" ? <AppText style={styles.webKeyboardHint}>矢印キーでも移動できます</AppText> : null}
           </View>
         </View>
       </View>
@@ -2332,26 +2349,42 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   webDpad: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    width: 156,
+    height: 156,
+    borderWidth: 0,
+    borderRadius: 0,
+    flexShrink: 0,
+    backgroundColor: "transparent",
+  },
+  webDpadButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ff86c5",
+    backgroundColor: "#30202b",
+  },
+  webDpadText: {
+    fontSize: 28,
+    lineHeight: 34,
   },
   webDpadUp: {
     top: 0,
-    left: 17,
+    left: 54,
   },
   webDpadLeft: {
-    top: 17,
+    top: 54,
     left: 0,
   },
   webDpadRight: {
-    top: 17,
+    top: 54,
     right: 0,
   },
   webDpadDown: {
     bottom: 0,
-    left: 17,
+    left: 54,
   },
+  dpadDisabled: { opacity: 0.4 },
   fullMap: {
     flex: 8.4,
     width: "100%",
@@ -2361,6 +2394,7 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#000",
   },
+  webFullMap: { flex: 1, minHeight: 160 },
   mapBackground: {
     position: "absolute",
     top: 0,
@@ -3248,6 +3282,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
   },
+  webOutsideBottomRow: { flex: 0, flexShrink: 0, minHeight: 220 },
   statusPanel: {
     flex: 1,
     borderWidth: 2,
@@ -3265,6 +3300,11 @@ const styles = StyleSheet.create({
     padding: 7,
     gap: 1,
   },
+  webOperationPanel: { minWidth: 180, gap: 4, justifyContent: "center" },
+  webMapHintTitle: { fontSize: 14, lineHeight: 18, letterSpacing: 2, textAlign: "center" },
+  webKeyboardHint: { color: "#ddd", fontSize: 11, lineHeight: 16, textAlign: "center" },
+  webMapInfoButton: { minHeight: 48 },
+  webMapInfoButtonText: { fontSize: 15, lineHeight: 22 },
   statusBig: {
     color: "#fff",
     fontSize: 22,

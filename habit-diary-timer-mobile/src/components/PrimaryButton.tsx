@@ -7,6 +7,7 @@ type Props = {
   onPress: () => void;
   tone?:
     | "primary"
+    | "save"
     | "secondary"
     | "danger"
     | "punishment"
@@ -35,6 +36,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
     !darkNavigation &&
     tone !== "danger" &&
     (
+      tone === "save" ||
       title.includes("保存") ||
       title.includes("登録") ||
       title.includes("命令完了") ||
@@ -51,7 +53,7 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
       onPress={press}
       style={({ pressed }) => [
         styles.button,
-        styles[tone],
+        styles[tone === "save" ? "primary" : tone],
         darkNavigation && styles.darkNavigation,
         activeSubmit && styles.activeSubmit,
         disabled && styles.disabled,

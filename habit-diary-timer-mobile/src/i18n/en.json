@@ -1957,5 +1957,17 @@
   "旧形式のバックアップが大きすぎます。この端末では読み込めません。元の端末で新しい完全バックアップを作成してください。": "This backup uses an older format and is too large to open on this device. Create a new complete backup on the original device.",
   "バックアップのセーブデータが大きすぎます。": "The save data in this backup is too large.",
   "バックアップファイルが壊れているか、対応していない形式です。": "The backup file is damaged or uses an unsupported format.",
-  "復元前のデータに戻せませんでした。アプリを閉じず、バックアップを保管してください。": "Could not recover the data from before the restore. Keep the app open and keep your backup file."
+  "復元前のデータに戻せませんでした。アプリを閉じず、バックアップを保管してください。": "Could not recover the data from before the restore. Keep the app open and keep your backup file.",
+  "上へ移動": "Move up",
+  "下へ移動": "Move down",
+  "左へ移動": "Move left",
+  "右へ移動": "Move right",
+  "矢印キーでも移動できます": "You can also use the arrow keys to move",
+  "タップ / Enter ▼": "Tap / Enter ▼",
+  "追加ボイスをループ再生します。": "Loop this voice recording.",
+  "逝くな×死ね": "Don't Come × Die",
+  "勃起しろ": "Get Hard",
+  "死ね": "Die",
+  "複数の音声を同時に再生できます。": "You can play multiple audio tracks at the same time.",
+  "すべて停止": "Stop all"
 }
