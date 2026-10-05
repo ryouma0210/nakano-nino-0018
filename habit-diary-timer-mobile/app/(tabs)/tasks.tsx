@@ -154,6 +154,11 @@ export default function TasksScreen() {
         tone="record"
         onPress={() => router.push("/(tabs)/records")}
       />
+      <PrimaryButton
+        title="ゴミ汁廃棄履歴"
+        tone="tribute"
+        onPress={() => router.push("/(tabs)/disposal-history")}
+      />
     </Screen>
   );
 }

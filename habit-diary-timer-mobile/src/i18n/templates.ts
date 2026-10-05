@@ -8,6 +8,7 @@ export const translationTemplates: readonly TranslationTemplate[] = [
   ["ストップ{0}", "Stop {0}", "정지 칸 {0}", "停留格{0}"],
   ["残り{0}マス", "Spaces left: {0}", "남은 칸: {0}", "剩余{0}格"],
   ["残りマス：{0}", "Spaces remaining: {0}", "남은 칸: {0}", "剩余格数：{0}"],
+  ["敗北マス：{0}", "Defeat space: {0}", "패배한 칸: {0}", "失败位置：{0}"],
   ["出目：{0}", "Roll: {0}", "주사위 눈: {0}", "点数：{0}"],
   ["ルール適用後：{0}", "After applying rule: {0}", "규칙 적용 후: {0}", "应用规则后：{0}"],
   ["元の出目：{0}", "Original roll: {0}", "원래 주사위 눈: {0}", "原始点数：{0}"],

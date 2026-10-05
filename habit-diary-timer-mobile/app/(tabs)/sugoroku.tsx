@@ -12,11 +12,13 @@ import { useAppModal } from "@/components/AppModalProvider";
 import { SugorokuArtwork, SugorokuMapModal } from "@/features/sugoroku/SugorokuArtwork";
 import { SugorokuDice } from "@/features/sugoroku/SugorokuDice";
 import { SugorokuRules } from "@/features/sugoroku/SugorokuRules";
+import { SugorokuTimer } from "@/features/sugoroku/SugorokuTimer";
 import { getSugorokuAudioScene } from "@/features/sugoroku/audio";
+import { getSugorokuInstruction } from "@/features/sugoroku/instructions";
 import {
-  chooseRoute, completeEvent, createGame, failGame, getCurrentTile,
+  chooseRoute, completeEvent, createGame, failGame, getCurrentTile, getDefeatTile,
   getDiceMovementRule, getDisplayedDiceResult, getRemainingSpaces, retireGame, rollDice,
-  ROUTE_TILES, type SugorokuGame,
+  getTileRuleDescription, ROUTE_TILES, type SugorokuGame,
 } from "@/features/sugoroku/game";
 import { loadSugoroku, saveSugoroku, type SugorokuSave } from "@/features/sugoroku/storage";
 
@@ -33,9 +35,11 @@ function GameResult({ game }: { game: SugorokuGame }) {
   if (game.outcome === "goal-1" || game.outcome === "goal-2") {
     return <AppText style={[styles.resultLabel, styles.resultSuccess]}>{game.outcome === "goal-1" ? "ゴール①をクリア" : "ゴール②をクリア"}</AppText>;
   }
+  const defeatTile = getDefeatTile(game);
   return (
     <>
       <AppText style={[styles.resultLabel, styles.resultFailure]}>未達成</AppText>
+      {defeatTile ? <AppText variant="muted" style={styles.resultFailure}>{`敗北マス：${defeatTile.label}`}</AppText> : null}
       <AppText variant="muted" style={styles.resultFailure}>{`残りマス：${getRemainingSpaces(game)}`}</AppText>
       {game.penaltyPoints !== null ? <AppText variant="muted" style={styles.resultFailure}>{`ペナルティ：${game.penaltyPoints}`}</AppText> : null}
     </>
@@ -249,6 +253,7 @@ export default function SugorokuScreen() {
   }
 
   const tile = game ? getCurrentTile(game) : ROUTE_TILES[0];
+  const instruction = getSugorokuInstruction(tile.id);
   const disabled = loading || saving || loadFailed || rollPreview !== null;
   const rollingDice = rollPreview?.stage === "rolling" || rollPreview?.stage === "adjusting";
   const adjustedPreview = rollPreview?.stage === "adjusting" || rollPreview?.stage === "committing";
@@ -320,6 +325,12 @@ export default function SugorokuScreen() {
                 <>
                   <Card>
                     {tileSummary}
+                    {instruction ? (
+                      <View style={styles.instruction}>
+                        <AppText variant="subtitle" accessibilityRole="header">命令</AppText>
+                        <AppText>{instruction}</AppText>
+                      </View>
+                    ) : null}
                     {game.phase === "ready" && game.movement === 0 ? <AppText>移動なし。もう一度サイコロを振ってください。</AppText> : null}
                     {game.phase === "choice" ? (
                       <View style={styles.stack}>
@@ -330,22 +341,25 @@ export default function SugorokuScreen() {
                     {game.penaltyPoints !== null ? <AppText style={styles.score} localize={false}>{`${game.failureRemainingSpaces} × ${game.penaltyRoll} × 10 = ${game.penaltyPoints}`}</AppText> : null}
                   </Card>
                   <View style={styles.controls}>
-                    <View style={styles.actions}>
+                    <View style={styles.actions} testID="sugoroku-left-actions">
                       <PrimaryButton title={game.phase === "goal" || game.phase === "penalty-event" ? "結果を記録して終了" : "命令完了"} tone="save" disabled={disabled || !canComplete} onPress={() => advance(completeEvent, true)} />
                       <PrimaryButton title="リタイア" tone="secondary" disabled={disabled || !canExit} onPress={() => setExitAction("retire")} />
                       <PrimaryButton title="失敗" tone="danger" disabled={disabled || !canExit} onPress={() => setExitAction("fail")} />
                     </View>
-                    <Card style={styles.dicePanel}>
-                      <SugorokuDice value={displayedDice} rolling={rollingDice} onRollAnimationEnd={() => void finishDiceRoll()} />
-                      <AppText variant="muted" accessibilityLiveRegion="polite">{diceResultLabel}</AppText>
-                      {showsAdjustedResult && rawDice !== null ? <AppText variant="muted">{`元の出目：${rawDice}`}</AppText> : null}
-                      {rollPreview?.stage === "rule" ? <AppText style={styles.diceRule} accessibilityLiveRegion="polite">ルール適用</AppText> : null}
-                      {diceRuleLabel ? <AppText style={styles.diceRule}>{diceRuleLabel}</AppText> : null}
-                      <View style={styles.fullWidth}>
-                        <PrimaryButton title={rollPreview?.stage === "rolling" ? "振っています…" : rollPreview?.stage === "rule" || rollPreview?.stage === "adjusting" ? "ルール適用中…" : "サイコロを振る"} disabled={disabled || !canRoll} onPress={startDiceRoll} />
-                      </View>
-                    </Card>
+                    <View style={styles.actions} testID="sugoroku-right-actions">
+                      <PrimaryButton title={rollPreview?.stage === "rolling" ? "振っています…" : rollPreview?.stage === "rule" || rollPreview?.stage === "adjusting" ? "ルール適用中…" : "サイコロを振る"} disabled={disabled || !canRoll} onPress={startDiceRoll} />
+                      <SugorokuTimer key={game.id} />
+                    </View>
                   </View>
+                  <Card>
+                    {displayedDice !== null || diceRuleLabel ? <View style={styles.diceResults} testID="sugoroku-dice-results">
+                      {displayedDice !== null ? <AppText accessibilityLiveRegion="polite">{diceResultLabel}</AppText> : null}
+                      {showsAdjustedResult && rawDice !== null ? <AppText variant="muted">{`元の出目：${rawDice}`}</AppText> : null}
+                      {diceRuleLabel ? <AppText style={styles.diceRule}>{diceRuleLabel}</AppText> : null}
+                    </View> : null}
+                    <AppText variant="subtitle">マスのルール</AppText>
+                    <AppText>{getTileRuleDescription(tile.id)}</AppText>
+                  </Card>
                 </>
               )}
             </>
@@ -353,8 +367,8 @@ export default function SugorokuScreen() {
 
           <Card>
             <PrimaryButton title="マップを確認" tone="secondary" onPress={() => setShowMap(true)} />
-            <PrimaryButton title={showRules || !game ? "遊び方を表示中" : "遊び方を見る"} tone="secondary" onPress={() => setShowRules((value) => !value)} disabled={!game} />
-            {showRules || !game ? <SugorokuRules /> : null}
+            <PrimaryButton title={showRules ? "遊び方を表示中" : "遊び方を見る"} tone="secondary" onPress={() => setShowRules((value) => !value)} />
+            {showRules ? <SugorokuRules /> : null}
           </Card>
 
           {!loading && !loadFailed ? (
@@ -374,6 +388,20 @@ export default function SugorokuScreen() {
           onConfirm={() => { const action = exitAction; setExitAction(null); if (action) advance(action === "retire" ? retireGame : failGame); }}
         />
       </Screen>
+      {rollPreview ? (
+        <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => undefined}>
+          <View style={styles.diceOverlay}>
+            <View accessibilityViewIsModal style={styles.diceDialog} testID="sugoroku-dice-roll">
+              <AppText variant="subtitle" accessibilityRole="header">サイコロ</AppText>
+              <SugorokuDice value={displayedDice} rolling={rollingDice} onRollAnimationEnd={() => void finishDiceRoll()} />
+              <AppText accessibilityLiveRegion="polite">{diceResultLabel}</AppText>
+              {showsAdjustedResult && rawDice !== null ? <AppText variant="muted">{`元の出目：${rawDice}`}</AppText> : null}
+              {rollPreview.stage === "rule" ? <AppText style={styles.diceRule} accessibilityLiveRegion="polite">ルール適用</AppText> : null}
+              {diceRuleLabel ? <AppText style={styles.diceRule}>{diceRuleLabel}</AppText> : null}
+            </View>
+          </View>
+        </Modal>
+      ) : null}
       <SugorokuMapModal visible={showMap} onClose={() => setShowMap(false)} />
       <PlayHistoryModal visible={showHistory} history={history} onClose={() => setShowHistory(false)} />
       {movementNotice ? (
@@ -403,11 +431,13 @@ const styles = StyleSheet.create({
   noticeBubble: { width: "100%", maxWidth: 720, paddingVertical: 14, paddingHorizontal: 18, borderRadius: 8, borderWidth: 1, borderColor: "#7bb2eb", backgroundColor: "#15263c" },
   noticeText: { color: "#eff6ff", fontWeight: "700", textAlign: "center" },
   stack: { gap: 10 },
+  instruction: { gap: 6 },
   controls: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   actions: { flex: 1, minWidth: 0, gap: 10 },
-  dicePanel: { flex: 1, minWidth: 0, alignItems: "center", padding: 10, gap: 8 },
-  diceRule: { color: "#f3d985", fontWeight: "700", textAlign: "center" },
-  fullWidth: { width: "100%" },
+  diceResults: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 },
+  diceRule: { color: "#f3d985", fontWeight: "700" },
+  diceOverlay: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.8)" },
+  diceDialog: { width: "100%", maxWidth: 320, padding: 20, gap: 12, alignItems: "center", borderWidth: 1, borderColor: "#fff", borderRadius: 8, backgroundColor: "#080d14" },
   score: { fontWeight: "800", fontSize: 20, lineHeight: 28, color: "#f3d985" },
   resultLabel: { fontWeight: "800" },
   resultSuccess: { color: "#86efac" },

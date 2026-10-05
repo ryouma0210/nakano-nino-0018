@@ -18,13 +18,13 @@ export const SUGOROKU_IMAGES: Readonly<Partial<Record<string, ImageSourcePropTyp
   // スタート
   start: SUGOROKU_START_IMAGES[0],
 
-  // マイナスゾーン
-  "-6": require("../../../assets/sugoroku/No.-6.jpg"),
-  "-5": require("../../../assets/sugoroku/No.-5.jpg"),
-  "-4": require("../../../assets/sugoroku/No.-4.jpg"),
-  "-3": require("../../../assets/sugoroku/No.-3.jpg"),
-  "-2": require("../../../assets/sugoroku/No.-2.jpg"),
-  "-1": require("../../../assets/sugoroku/No.-1.jpg"),
+  // Androidでは記号が除去されるため、通常マスと区別できる minus_ の名前を使う。
+  "-6": require("../../../assets/sugoroku/minus_6.jpg"),
+  "-5": require("../../../assets/sugoroku/minus_5.jpg"),
+  "-4": require("../../../assets/sugoroku/minus_4.jpg"),
+  "-3": require("../../../assets/sugoroku/minus_3.jpg"),
+  "-2": require("../../../assets/sugoroku/minus_2.jpg"),
+  "-1": require("../../../assets/sugoroku/minus_1.jpg"),
 
   // 通常マス（強制停止の 7・14・21・25 も、この番号で設定）
   "1": require("../../../assets/sugoroku/No.1.jpg"),

@@ -24,7 +24,7 @@ const destinations = [
 ] as const;
 
 const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku"]);
-const recordScreens = new Set(["records", "tribute", "rewards", "collection", "today", "report"]);
+const recordScreens = new Set(["records", "tribute", "disposal-history", "rewards", "collection", "today", "report"]);
 const managementScreens = new Set(["loop-audio", "files", "settings", "external-links", "slave-contract"]);
 const BottomNavigationVisibleContext = createContext(false);
 

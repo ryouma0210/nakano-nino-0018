@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { completeEvent, createGame, failGame, getDisplayedDiceResult, rollDice, type SugorokuGame } from "./game";
+import {
+  completeEvent, createGame, failGame, getDefeatTile, getDisplayedDiceResult, retireGame,
+  rollDice, ROUTE_TILES, type SugorokuGame,
+} from "./game";
 import { clearSugoroku, loadSugoroku, saveSugoroku } from "./storage";
 
 const storage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }));
@@ -85,6 +88,29 @@ describe("sugoroku persistence", () => {
     await saveSugoroku(next);
     expect((await loadSugoroku()).current).toMatchObject({ diceResult: 6, adjustedDiceResult: 6, movement: 4 });
     expect((await loadSugoroku()).history).toEqual([previous]);
+  });
+
+  it("derives defeat spaces from unchanged legacy history, including inserted stops", async () => {
+    const stopped = {
+      ...started("legacy-retire"), extended: true,
+      position: ROUTE_TILES.find((tile) => tile.id === "stop-2")!.position!, phase: "event" as const,
+    };
+    const failed = { ...started("legacy-fail"), position: -5, phase: "event" as const };
+    const history = [
+      completeEvent(rollDice(completeEvent(retireGame(stopped)), 3), "2026-10-03T00:01:00.000Z"),
+      completeEvent(rollDice(failGame(failed), 5), "2026-10-03T00:01:00.000Z"),
+    ];
+    for (const game of history) delete game.adjustedDiceResult;
+    raw = JSON.stringify({ version: 1, current: null, history });
+    const originalRaw = raw;
+
+    const loaded = await loadSugoroku();
+    expect(loaded.history.map((game) => getDefeatTile(game)?.label)).toEqual(["ストップ2", "-5マス目"]);
+    expect(raw).toBe(originalRaw);
+    expect(storage.setItem).not.toHaveBeenCalled();
+
+    await saveSugoroku(started("next-game"));
+    expect((await loadSugoroku()).history).toEqual(history);
   });
 
   it("rejects invalid stored corrections without replacing the saved progress or history", async () => {

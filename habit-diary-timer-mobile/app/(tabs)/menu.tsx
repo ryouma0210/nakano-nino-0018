@@ -15,6 +15,7 @@ const recordExchangeItems = [
   ["調教日記", "/(tabs)/records"],
   ["ご褒美", "/(tabs)/rewards"],
   ["コレクション", "/(tabs)/collection"],
+  ["ゴミ汁廃棄履歴", "/(tabs)/disposal-history"],
   ["お貢ぎ履歴", "/(tabs)/tribute"],
 ] as const;
 
@@ -35,7 +36,7 @@ function menuTone(title: MenuTitle) {
   if (title === "ご褒美") return "defeat";
   if (title === "マイページ") return "record";
   if (title === "ファイル格納") return "preparation";
-  if (title === "お貢ぎ履歴") return "tribute";
+  if (title === "お貢ぎ履歴" || title === "ゴミ汁廃棄履歴") return "tribute";
   if (title === "ループ音声" || title === "コレクション") return "collection";
   if (title === "本日の記録" || title === "週間報告" || title === "調教日記")
     return "record";

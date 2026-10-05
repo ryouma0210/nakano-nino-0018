@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { backupService, type BackupPayload, type PickedBackup } from "./backupService";
 import { readBackupArchive, writeBackupArchive } from "./backupArchive";
+import { disposalHistoryService } from "./disposalHistoryService";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, storage: new Map<string, string>(), sources: new Map<string, Uint8Array>(),
@@ -117,6 +118,15 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
+  it("round-trips disposal counts and optional notes in save backups", async () => {
+    const records = await disposalHistoryService.add({ recordDate: "2000-01-01", count: 2, note: "個人のメモ\n二行目" });
+    const payload = await savePayload();
+    expect(JSON.parse(payload.asyncStorage["nino-room:disposal-history:v1"])).toEqual({ version: 1, records });
+    await disposalHistoryService.update(records[0].id, { recordDate: "2000-01-01", count: 5 });
+    await backupService.restore(payload);
+    expect(await disposalHistoryService.load()).toEqual(records);
+  });
+
   it("writes save-only JSON and records export history outside of the backup", async () => {
     const payload = await savePayload();
     expect(payload.version).toBe(1);
