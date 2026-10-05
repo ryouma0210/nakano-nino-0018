@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  chooseRoute, completeEvent, createGame, failGame, getAdjustedDiceResult, getCurrentTile,
+  chooseRoute, completeEvent, createGame, failGame, getAdjustedDiceResult, getCurrentTile, getDefeatTile,
   getDiceMovementRule, getDisplayedDiceResult,
   getRemainingSpaces, getTileRuleDescription, retireGame, rollDice,
   ROUTE_TILES, SUGOROKU_TILES, validateGame, type SugorokuGame,
@@ -238,6 +238,36 @@ describe("sugoroku adjusted dice faces", () => {
 });
 
 describe("neutral sugoroku exit and penalty points", () => {
+  it.each([
+    ["start", "スタート"], ["3", "3マス目"], ["-6", "-6マス目"], ["-1", "-1マス目"],
+    ["25", "25マス目"], ["stop-1", "ストップ1"], ["stop-2", "ストップ2"],
+    ["stop-3", "ストップ3"], ["stop-4", "ストップ4"], ["29", "29マス目"], ["40", "40マス目"],
+  ])("retains the defeat space %s through both exit flows and penalty completion", (id, label) => {
+    const original = id === "25" ? completeEvent(at(id)) : at(id);
+    for (const exit of [retireGame, failGame]) {
+      const exited = exit(original);
+      const pending = exited.phase === "retire" ? completeEvent(exited) : exited;
+      const rolled = rollDice(pending, 4);
+      const finished = completeEvent(rolled, completedAt);
+      for (const state of [exited, pending, rolled, finished]) {
+        expect(getDefeatTile(state)).toMatchObject({ id, label, position: original.position });
+        expect(validateGame(state)).toBe(true);
+      }
+      expect(getCurrentTile(finished).id).toBe("penalty");
+    }
+  });
+
+  it("does not label active or successful games with a defeat space", () => {
+    const normalGoal = chooseRoute(completeEvent(at("25")), false);
+    const extendedGoal = rollDice(at("40", { phase: "ready" }), 6);
+    for (const state of [
+      createGame(startedAt), at("-5"), completeEvent(at("25")), normalGoal, extendedGoal,
+      completeEvent(normalGoal, completedAt), completeEvent(extendedGoal, completedAt),
+    ]) {
+      expect(getDefeatTile(state)).toBeNull();
+    }
+  });
+
   it("hides movement modifiers during every penalty phase and uses the raw die", () => {
     const state = at("-1", { extended: true, nextRollReduction: 2, forceOneUntilEnd: true });
     const retired = retireGame(state);

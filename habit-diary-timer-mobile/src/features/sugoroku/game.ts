@@ -102,6 +102,12 @@ export function getCurrentTile(state: SugorokuGame): SugorokuTile {
   return state.position < 0 ? tilesById.get(String(state.position))! : route[state.position];
 }
 
+/** Exit flows retain their original route position, including in older history records. */
+export function getDefeatTile(state: SugorokuGame): SugorokuTile | null {
+  if (state.outcome !== "penalty") return null;
+  return state.position < 0 ? tilesById.get(String(state.position))! : route[state.position];
+}
+
 function validDie(die: unknown): die is number {
   return typeof die === "number" && Number.isInteger(die) && die >= 1 && die <= 6;
 }

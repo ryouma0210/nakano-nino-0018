@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -17,8 +17,9 @@ import {
 } from "@/repositories/tributeRepository";
 import { useAppModal } from "@/components/AppModalProvider";
 import { useAppAudio } from "@/audio/AudioProvider";
-import type { AppLanguage } from "@/i18n";
+import { translateWeekday, type AppLanguage } from "@/i18n";
 import { formatDateJa, toDateKey } from "@/utils/date";
+import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
 
 function formatYen(value: number) {
   return `${Math.max(0, Math.floor(value)).toLocaleString("ja-JP")}円`;
@@ -481,7 +482,8 @@ function DateSelector({
   amountTone: "income" | "spending";
   onChange: (value: string) => void;
 }) {
-  const isNative = Platform.OS !== "web";
+  const { settings } = useAppAudio();
+  const language = settings?.language ?? "ja";
   const dailyAmounts = useMemo(() => {
     const amounts = new Map<string, number>();
     for (const record of records) {
@@ -489,42 +491,77 @@ function DateSelector({
     }
     return amounts;
   }, [records]);
-  const days = Array.from({ length: daysInMonth(month) }, (_, index) => index + 1);
+  const calendarDays = useMemo(() => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    const leading = new Date(year, monthNumber - 1, 1).getDay();
+    return [
+      ...Array.from({ length: leading }, () => null),
+      ...Array.from({ length: daysInMonth(month) }, (_, index) => {
+        const day = index + 1;
+        const dateKey = `${month}-${String(day).padStart(2, "0")}`;
+        return {
+          day,
+          dateKey,
+          dayOfWeek: (leading + index) % 7,
+          holiday: isJapaneseHoliday(dateKey),
+        };
+      }),
+    ];
+  }, [month]);
   return (
-    <View style={styles.dateSelector}>
-      <AppText variant="label">{label}</AppText>
-      <AppText variant="muted">選択中：{formatDateJa(value)}</AppText>
-      <View style={[styles.dayGrid, isNative && styles.dayGridNative]}>
-        {days.map((day) => {
-          const dateKey = `${month}-${String(day).padStart(2, "0")}`;
+    <View style={styles.dateSelector} testID={`tribute-${amountTone}-calendar`}>
+      <AppText variant="label" style={styles.calendarText}>{label}</AppText>
+      <AppText localize={false} style={styles.calendarMonth}>{monthLabel(month, language)}</AppText>
+      <View style={styles.weekRow}>
+        {Array.from({ length: 7 }, (_, index) => (
+          <AppText
+            key={index}
+            localize={false}
+            style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}
+          >
+            {translateWeekday(index, language)}
+          </AppText>
+        ))}
+      </View>
+      <View style={styles.dayGrid}>
+        {calendarDays.map((date, index) => {
+          if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
+          const { dateKey, day, dayOfWeek, holiday } = date;
           const selected = dateKey === value;
           const amount = dailyAmounts.get(dateKey) ?? 0;
           return (
-            <View key={dateKey} style={[styles.dayCell, isNative && styles.dayCellNative]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                style={[styles.dayButton, isNative && styles.dayButtonNative, selected && styles.dayButtonActive]}
-                onPress={() => onChange(dateKey)}
+            <Pressable
+              key={dateKey}
+              testID={`tribute-${amountTone}-${dateKey}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              style={[styles.dayCell, selected && styles.selectedDay]}
+              onPress={() => onChange(dateKey)}
+            >
+              <AppText
+                style={[
+                  styles.dayText,
+                  dayOfWeek === 6 && styles.saturdayText,
+                  (dayOfWeek === 0 || holiday) && styles.holidayText,
+                  selected && styles.selectedDayText,
+                ]}
               >
-                <AppText style={[styles.dayText, selected && styles.dayTextActive]}>
-                  {day}
-                </AppText>
-                <AppText
-                  style={[
-                    styles.dayAmount,
-                    isNative && styles.dayAmountNative,
-                    amountTone === "income" ? styles.dayIncomeAmount : styles.daySpendingAmount,
-                    selected && (amountTone === "income" ? styles.dayIncomeAmountActive : styles.daySpendingAmountActive),
-                  ]}
-                >
-                  {formatYen(amount)}
-                </AppText>
-              </Pressable>
-            </View>
+                {day}
+              </AppText>
+              <AppText
+                style={[
+                  styles.dayAmount,
+                  amountTone === "income" ? styles.dayIncomeAmount : styles.daySpendingAmount,
+                  selected && styles.selectedDayText,
+                ]}
+              >
+                {formatYen(amount)}
+              </AppText>
+            </Pressable>
           );
         })}
       </View>
+      <AppText variant="muted" style={styles.calendarHelp}>選択中：{formatDateJa(value)}</AppText>
     </View>
   );
 }
@@ -633,47 +670,53 @@ const styles = StyleSheet.create({
   remainingOver: { color: lightTheme.danger },
   incomeCard: { borderColor: "#1f5fae" },
   spendingCard: { borderColor: lightTheme.danger },
-  dateSelector: { gap: 8 },
-  dayGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
+  dateSelector: {
+    gap: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 4,
+    backgroundColor: "#fff",
   },
-  dayGridNative: { gap: 0, marginHorizontal: -3 },
-  dayCell: { maxWidth: "100%" },
-  dayCellNative: { width: "20%", padding: 3 },
-  dayButton: {
-    minWidth: 88,
-    maxWidth: "100%",
-    minHeight: 60,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+  calendarText: { color: "#111" },
+  calendarMonth: { color: "#111", textAlign: "center", fontSize: 18, fontWeight: "900" },
+  calendarHelp: { color: "#555" },
+  weekRow: { flexDirection: "row" },
+  weekDay: {
+    width: `${100 / 7}%`,
+    color: "#111",
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  dayGrid: { flexDirection: "row", flexWrap: "wrap" },
+  dayCell: {
+    width: `${100 / 7}%`,
+    minWidth: 0,
+    minHeight: 52,
+    paddingHorizontal: 1,
+    paddingVertical: 4,
     gap: 2,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#555",
-    borderRadius: 4,
-    backgroundColor: "#080808",
+    borderColor: "#d7d7d7",
+    backgroundColor: "#fff",
   },
-  dayButtonNative: { minWidth: 0, width: "100%", paddingHorizontal: 2, flexGrow: 1 },
-  dayButtonActive: {
-    borderColor: "#fff",
-    backgroundColor: "#f2c94c",
-  },
-  dayText: { color: lightTheme.text, fontWeight: "900" },
+  selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
+  dayText: { color: "#111", fontWeight: "800" },
+  saturdayText: { color: "#1667c7" },
+  holidayText: { color: "#d92332" },
+  selectedDayText: { color: "#fff" },
   dayAmount: {
+    width: "100%",
     maxWidth: "100%",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "700",
     textAlign: "center",
   },
-  dayAmountNative: { width: "100%", fontSize: 10, lineHeight: 15 },
-  dayIncomeAmount: { color: "#7cb342" },
-  daySpendingAmount: { color: "#f87171" },
-  dayIncomeAmountActive: { color: "#246b2b" },
-  daySpendingAmountActive: { color: "#a31621" },
-  dayTextActive: { color: "#111" },
+  dayIncomeAmount: { color: "#246b2b" },
+  daySpendingAmount: { color: "#a31621" },
 });
 

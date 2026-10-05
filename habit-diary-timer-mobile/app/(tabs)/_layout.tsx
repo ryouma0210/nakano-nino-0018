@@ -21,6 +21,7 @@ export default function TabLayout() {
         <Stack.Screen name="habits" options={{ title: t("調教部屋") }} />
         <Stack.Screen name="records" options={{ title: t("調教日記部屋") }} />
         <Stack.Screen name="tribute" options={{ title: t("お貢ぎ履歴") }} />
+        <Stack.Screen name="disposal-history" options={{ title: t("ゴミ汁廃棄履歴") }} />
         <Stack.Screen name="timer" options={{ title: t("お仕置き部屋") }} />
         <Stack.Screen name="preparation" options={{ title: t("準備部屋") }} />
         <Stack.Screen name="defeat" options={{ title: t("敗北部屋") }} />
