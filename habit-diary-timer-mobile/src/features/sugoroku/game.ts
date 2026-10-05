@@ -1,0 +1,299 @@
+export type SugorokuPhase =
+  | "ready" | "event" | "choice" | "goal" | "retire"
+  | "penalty-roll" | "penalty-event" | "finished";
+
+export type SugorokuOutcome = "goal-1" | "goal-2" | "penalty";
+
+export type SugorokuGame = {
+  version: 1;
+  id: string;
+  startedAt: string;
+  completedAt: string | null;
+  phase: SugorokuPhase;
+  /** Physical route index, including the four inserted stop spaces. */
+  position: number;
+  extended: boolean;
+  /** Original random roll, retained for logs and penalty calculations. */
+  diceResult: number | null;
+  /** Rule-adjusted result before a stop or route end shortens movement; absent in older saves. */
+  adjustedDiceResult?: number | null;
+  /** Actual distance moved, after modifiers and intervening stop spaces. */
+  movement: number | null;
+  rollCount: number;
+  nextRollReduction: 0 | 2;
+  forceOneUntilBranch: boolean;
+  forceOneUntilEnd: boolean;
+  outcome: SugorokuOutcome | null;
+  failureRemainingSpaces: number | null;
+  penaltyRoll: number | null;
+  penaltyPoints: number | null;
+};
+
+export type SugorokuTile = {
+  id: string;
+  label: string;
+  position: number | null;
+  kind: "start" | "event" | "stop" | "goal" | "retire" | "penalty";
+};
+
+const numberedStops = new Set([7, 14, 21, 25]);
+const insertedStops = new Map([[28, 1], [31, 2], [34, 3], [37, 4]]);
+const route: SugorokuTile[] = [{ id: "start", label: "スタート", position: 0, kind: "start" }];
+for (let number = 1; number <= 40; number += 1) {
+  route.push({
+    id: String(number), label: `${number}マス目`, position: route.length,
+    kind: numberedStops.has(number) ? "stop" : "event",
+  });
+  const stop = insertedStops.get(number);
+  if (stop) route.push({
+    id: `stop-${stop}`, label: `ストップ${stop}`, position: route.length, kind: "stop",
+  });
+}
+route.push({ id: "goal-2", label: "ゴール②", position: route.length, kind: "goal" });
+
+export const ROUTE_TILES: readonly SugorokuTile[] = route;
+export const SUGOROKU_TILES: readonly SugorokuTile[] = [
+  ...Array.from({ length: 6 }, (_, index): SugorokuTile => ({
+    id: String(index - 6), label: `${index - 6}マス目`, position: index - 6, kind: "event",
+  })),
+  ...route,
+  { id: "goal-1", label: "ゴール①", position: null, kind: "goal" },
+  { id: "retire", label: "リタイアイベント", position: null, kind: "retire" },
+  { id: "penalty", label: "ペナルティ", position: null, kind: "penalty" },
+];
+
+const tilesById = new Map(SUGOROKU_TILES.map((tile) => [tile.id, tile]));
+const finalPosition = route.length - 1;
+let idSequence = 0;
+
+function timestamp(value?: string): string {
+  return value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : new Date().toISOString();
+}
+
+export function createGame(now?: string): SugorokuGame {
+  const startedAt = timestamp(now);
+  idSequence += 1;
+  return {
+    version: 1,
+    id: `${startedAt}-${idSequence}-${Math.random().toString(36).slice(2, 10)}`,
+    startedAt, completedAt: null, phase: "ready", position: 0, extended: false,
+    diceResult: null, adjustedDiceResult: null, movement: null, rollCount: 0, nextRollReduction: 0,
+    forceOneUntilBranch: false, forceOneUntilEnd: false,
+    outcome: null, failureRemainingSpaces: null, penaltyRoll: null, penaltyPoints: null,
+  };
+}
+
+function positionOf(id: string): number {
+  return tilesById.get(id)?.position ?? 0;
+}
+
+function routeRemaining(state: SugorokuGame): number {
+  return Math.max(0, (state.extended ? finalPosition : 25) - state.position);
+}
+
+export function getRemainingSpaces(state: SugorokuGame): number {
+  return state.failureRemainingSpaces ?? routeRemaining(state);
+}
+
+export function getCurrentTile(state: SugorokuGame): SugorokuTile {
+  if (state.phase === "retire") return tilesById.get("retire")!;
+  if (state.phase === "penalty-roll" || state.phase === "penalty-event") return tilesById.get("penalty")!;
+  if ((state.phase === "goal" || state.phase === "finished") && state.outcome) return tilesById.get(state.outcome)!;
+  return state.position < 0 ? tilesById.get(String(state.position))! : route[state.position];
+}
+
+function validDie(die: unknown): die is number {
+  return typeof die === "number" && Number.isInteger(die) && die >= 1 && die <= 6;
+}
+
+/** The currently effective modifier for the next movement roll. */
+export function getDiceMovementRule(state: SugorokuGame): "forced-one" | "minus-three" | "minus-two" | null {
+  if (state.outcome !== null) return null;
+  if (state.position < 0 || state.forceOneUntilBranch || state.forceOneUntilEnd) return "forced-one";
+  if (state.extended) return "minus-three";
+  return state.nextRollReduction === 2 ? "minus-two" : null;
+}
+
+/** Apply the current rule to a valid 1–6 roll, before any stop or route boundary. */
+export function getAdjustedDiceResult(state: SugorokuGame, die: number): number {
+  const movementRule = getDiceMovementRule(state);
+  if (movementRule === "forced-one") return 1;
+  const reduction = movementRule === "minus-three" ? 3 : movementRule === "minus-two" ? 2 : 0;
+  return Math.max(0, die - reduction);
+}
+
+/** Older saves retain their original face; a pending penalty roll has no face yet. */
+export function getDisplayedDiceResult(state: SugorokuGame): number | null {
+  if (state.phase === "penalty-roll") return null;
+  return state.adjustedDiceResult ?? state.diceResult;
+}
+
+export function rollDice(state: SugorokuGame, die: number): SugorokuGame {
+  if (!validDie(die)) return state;
+  if (state.phase === "penalty-roll") {
+    return {
+      ...state, phase: "penalty-event", penaltyRoll: die,
+      penaltyPoints: getRemainingSpaces(state) * die * 10,
+      diceResult: die, adjustedDiceResult: die, movement: 0, rollCount: state.rollCount + 1,
+    };
+  }
+  if (state.phase !== "ready") return state;
+
+  // Negative spaces always advance by one. The -1 modifier waits until the
+  // first ordinary roll after returning to start, so it is not lost on exit.
+  const inNegativeZone = state.position < 0;
+  const distance = getAdjustedDiceResult(state, die);
+  const next = {
+    ...state, diceResult: die, adjustedDiceResult: distance, movement: 0, rollCount: state.rollCount + 1,
+    nextRollReduction: inNegativeZone ? state.nextRollReduction : 0 as const,
+  };
+  if (distance === 0) return next;
+
+  const end = Math.min(state.position + distance, state.extended ? finalPosition : 25);
+  let destination = end;
+  for (let position = state.position + 1; position <= end; position += 1) {
+    if (position >= 0 && route[position].kind === "stop") {
+      destination = position;
+      break;
+    }
+  }
+  return {
+    ...next, position: destination, movement: destination - state.position,
+    phase: destination === 0 ? "ready" : destination === finalPosition ? "goal" : "event",
+    outcome: destination === finalPosition ? "goal-2" : null,
+  };
+}
+
+function finish(state: SugorokuGame, now?: string): SugorokuGame {
+  const completedAt = timestamp(now);
+  return {
+    ...state, phase: "finished",
+    completedAt: Date.parse(completedAt) < Date.parse(state.startedAt) ? state.startedAt : completedAt,
+  };
+}
+
+export function completeEvent(state: SugorokuGame, now?: string): SugorokuGame {
+  if (state.phase === "goal" || state.phase === "penalty-event") return finish(state, now);
+  if (state.phase === "retire") return { ...state, phase: "penalty-roll" };
+  if (state.phase !== "event") return state;
+
+  const id = getCurrentTile(state).id;
+  if (["1", "8", "15"].includes(id)) return { ...state, position: -6 };
+  if (["2", "6", "13", "26"].includes(id)) return { ...state, position: 0, phase: "ready" };
+  const transfer = { "12": "9", "20": "16", "37": "29" }[id];
+  if (transfer) return { ...state, position: positionOf(transfer) };
+  if (id === "-1") return { ...state, phase: "ready", nextRollReduction: 2 };
+  if (id === "21" && !state.extended) return { ...state, phase: "ready", forceOneUntilBranch: true };
+  if (id === "25" && !state.extended) return { ...state, phase: "choice" };
+  if (id === "stop-4") return { ...state, phase: "ready", forceOneUntilEnd: true };
+  return { ...state, phase: "ready" };
+}
+
+export function chooseRoute(state: SugorokuGame, extended: boolean): SugorokuGame {
+  if (state.phase !== "choice" || state.extended || state.position !== 25) return state;
+  return extended
+    ? { ...state, phase: "ready", extended: true, forceOneUntilBranch: false, nextRollReduction: 0 }
+    : { ...state, phase: "goal", outcome: "goal-1", forceOneUntilBranch: false };
+}
+
+function canExit(state: SugorokuGame): boolean {
+  return state.phase === "ready" || state.phase === "event" || state.phase === "choice";
+}
+
+/** Freeze the remaining distance before entering either exit flow. */
+export function retireGame(state: SugorokuGame): SugorokuGame {
+  if (!canExit(state)) return state;
+  return { ...state, phase: "retire", outcome: "penalty", failureRemainingSpaces: routeRemaining(state) };
+}
+
+export function failGame(state: SugorokuGame): SugorokuGame {
+  if (!canExit(state)) return state;
+  return { ...state, phase: "penalty-roll", outcome: "penalty", failureRemainingSpaces: routeRemaining(state) };
+}
+
+export function getTileRuleDescription(id: string): string {
+  if (["1", "8", "15"].includes(id)) return "イベント完了後、マイナス６のマスへ移動します。";
+  if (["2", "6", "13", "26"].includes(id)) return "イベント完了後、スタートに戻ります。";
+  if (id === "12") return "イベント完了後、３マス戻ります。";
+  if (id === "20") return "イベント完了後、４マス戻ります。";
+  if (id === "37") return "イベント完了後、２９のマスへ移動します。";
+  if (id === "-1") return "マイナスゾーンでは１マスずつ進みます。通常コースでは、スタートに戻った後の次の出目から２を引きます。";
+  if (id.startsWith("-")) return "マイナスゾーンでは、サイコロの出目に関係なく１マスずつ進みます。";
+  if (id === "21") return "必ず止まります。通常コースでは、完了後から２５の分岐まで１マスずつ進みます。";
+  if (id === "25") return "必ず止まります。初回の完了後、ゴールするか延長するか選べます。延長後は選び直せません。";
+  if (id === "stop-4") return "必ず止まります。イベント完了後は、ゲーム終了まで１マスずつ進みます。";
+  if (id.startsWith("stop-") || id === "7" || id === "14") return "通過する場合も必ず止まり、残りの出目は持ち越しません。";
+  if (id === "start") return "サイコロを振って進みます。延長コースでは出目から３を引き、０以下ならその場で振り直します。";
+  if (id === "retire") return "イベント完了後、ペナルティのサイコロを振ります。";
+  if (id === "penalty") return "残りマス数とサイコロの出目と１０を掛けた計算結果を記録します。";
+  if (id === "goal-1" || id === "goal-2") return "完了ボタンを押すとゲームが終了し、結果を記録します。";
+  return "イベントを完了すると、次のサイコロを振れます。";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Reject malformed or contradictory saves before they can drive the UI. */
+export function validateGame(value: unknown): value is SugorokuGame {
+  if (!isRecord(value) || value.version !== 1 || typeof value.id !== "string" || !value.id || value.id.length > 200) return false;
+  if (typeof value.startedAt !== "string" || !Number.isFinite(Date.parse(value.startedAt))) return false;
+  if (value.completedAt !== null && (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt)))) return false;
+  if (typeof value.phase !== "string" || !["ready", "event", "choice", "goal", "retire", "penalty-roll", "penalty-event", "finished"].includes(value.phase)) return false;
+  if (typeof value.position !== "number" || !Number.isInteger(value.position) || value.position < -6 || value.position > finalPosition) return false;
+  if (typeof value.extended !== "boolean" || (!value.extended && value.position > 25)) return false;
+  if (value.diceResult !== null && !validDie(value.diceResult)) return false;
+  if (value.movement !== null && (!nonNegativeInteger(value.movement) || value.movement > 6)) return false;
+  if ((value.diceResult === null) !== (value.movement === null) || !nonNegativeInteger(value.rollCount)) return false;
+  if ((value.rollCount === 0) !== (value.diceResult === null)) return false;
+  if (value.nextRollReduction !== 0 && value.nextRollReduction !== 2) return false;
+  if (typeof value.forceOneUntilBranch !== "boolean" || typeof value.forceOneUntilEnd !== "boolean") return false;
+  if ((value.extended && value.forceOneUntilBranch) || (!value.extended && value.forceOneUntilEnd)) return false;
+  if (value.outcome !== null && (typeof value.outcome !== "string" || !["goal-1", "goal-2", "penalty"].includes(value.outcome))) return false;
+  if (value.failureRemainingSpaces !== null && !nonNegativeInteger(value.failureRemainingSpaces)) return false;
+  if (value.penaltyRoll !== null && !validDie(value.penaltyRoll)) return false;
+  if (value.penaltyPoints !== null && !nonNegativeInteger(value.penaltyPoints)) return false;
+
+  const state = value as SugorokuGame;
+  if ("adjustedDiceResult" in value) {
+    const adjusted = state.adjustedDiceResult;
+    if (adjusted === null) {
+      if (state.diceResult !== null) return false;
+    } else {
+      if (!nonNegativeInteger(adjusted) || adjusted > 6 || state.diceResult === null || state.movement === null) return false;
+      // Rules may have changed after this roll, so validate possible past results
+      // rather than applying the current square's rule to a historical roll.
+      if (![state.diceResult, 1, Math.max(0, state.diceResult - 2), Math.max(0, state.diceResult - 3)].includes(adjusted)) return false;
+      if (state.movement > adjusted) return false;
+      if (state.movement === 0 && adjusted > 0 && state.penaltyRoll === null) return false;
+    }
+  }
+  if ((state.phase === "finished") !== (state.completedAt !== null)) return false;
+  if (state.completedAt && Date.parse(state.completedAt) < Date.parse(state.startedAt)) return false;
+  if (state.phase === "choice" && (state.position !== 25 || state.extended)) return false;
+  if (state.phase === "ready" && (state.position === finalPosition || (!state.extended && state.position === 25))) return false;
+  if (state.phase === "event" && (state.position === 0 || state.position === finalPosition)) return false;
+
+  if (state.outcome === "penalty") {
+    if (!["retire", "penalty-roll", "penalty-event", "finished"].includes(state.phase)) return false;
+    if (state.position === finalPosition) return false;
+    if (state.failureRemainingSpaces !== routeRemaining(state)) return false;
+    const rolled = state.phase === "penalty-event" || state.phase === "finished";
+    if (!rolled) return state.penaltyRoll === null && state.penaltyPoints === null;
+    return state.penaltyRoll !== null && state.diceResult === state.penaltyRoll && state.movement === 0
+      && (!("adjustedDiceResult" in state) || state.adjustedDiceResult === state.penaltyRoll)
+      && state.penaltyPoints === state.failureRemainingSpaces * state.penaltyRoll * 10;
+  }
+  if (state.failureRemainingSpaces !== null || state.penaltyRoll !== null || state.penaltyPoints !== null) return false;
+  if (state.outcome === "goal-1" || state.outcome === "goal-2") {
+    if (state.phase !== "goal" && state.phase !== "finished") return false;
+    return state.outcome === "goal-1"
+      ? state.position === 25 && !state.extended
+      : state.position === finalPosition && state.extended;
+  }
+  return state.phase === "ready" || state.phase === "event" || state.phase === "choice";
+}

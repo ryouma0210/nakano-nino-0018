@@ -4,6 +4,10 @@ import { AppState, Platform } from "react-native";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 import { createLoopPlayback } from "./loopPlayback";
+import { getRoomAudioTracks, type RoomAudioScene } from "./roomAudio";
+import { RoomAudioPlayback } from "./RoomAudioPlayback";
+
+export type { RoomAudioScene } from "./roomAudio";
 
 type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
 export type LoopAudioName = "earLick" | "nippleScratch" | "ikunaSine" | "bokkisiro" | "sineW";
@@ -19,6 +23,7 @@ type AudioContextValue = {
   playLoopAudio: (name: LoopAudioName) => void;
   stopLoopAudio: (name?: LoopAudioName) => void;
   setSessionAudioActive: (active: boolean) => void;
+  setRoomAudioScene: (scene: RoomAudioScene | null) => void;
 };
 
 const AudioContext = createContext<AudioContextValue>({
@@ -32,6 +37,7 @@ const AudioContext = createContext<AudioContextValue>({
   playLoopAudio: () => {},
   stopLoopAudio: () => {},
   setSessionAudioActive: () => {},
+  setRoomAudioScene: () => {},
 });
 
 const bgmSource = require("../../assets/audio/kyouhunomori.m4a");
@@ -73,6 +79,7 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     playLoopAudio: () => {},
     stopLoopAudio: () => {},
     setSessionAudioActive: () => {},
+    setRoomAudioScene: () => {},
   }), [bgmMode, settings, updateAudioSettings]);
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
@@ -81,9 +88,12 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
 function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
+  const [roomAudioScene, setRoomAudioScene] = useState<RoomAudioScene | null>(null);
   const [loopAudioNames, setLoopAudioNames] = useState<LoopAudioName[]>([]);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
+  const roomAudioTracks = getRoomAudioTracks(roomAudioScene, settings, appIsActive);
+  const roomAudioActive = roomAudioTracks.length > 0;
   const bgm = useAudioPlayer(bgmSource);
   const outsideBrightBgm = useAudioPlayer(outsideBrightBgmSource);
   const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
@@ -181,10 +191,10 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       player.loop = true;
       player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
     });
-    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && loopAudioNames.length === 0) {
+    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && !roomAudioActive && loopAudioNames.length === 0) {
       bgms[bgmMode].play();
     }
-  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, sessionAudioActive, settings]);
+  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, roomAudioActive, sessionAudioActive, settings]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -246,10 +256,16 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       playLoopAudio,
       stopLoopAudio,
       setSessionAudioActive,
+      setRoomAudioScene,
     }),
     [bgmMode, loopAudioNames, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
-  return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
+  return (
+    <AudioContext.Provider value={value}>
+      <RoomAudioPlayback tracks={roomAudioTracks} />
+      {children}
+    </AudioContext.Provider>
+  );
 }
 
 export function useAppAudio() {
