@@ -12,6 +12,8 @@ export default function TabLayout() {
         <Stack.Screen name="index" options={{ title: t("ホーム") }} />
         <Stack.Screen name="tasks" options={{ title: t("タスク") }} />
         <Stack.Screen name="rooms" options={{ title: t("廊下") }} />
+        <Stack.Screen name="games" options={{ title: t("ゲーム部屋") }} />
+        <Stack.Screen name="sugoroku" options={{ title: t("すごろく") }} />
         <Stack.Screen name="nino-room" options={{ title: t("二ノ様の控室") }} />
         <Stack.Screen name="outside" options={{ title: t("館の外") }} />
         <Stack.Screen name="menu" options={{ title: t("記録・管理メニュー") }} />

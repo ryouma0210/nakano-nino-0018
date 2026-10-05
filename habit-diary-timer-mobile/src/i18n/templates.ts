@@ -3,6 +3,18 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["{0}マス目", "Space {0}", "{0}번 칸", "第{0}格"],
+  ["マスのルールにより、{0}マス目へ移動しました。", "Moved to space {0} according to this space's rule.", "칸의 규칙에 따라 {0}번 칸으로 이동했습니다.", "根据格子的规则，已移动到第{0}格。"],
+  ["ストップ{0}", "Stop {0}", "정지 칸 {0}", "停留格{0}"],
+  ["残り{0}マス", "Spaces left: {0}", "남은 칸: {0}", "剩余{0}格"],
+  ["残りマス：{0}", "Spaces remaining: {0}", "남은 칸: {0}", "剩余格数：{0}"],
+  ["出目：{0}", "Roll: {0}", "주사위 눈: {0}", "点数：{0}"],
+  ["ルール適用後：{0}", "After applying rule: {0}", "규칙 적용 후: {0}", "应用规则后：{0}"],
+  ["元の出目：{0}", "Original roll: {0}", "원래 주사위 눈: {0}", "原始点数：{0}"],
+  ["移動：{0}マス", "Spaces moved: {0}", "이동한 칸: {0}", "移动格数：{0}"],
+  ["サイコロ：{0}回", "Rolls: {0}", "주사위 횟수: {0}", "掷骰次数：{0}"],
+  ["ペナルティ：{0}ポイント", "Penalty points: {0}", "페널티 포인트: {0}", "罚分：{0}"],
+  ["ペナルティ：{0}", "Penalty: {0}", "페널티: {0}", "惩罚：{0}"],
   ["実施済み：{0}/{1}種類", "Unique orders completed: {0}/{1}", "완료한 명령: {0}/{1}종", "已完成：{0}/{1}种命令"],
   ["削除中：{0}/{1}件", "Deleting files: {0}/{1}", "파일 삭제 중: {0}/{1}", "正在删除文件：{0}/{1}"],
   ["表示中：{0}件", "Showing: {0} files", "표시 중: {0}개", "当前显示：{0}个文件"],
