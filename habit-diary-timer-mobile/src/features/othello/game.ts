@@ -184,15 +184,22 @@ function evaluateHard(board: Board, blackMoves?: number[], whiteMoves?: number[]
     + score.white * lateDiscWeight;
 }
 
-function terminalScore(board: Board, restrictHuman: boolean): number {
+function terminalScore(board: Board, preferCoverage: boolean): number {
   const score = getScore(board);
   const difference = score.white - score.black;
   // The outcome dominates any positional/pass bonus. Among hard-mode wins,
   // prefer more actual CPU discs, then fewer remaining human discs. Empty
   // squares stay empty; only legal play can achieve a completely purple board.
-  if (restrictHuman) return Math.sign(difference) * 100_000 + score.white * 128 - score.black;
+  if (preferCoverage) return Math.sign(difference) * 100_000 + score.white * 128 - score.black;
   return difference === 0 ? 0 : Math.sign(difference) * 100_000 + difference;
 }
+
+type SearchEntry = {
+  depth: number;
+  value: number;
+  bound: "exact" | "lower" | "upper";
+  move?: number;
+};
 
 type SearchContext = {
   nodes: number;
@@ -202,6 +209,8 @@ type SearchContext = {
   exhausted: boolean;
   cooperative: boolean;
   restrictHuman: boolean;
+  preferCoverage: boolean;
+  positions?: Map<string, SearchEntry>;
 };
 
 function bounded(value: number | undefined, fallback: number, min: number, max: number): number {
@@ -221,6 +230,8 @@ function createContext(difficulty: Exclude<Difficulty, "easy">, tempting: boolea
     exhausted: false,
     cooperative,
     restrictHuman: hard && !tempting && !cooperative,
+    preferCoverage: hard && !tempting,
+    positions: hard && !tempting ? new Map() : undefined,
   };
 }
 
@@ -239,31 +250,61 @@ function orderedMoves(moves: number[]): number[] {
 
 function search(board: Board, player: Player, depth: number, alpha: number, beta: number, context: SearchContext): number {
   if (!visit(context)) return 0;
+  const key = context.positions ? `${player}:${board.join("")}` : undefined;
+  const cached = key === undefined ? undefined : context.positions?.get(key);
+  if (cached && cached.depth >= depth) {
+    if (cached.bound === "exact") return cached.value;
+    if (cached.bound === "lower") alpha = Math.max(alpha, cached.value);
+    else beta = Math.min(beta, cached.value);
+    if (alpha >= beta) return cached.value;
+  }
+  const originalAlpha = alpha;
+  const originalBeta = beta;
+  const remember = (value: number, move?: number, exact = false): number => {
+    if (key !== undefined) {
+      context.positions?.set(key, {
+        depth, value, move,
+        bound: exact ? "exact" : value <= originalAlpha ? "upper" : value >= originalBeta ? "lower" : "exact",
+      });
+    }
+    return value;
+  };
   const moves = getLegalMoves(board, player);
   const other = opponent(player);
   if (moves.length === 0) {
-    if (getLegalMoves(board, other).length === 0) return terminalScore(board, context.restrictHuman);
+    if (getLegalMoves(board, other).length === 0) return remember(terminalScore(board, context.preferCoverage), undefined, true);
     // A pass places no disc and therefore consumes no search depth.
-    return search(board, other, depth, alpha, beta, context);
+    const value = search(board, other, depth, alpha, beta, context);
+    return context.exhausted ? 0 : remember(value);
   }
-  if (depth <= 0) return (context.restrictHuman ? evaluateHard : evaluate)(board, player === BLACK ? moves : undefined, player === WHITE ? moves : undefined);
+  if (depth <= 0) return remember((context.restrictHuman ? evaluateHard : evaluate)(board, player === BLACK ? moves : undefined, player === WHITE ? moves : undefined), undefined, true);
   // Assisted play lets both sides help the CPU. Ordinary play still assumes
   // that the user's future moves oppose it and therefore uses minimax.
   const maximizing = player === WHITE || context.cooperative;
   let best = maximizing ? -Infinity : Infinity;
-  for (const move of orderedMoves(moves)) {
+  let bestMove: number | undefined;
+  const ordered = orderedMoves(moves);
+  // Reuse the previous iteration's best reply so deeper searches spend their
+  // fixed budget on promising continuations, including successive passes.
+  if (cached?.move !== undefined && ordered.includes(cached.move)) {
+    ordered.splice(ordered.indexOf(cached.move), 1);
+    ordered.unshift(cached.move);
+  }
+  for (const move of ordered) {
     const value = search(applyMove(board, player, move), other, depth - 1, alpha, beta, context);
     if (context.exhausted) return 0;
     if (maximizing) {
+      if (value > best) bestMove = move;
       best = Math.max(best, value);
       alpha = Math.max(alpha, best);
     } else {
+      if (value < best) bestMove = move;
       best = Math.min(best, value);
       beta = Math.min(beta, best);
     }
     if (alpha >= beta) break;
   }
-  return best;
+  return remember(best, bestMove);
 }
 
 function randomMove(moves: readonly number[], random: () => number): number {
@@ -286,7 +327,7 @@ function selectWhiteFavorableMove(board: Board, player: Player, difficulty: Excl
   const empty = getScore(board).empty;
   const maxDepth = tempting
     ? (difficulty === "hard" ? 3 : 2)
-    : difficulty === "hard" ? (empty <= 10 ? empty : 4) : 2;
+    : difficulty === "hard" ? (empty <= 14 ? empty : empty <= 24 ? 6 : 4) : 2;
 
   // Only completed iterations replace the fallback: budget exhaustion cannot
   // accidentally prefer a partially searched move over the remaining choices.
@@ -295,7 +336,10 @@ function selectWhiteFavorableMove(board: Board, player: Player, difficulty: Excl
     const iterationMoves: number[] = [];
     const scores = new Map<number, number>();
     for (const candidate of candidates) {
-      const value = search(candidate.board, opponent(player), depth - 1, -Infinity, Infinity, context);
+      // Scores are integers. A window starting one point below the best score
+      // prunes worse hard-mode alternatives while still resolving true ties.
+      const alpha = context.positions ? bestScore - 1 : -Infinity;
+      const value = search(candidate.board, opponent(player), depth - 1, alpha, Infinity, context);
       if (context.exhausted) break;
       scores.set(candidate.move, value);
       if (value > bestScore) {

@@ -1,4 +1,5 @@
 import type { ChastityRecord, ChastityStatus } from "../../services/chastityHistoryService";
+import { CHASTITY_STATUSES } from "../../services/chastityHistoryStorage";
 
 const normalize = (value: string) => value.normalize("NFKC").toLocaleLowerCase();
 
@@ -26,6 +27,9 @@ export function getDailyChastityStatuses(records: readonly ChastityRecord[]): Re
   for (const record of records) {
     const statuses = days[record.recordDate] ?? (days[record.recordDate] = []);
     if (!statuses.includes(record.status)) statuses.push(record.status);
+  }
+  for (const date of Object.keys(days)) {
+    days[date] = CHASTITY_STATUSES.filter((status) => days[date].includes(status));
   }
   return days;
 }

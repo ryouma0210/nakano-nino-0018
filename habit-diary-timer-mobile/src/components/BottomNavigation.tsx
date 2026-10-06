@@ -25,7 +25,7 @@ const destinations = [
 
 const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello"]);
 const recordScreens = new Set(["records", "tribute", "disposal-history", "chastity-history", "rewards", "collection", "today", "report"]);
-const managementScreens = new Set(["loop-audio", "files", "settings", "custom-orders", "external-links", "slave-contract"]);
+const managementScreens = new Set(["loop-audio", "files", "settings", "custom-orders", "manual", "external-links", "slave-contract"]);
 const BottomNavigationVisibleContext = createContext(false);
 
 export function useHasBottomNavigation() {

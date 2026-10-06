@@ -13,6 +13,7 @@ import Constants from "expo-constants";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { LoginBonusCalendar } from "@/components/LoginBonusCalendar";
 import { Screen } from "@/components/Screen";
 import { lightTheme } from "@/constants/theme";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -35,9 +36,6 @@ export default function Index() {
   const [loginBonusStamps, setLoginBonusStamps] = useState<LoginBonusStamp[]>([]);
   const [todayEarnedPoints, setTodayEarnedPoints] = useState(0);
   const { showNotice } = useAppModal();
-  const loginBonusMonthLabel = loginBonusStatus
-    ? `${loginBonusStatus.today.slice(0, 7).replace("-", "年")}月`
-    : "";
 
   const refreshLoginBonusInfo = useCallback(() => {
     const status = loginBonusRepository.status();
@@ -144,7 +142,7 @@ export default function Index() {
         <View style={styles.modalBackdrop}>
           <View style={styles.loginDialog}>
             <AppText variant="subtitle">
-              {loginBonusMonthLabel}のスタンプ
+              ログインボーナス
             </AppText>
             <AppText style={styles.loginStatus}>
               本日のログインボーナス：
@@ -159,28 +157,10 @@ export default function Index() {
             <AppText style={styles.todayPoints}>
               本日の獲得Pt：{todayEarnedPoints.toLocaleString()}pt
             </AppText>
-            <ScrollView style={styles.stampScroll} contentContainerStyle={styles.stampGrid}>
-              {loginBonusStamps.map((stamp) => {
-                const isToday = loginBonusStatus?.today === stamp.date;
-                return (
-                  <View
-                    key={stamp.date}
-                    style={[
-                      styles.stampCell,
-                      stamp.claimed && styles.stampCellClaimed,
-                      isToday && styles.stampCellToday,
-                    ]}
-                  >
-                    <AppText style={styles.stampDay}>{stamp.day}</AppText>
-                    <AppText style={[styles.stampMark, stamp.claimed && styles.stampMarkClaimed]}>
-                      {stamp.claimed ? "♡" : "—"}
-                    </AppText>
-                    {stamp.claimed ? (
-                      <AppText style={styles.stampPoint}>{stamp.points}pt</AppText>
-                    ) : null}
-                  </View>
-                );
-              })}
+            <ScrollView style={styles.stampScroll}>
+              {loginBonusStatus ? (
+                <LoginBonusCalendar stamps={loginBonusStamps} today={loginBonusStatus.today} />
+              ) : null}
             </ScrollView>
             {loginBonusStatus?.alreadyClaimed ? (
               <PrimaryButton
@@ -300,51 +280,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   stampScroll: {
-    maxHeight: 280,
-  },
-  stampGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingVertical: 2,
-  },
-  stampCell: {
-    width: "13.2%",
-    minHeight: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#444",
-    borderRadius: 6,
-    backgroundColor: "#111",
-    paddingVertical: 4,
-  },
-  stampCellClaimed: {
-    borderColor: "#ff5fb3",
-    backgroundColor: "#2a071a",
-  },
-  stampCellToday: {
-    borderColor: "#f2c94c",
-  },
-  stampDay: {
-    color: "#fff",
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "900",
-  },
-  stampMark: {
-    color: "#555",
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: "900",
-  },
-  stampMarkClaimed: {
-    color: "#ff5fb3",
-  },
-  stampPoint: {
-    color: "#aaa",
-    fontSize: 8,
-    lineHeight: 10,
-    fontWeight: "800",
+    maxHeight: 300,
   },
 });

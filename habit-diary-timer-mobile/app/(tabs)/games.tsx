@@ -3,16 +3,25 @@ import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
+import { roomMessages } from "@/constants/messages";
 import { lightTheme } from "@/constants/theme";
 
 export default function GamesScreen() {
   return (
-    <Screen desktopLayout="single">
+    <Screen>
       <View style={styles.header}>
         <AppText variant="title">ゲーム部屋</AppText>
         <View style={styles.rule} />
       </View>
+
+      <RoomConversation
+        characterSource={require("../../assets/characters/home-nino.png")}
+        roomName="ゲーム部屋"
+        lines={roomMessages.games.lines}
+        contractLines={roomMessages.games.contractLines}
+      />
 
       <Card style={styles.gameCard}>
         <PrimaryButton title="すごろく" tone="defeat" onPress={() => router.push("/(tabs)/sugoroku")} />

@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
+import { LoginBonusCalendar } from "@/components/LoginBonusCalendar";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
 import {
@@ -17,7 +18,6 @@ import {
 
 type TodayData = {
   bonus: LoginBonusStatus;
-  monthLabel: string;
   stamps: LoginBonusStamp[];
   report: ActivityReport;
 };
@@ -28,7 +28,6 @@ function loadTodayData(): TodayData {
 
   return {
     bonus,
-    monthLabel: `${month.replace("-", "年")}月`,
     stamps: loginBonusRepository.monthlyStamps(month),
     report: reportRepository.today(),
   };
@@ -73,25 +72,10 @@ export default function TodayScreen() {
             {data.report.earnedPoints.toLocaleString()}pt
           </AppText>
         </View>
-        <View style={styles.monthHeader}>
-          <AppText variant="subtitle">{data.monthLabel}のスタンプ</AppText>
-          <AppText style={styles.claimStatus}>
-            {data.bonus.alreadyClaimed ? "本日は受取済み" : "本日は未受取"}
-          </AppText>
-        </View>
-        <ScrollView
-          style={styles.stampScroll}
-          contentContainerStyle={styles.stampGrid}
-          nestedScrollEnabled
-        >
-          {data.stamps.map((stamp) => (
-            <StampCell
-              key={stamp.date}
-              stamp={stamp}
-              isToday={stamp.date === data.bonus.today}
-            />
-          ))}
-        </ScrollView>
+        <AppText style={styles.claimStatus}>
+          {data.bonus.alreadyClaimed ? "本日は受取済み" : "本日は未受取"}
+        </AppText>
+        <LoginBonusCalendar stamps={data.stamps} today={data.bonus.today} />
         <PrimaryButton
           title={
             data.bonus.alreadyClaimed
@@ -126,24 +110,6 @@ export default function TodayScreen() {
         onPress={() => router.replace("/(tabs)")}
       />
     </Screen>
-  );
-}
-
-function StampCell({ stamp, isToday }: { stamp: LoginBonusStamp; isToday: boolean }) {
-  return (
-    <View
-      style={[
-        styles.stampCell,
-        stamp.claimed && styles.stampCellClaimed,
-        isToday && styles.stampCellToday,
-      ]}
-    >
-      <AppText style={styles.stampDay}>{stamp.day}</AppText>
-      <AppText style={[styles.stampMark, stamp.claimed && styles.stampMarkClaimed]}>
-        {stamp.claimed ? "♡" : "—"}
-      </AppText>
-      {stamp.claimed ? <AppText style={styles.stampPoint}>{stamp.points}pt</AppText> : null}
-    </View>
   );
 }
 
@@ -201,59 +167,11 @@ const styles = StyleSheet.create({
     lineHeight: 36,
     fontWeight: "900",
   },
-  monthHeader: {
-    gap: 6,
-    marginTop: 4,
-  },
   claimStatus: {
     color: "#ff5fb3",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "900",
-  },
-  stampScroll: { maxHeight: 300 },
-  stampGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingVertical: 2,
-  },
-  stampCell: {
-    width: "13.2%",
-    minHeight: 58,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#444",
-    borderRadius: 6,
-    backgroundColor: "#111",
-    paddingVertical: 4,
-  },
-  stampCellClaimed: {
-    borderColor: "#ff5fb3",
-    backgroundColor: "#2a071a",
-  },
-  stampCellToday: {
-    borderColor: "#f2c94c",
-  },
-  stampDay: {
-    color: "#fff",
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "900",
-  },
-  stampMark: {
-    color: "#555",
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: "900",
-  },
-  stampMarkClaimed: { color: "#ff5fb3" },
-  stampPoint: {
-    color: "#aaa",
-    fontSize: 8,
-    lineHeight: 10,
-    fontWeight: "800",
   },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metric: {

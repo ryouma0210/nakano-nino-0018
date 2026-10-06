@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getRoomAudioTracks } from "../../audio/roomAudio";
-import { createGame, getLegalMoves, getScore, playMove, type Cell, type GameState } from "./game";
-import { getHardPressureCue, getOthelloAudioScene } from "./presentation";
+import { arrangeFinishedBoard, createGame, getLegalMoves, getScore, playMove, type Cell, type GameState } from "./game";
+import { getCpuAdvantageCue, getHardPressureCue, getMoveFlips, getOthelloAudioScene } from "./presentation";
 
 function singleMove(): GameState {
   const board: Cell[] = Array<Cell>(64).fill(1);
@@ -36,6 +36,68 @@ function humanPassAt(occupied: number): GameState {
   }
   return playMove({ ...createGame(), board, turn: -1 }, 0);
 }
+
+describe("CPU advantage dialogue cues", () => {
+  it.each([[0, 1, 2], [7, 6, 5], [56, 57, 58], [63, 62, 61]])("announces a legal capture of corner %i", (corner, human, cpu) => {
+    const board: Cell[] = Array<Cell>(64).fill(0);
+    board[human] = 1;
+    board[cpu] = -1;
+    expect(getCpuAdvantageCue({ ...createGame(), board, turn: -1 }, corner)).toBe("corner");
+  });
+
+  it("announces five or more actual flips, with corner captures taking priority", () => {
+    const board: Cell[] = Array<Cell>(64).fill(0);
+    for (let index = 9; index <= 13; index += 1) board[index] = 1;
+    board[14] = -1;
+    expect(getCpuAdvantageCue({ ...createGame(), board, turn: -1 }, 8)).toBe("capture");
+    board[13] = -1;
+    expect(getCpuAdvantageCue({ ...createGame(), board, turn: -1 }, 8)).toBeNull();
+    for (let index = 1; index <= 5; index += 1) board[index] = 1;
+    board[6] = -1;
+    expect(getCpuAdvantageCue({ ...createGame(), board, turn: -1 }, 0)).toBe("corner");
+  });
+
+  it("ignores illegal moves, human turns and finished or absent games", () => {
+    const game = humanPass();
+    expect(getCpuAdvantageCue(null, 0)).toBeNull();
+    expect(getCpuAdvantageCue(createGame(), 19)).toBeNull();
+    expect(getCpuAdvantageCue({ ...createGame(), turn: -1 }, 0)).toBeNull();
+    expect(getCpuAdvantageCue(game, 64)).toBeNull();
+    expect(getCpuAdvantageCue({ ...game, turn: 1 }, 3)).toBeNull();
+    expect(getCpuAdvantageCue(playMove(game, 3), 3)).toBeNull();
+  });
+});
+
+describe("disc flip transitions", () => {
+  it("animates the captured discs for either player, without including the newly placed disc", () => {
+    const before = createGame();
+    const after = playMove(before, 19);
+    expect(getMoveFlips(before, after)).toEqual([27]);
+    const cpuAfter = playMove(after, 18);
+    expect(getMoveFlips(after, cpuAfter)).toEqual([27]);
+    expect(before.board[27]).toBe(-1);
+    expect(after.board[27]).toBe(1);
+    expect(cpuAfter.board[27]).toBe(-1);
+  });
+
+  it("includes the final move before the finished board is arranged", () => {
+    const before = singleMove();
+    const after = playMove(before, 0);
+    expect(after.status).toBe("finished");
+    expect(getMoveFlips(before, after)).toEqual([1]);
+  });
+
+  it("does not animate loading, resuming, surrendering, unrelated positions or a display-only arrangement", () => {
+    const before = createGame();
+    const after = playMove(before, 19);
+    expect(getMoveFlips(null, after)).toEqual([]);
+    expect(getMoveFlips(before, null)).toEqual([]);
+    expect(getMoveFlips(before, before)).toEqual([]);
+    expect(getMoveFlips(after, { ...after, status: "finished", turn: null, winner: -1 })).toEqual([]);
+    expect(getMoveFlips(before, { ...after, board: arrangeFinishedBoard(after.board) })).toEqual([]);
+    expect(getMoveFlips(before, playMove(after, 18))).toEqual([]);
+  });
+});
 
 describe("hard mode dialogue cues", () => {
   it("announces the user's sole legal move and a real forced pass", () => {

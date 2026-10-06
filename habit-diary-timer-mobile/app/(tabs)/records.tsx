@@ -322,6 +322,9 @@ export default function RecordsScreen() {
             return (
               <Pressable
                 key={date}
+                testID={`journal-day-${date}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected, disabled: future }}
                 disabled={future}
                 onPress={() => setSelectedDate(date)}
                 style={[
@@ -335,18 +338,12 @@ export default function RecordsScreen() {
                     styles.dayText,
                     dayOfWeek === 6 && styles.saturdayText,
                     (dayOfWeek === 0 || holiday) && styles.holidayText,
-                    selected && styles.selectedDayText,
                   ]}
                 >
                   {Number(date.slice(-2))}
                 </AppText>
                 {marked ? (
-                  <View
-                    style={[
-                      styles.recordDot,
-                      selected && styles.selectedRecordDot,
-                    ]}
-                  />
+                  <View style={styles.recordDot} />
                 ) : null}
               </Pressable>
             );
@@ -431,6 +428,11 @@ export default function RecordsScreen() {
         title="記録・交換メニューへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/menu?section=record")}
+      />
+      <PrimaryButton
+        title="タスクへ戻る"
+        tone="order"
+        onPress={() => router.replace("/(tabs)/tasks")}
       />
       <PrimaryButton
         title="ホームへ戻る"
@@ -630,12 +632,11 @@ const styles = StyleSheet.create({
     borderColor: "#d7d7d7",
     backgroundColor: "#fff",
   },
-  selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
+  selectedDay: { borderColor: "#1667c7", borderWidth: 3 },
   futureDay: { opacity: 0.25 },
   dayText: { color: "#111", fontWeight: "800" },
   saturdayText: { color: "#1667c7" },
   holidayText: { color: "#d92332" },
-  selectedDayText: { color: "#fff" },
   calendarHelp: { color: "#555" },
   recordDot: {
     position: "absolute",
@@ -645,7 +646,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: lightTheme.danger,
   },
-  selectedRecordDot: { backgroundColor: "#fff" },
   journalHeader: {
     flexDirection: "row",
     alignItems: "flex-start",

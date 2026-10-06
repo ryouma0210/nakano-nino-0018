@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChastityRecord } from "../../services/chastityHistoryService";
+import type { ChastityRecord, ChastityStatus } from "../../services/chastityHistoryService";
 import { getDailyChastityStatuses, selectChastityRecords } from "./history";
 
 const statusNames = {
@@ -16,6 +16,12 @@ const records = Object.freeze([
   Object.freeze(record("latest", { note: "Original\ntext" })),
   Object.freeze(record("dream", { status: "wetDream" })),
 ]);
+
+function permutations(values: readonly ChastityStatus[]): ChastityStatus[][] {
+  if (values.length === 0) return [[]];
+  return values.flatMap((value, index) => permutations(values.filter((_, position) => position !== index))
+    .map((remaining) => [value, ...remaining]));
+}
 
 describe("chastity record calendar and search", () => {
   it("keeps multiple records on the selected date and shows the newest first", () => {
@@ -36,4 +42,20 @@ describe("chastity record calendar and search", () => {
     expect(getDailyChastityStatuses(records)).toEqual({ "2026-03-02": ["washing"], "2026-10-06": ["locked", "wetDream"] });
     expect(getDailyChastityStatuses([])).toEqual({});
   });
+  it.each(permutations(["locked", "wetDream", "ejaculation", "washing"]).map((order) => [order]))(
+    "uses the fixed icon order regardless of record order: %j",
+    (order) => {
+      const input = Object.freeze([
+        ...order.map((status, index) => Object.freeze(record(String(index), { status }))),
+        Object.freeze(record("duplicate", { status: order[0] })),
+        Object.freeze(record("previous-washing", { recordDate: "2026-10-05", status: "washing" })),
+        Object.freeze(record("previous-dream", { recordDate: "2026-10-05", status: "wetDream" })),
+      ]);
+      expect(getDailyChastityStatuses(input)).toEqual({
+        "2026-10-06": ["locked", "wetDream", "ejaculation", "washing"],
+        "2026-10-05": ["wetDream", "washing"],
+      });
+      expect(input.slice(0, 4).map((item) => item.status)).toEqual(order);
+    },
+  );
 });

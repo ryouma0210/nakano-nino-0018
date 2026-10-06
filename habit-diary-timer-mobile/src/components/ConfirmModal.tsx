@@ -8,7 +8,7 @@ type Props = {
   title: string;
   message: ReactNode;
   confirmLabel?: string;
-  confirmTone?: "primary" | "danger" | "defeat";
+  confirmTone?: "primary" | "secondary" | "danger" | "defeat";
   showCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;

@@ -16,9 +16,11 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
+import { roomMessages } from "@/constants/messages";
 import { selectDisposalRecords } from "@/features/records/search";
 import { translateText, translateWeekday } from "@/i18n";
 import {
@@ -196,8 +198,16 @@ export default function DisposalHistoryScreen() {
 
   return (
     <>
-      <Screen desktopLayout="single">
+      <Screen>
         <AppText variant="title">ゴミ汁廃棄履歴</AppText>
+        <PrimaryButton title="記録・交換メニューへ戻る" tone="secondary" disabled={busy}
+          onPress={() => router.replace("/(tabs)/menu?section=record")} />
+        <RoomConversation
+          characterSource={require("../../assets/characters/diary-nino.png")}
+          roomName="ゴミ汁廃棄履歴"
+          lines={roomMessages.disposalHistory.lines}
+          contractLines={roomMessages.disposalHistory.contractLines}
+        />
         <TextField
           testID="disposal-search"
           label="検索"
@@ -256,11 +266,10 @@ export default function DisposalHistoryScreen() {
                     styles.dayText,
                     dayOfWeek === 6 && styles.saturdayText,
                     (dayOfWeek === 0 || isJapaneseHoliday(date)) && styles.holidayText,
-                    selected && styles.selectedDayText,
                   ]}>
                     {Number(date.slice(-2))}
                   </AppText>
-                  <AppText localize={false} numberOfLines={1} adjustsFontSizeToFit style={[styles.dayCount, selected && styles.selectedDayText]}>
+                  <AppText localize={false} numberOfLines={1} adjustsFontSizeToFit style={styles.dayCount}>
                     {future || loading || loadFailed ? " " : count}
                   </AppText>
                 </Pressable>
@@ -280,7 +289,7 @@ export default function DisposalHistoryScreen() {
               <AppText style={styles.totalCount}>{`${selectedTotal}回`}</AppText>
             </View>
           )}
-          <PrimaryButton title="この日に追加" tone="tribute" disabled={busy || loading || loadFailed} onPress={() => openForm()} />
+          <PrimaryButton title="記録する" tone="tribute" disabled={busy || loading || loadFailed} onPress={() => openForm()} />
         </Card> : null}
 
         {!loading && !loadFailed && displayedRecords.length === 0 ? (
@@ -300,7 +309,7 @@ export default function DisposalHistoryScreen() {
             </Card>
           </View>
         )) : null}
-        <PrimaryButton title="タスクへ戻る" tone="tribute" onPress={() => router.replace("/(tabs)/tasks")} />
+        <PrimaryButton title="タスクへ戻る" tone="order" onPress={() => router.replace("/(tabs)/tasks")} />
       </Screen>
 
       <Modal visible={formVisible} animationType="slide" onRequestClose={closeForm}>
@@ -363,8 +372,7 @@ const styles = StyleSheet.create({
   dayCell: { width: `${100 / 7}%`, height: 56, paddingHorizontal: 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#d7d7d7", backgroundColor: "#fff" },
   dayText: { color: "#111", fontWeight: "800" },
   dayCount: { color: "#555", fontSize: 12, lineHeight: 18, textAlign: "center", width: "100%" },
-  selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
-  selectedDayText: { color: "#fff" },
+  selectedDay: { borderColor: "#1667c7", borderWidth: 3 },
   futureDay: { opacity: 0.25 },
   saturdayText: { color: "#1667c7" },
   holidayText: { color: "#d92332" },

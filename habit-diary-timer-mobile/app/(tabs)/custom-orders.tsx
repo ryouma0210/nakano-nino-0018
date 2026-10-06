@@ -6,10 +6,11 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { useAppModal } from "@/components/AppModalProvider";
-import { formatConfiguredMessage } from "@/constants/messages";
+import { formatConfiguredMessage, roomMessages } from "@/constants/messages";
 import {
   commandCategoryLabels, customCommandService, CUSTOM_COMMAND_MAX_LENGTH,
   type CommandCategory, type CustomCommand,
@@ -86,6 +87,12 @@ export default function CustomOrdersScreen() {
   return (
     <Screen>
       <AppText variant="title">命令追加</AppText>
+      <RoomConversation
+        characterSource={require("../../assets/characters/orders-nino.png")}
+        roomName="命令追加"
+        lines={roomMessages.customOrders.lines}
+        contractLines={roomMessages.customOrders.contractLines}
+      />
       <Card>
         <AppText variant="subtitle">追加先</AppText>
         {categories.map((value) => (

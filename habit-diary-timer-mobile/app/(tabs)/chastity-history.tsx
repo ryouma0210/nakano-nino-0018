@@ -8,9 +8,11 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
+import { roomMessages } from "@/constants/messages";
 import { getDailyChastityStatuses, selectChastityRecords } from "@/features/chastity/history";
 import { translateText, translateWeekday } from "@/i18n";
 import {
@@ -224,8 +226,16 @@ export default function ChastityHistoryScreen() {
 
   return (
     <>
-      <Screen desktopLayout="single">
+      <Screen>
         <AppText variant="title">貞操帯管理記録</AppText>
+        <PrimaryButton title="記録・交換メニューへ戻る" tone="secondary" disabled={busy}
+          onPress={() => router.replace("/(tabs)/menu?section=record")} />
+        <RoomConversation
+          characterSource={require("../../assets/characters/chastity-nino.png")}
+          roomName="貞操帯管理記録"
+          lines={roomMessages.chastityHistory.lines}
+          contractLines={roomMessages.chastityHistory.contractLines}
+        />
         <TextField testID="chastity-search" label="検索" accessibilityLabel={translateText("検索", language)}
           value={keyword} onChangeText={setKeyword} placeholder="内容・日付・状態" editable={!busy} />
         {searching ? <Card>
@@ -234,7 +244,7 @@ export default function ChastityHistoryScreen() {
           <PrimaryButton title="検索をクリア" tone="secondary" disabled={busy} onPress={() => setKeyword("")} />
           {loading ? <AppText variant="muted">検索結果を読み込み中…</AppText> : loadFailed ? <>
             <AppText>記録を読み込めませんでした。</AppText>
-            <PrimaryButton title="再読み込み" tone="tribute" onPress={() => void loadRecords()} />
+            <PrimaryButton title="再読み込み" tone="secondary" onPress={() => void loadRecords()} />
           </> : null}
         </Card> : <Card style={styles.calendarCard}>
           <AppText variant="subtitle" style={styles.calendarText}>貞操帯管理カレンダー</AppText>
@@ -272,7 +282,7 @@ export default function ChastityHistoryScreen() {
               const future = date > today;
               const selected = date === selectedDate;
               const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
-              const statuses = CHASTITY_STATUSES.filter((value) => dailyStatuses[date]?.includes(value));
+              const statuses = dailyStatuses[date] ?? [];
               const photo = snapshot.photos[date];
               const showPhoto = snapshot.calendarDisplay === "photos" && photo && !failedImages.has(photo.uri);
               return (
@@ -282,7 +292,7 @@ export default function ChastityHistoryScreen() {
                   accessibilityState={{ selected, disabled: future || busy }} disabled={future || busy}
                   onPress={() => setSelectedDate(date)} style={[styles.dayCell, selected && styles.selectedDay, future && styles.futureDay]}>
                   <AppText localize={false} style={[styles.dayText, dayOfWeek === 6 && styles.saturdayText,
-                    (dayOfWeek === 0 || isJapaneseHoliday(date)) && styles.holidayText, selected && styles.selectedDayText]}>
+                    (dayOfWeek === 0 || isJapaneseHoliday(date)) && styles.holidayText]}>
                     {Number(date.slice(-2))}
                   </AppText>
                   <View style={styles.dayMarkers}>
@@ -290,8 +300,8 @@ export default function ChastityHistoryScreen() {
                       <Image testID={`chastity-day-photo-${date}`} source={{ uri: photo.uri }} style={styles.dayPhoto} resizeMode="cover"
                         accessible={false} onError={() => imageFailed(photo.uri)} />
                     ) : statuses.map((value) => (
-                      <AppText key={value} localize={false} style={[styles.dayIcon, selected && styles.selectedDayText,
-                        value === "ejaculation" && styles.ejaculationIcon, selected && value === "ejaculation" && styles.selectedEjaculationIcon]}>
+                      <AppText key={value} localize={false} style={[styles.dayIcon,
+                        value === "ejaculation" && styles.ejaculationIcon]}>
                         {CHASTITY_STATUS_ICONS[value]}
                       </AppText>
                     )) : null}
@@ -309,11 +319,11 @@ export default function ChastityHistoryScreen() {
         {!searching ? <Card>
           <AppText localize={false} variant="subtitle">{dateLabel(selectedDate)}</AppText>
           {loading ? <AppText variant="muted">読み込み中…</AppText> : loadFailed ? (
-            <PrimaryButton title="再読み込み" tone="tribute" onPress={() => void loadRecords()} />
+            <PrimaryButton title="再読み込み" tone="secondary" onPress={() => void loadRecords()} />
           ) : <View style={styles.totalRow}>
             <AppText>記録件数</AppText><AppText localize={false} style={styles.totalCount}>{displayedRecords.length}</AppText>
           </View>}
-          <PrimaryButton title="この日に追加" tone="tribute" disabled={disabled} onPress={() => openForm()} />
+          <PrimaryButton title="記録する" tone="secondary" disabled={disabled} onPress={() => openForm()} />
           <AppText variant="subtitle">この日の画像</AppText>
           <AppText variant="muted">画像は1日1枚です。同じ日のすべての記録で共有します。</AppText>
           {selectedPhoto && !loading && !loadFailed ? <>
@@ -325,10 +335,10 @@ export default function ChastityHistoryScreen() {
               </Pressable>
             )}
             <View style={styles.actions}>
-              <View style={styles.action}><PrimaryButton title="画像を変更" tone="tribute" disabled={disabled} onPress={() => void pickPhoto()} /></View>
-              <View style={styles.action}><PrimaryButton title="画像を削除" tone="danger" disabled={disabled} onPress={() => setPendingPhotoDelete(selectedDate)} /></View>
+              <View style={styles.action}><PrimaryButton title="画像を変更" tone="secondary" disabled={disabled} onPress={() => void pickPhoto()} /></View>
+              <View style={styles.action}><PrimaryButton title="画像を削除" tone="secondary" disabled={disabled} onPress={() => setPendingPhotoDelete(selectedDate)} /></View>
             </View>
-          </> : <PrimaryButton title="画像を添付" tone="tribute" disabled={disabled} onPress={() => void pickPhoto()} />}
+          </> : <PrimaryButton title="画像を添付" tone="secondary" disabled={disabled} onPress={() => void pickPhoto()} />}
         </Card> : null}
 
         {!loading && !loadFailed && displayedRecords.length === 0 ? <Card>
@@ -341,14 +351,14 @@ export default function ChastityHistoryScreen() {
               <AppText localize={false} variant="subtitle">{renderStatusLabel(record.status)}</AppText>
               {record.note ? <AppText localize={false}>{record.note}</AppText> : <AppText variant="muted">内容なし</AppText>}
               <View style={styles.actions}>
-                <View style={styles.action}><PrimaryButton title="編集" tone="tribute" disabled={busy} onPress={() => openForm(record)} /></View>
-                <View style={styles.action}><PrimaryButton title="削除" tone="danger" disabled={busy} onPress={() => setPendingDelete(record)} /></View>
+                <View style={styles.action}><PrimaryButton title="編集" tone="secondary" disabled={busy} onPress={() => openForm(record)} /></View>
+                <View style={styles.action}><PrimaryButton title="削除" tone="secondary" disabled={busy} onPress={() => setPendingDelete(record)} /></View>
               </View>
               {searching ? <PrimaryButton title="この日を表示" tone="secondary" disabled={busy} onPress={() => showDate(record.recordDate)} /> : null}
             </Card>
           </View>
         )) : null}
-        <PrimaryButton title="タスクへ戻る" tone="tribute" disabled={busy} onPress={() => router.replace("/(tabs)/tasks")} />
+        <PrimaryButton title="タスクへ戻る" tone="order" disabled={busy} onPress={() => router.replace("/(tabs)/tasks")} />
       </Screen>
 
       <Modal visible={formVisible} animationType="slide" onRequestClose={closeForm}>
@@ -364,7 +374,8 @@ export default function ChastityHistoryScreen() {
                 aria-expanded={statusOpen} aria-disabled={busy}
                 accessibilityState={{ expanded: statusOpen, disabled: busy }} disabled={busy}
                 onPress={() => setStatusOpen((previous) => !previous)} style={styles.statusButton}>
-                <AppText localize={false}>{renderStatusLabel(status)}</AppText><AppText localize={false}>{statusOpen ? "▲" : "▼"}</AppText>
+                <AppText localize={false} style={styles.statusText}>{renderStatusLabel(status)}</AppText>
+                <AppText localize={false} style={styles.statusText}>{statusOpen ? "▲" : "▼"}</AppText>
               </Pressable>
               {statusOpen ? <View style={styles.statusOptions} accessibilityRole="radiogroup" accessibilityLabel={translateText("状態", language)}>
                 {CHASTITY_STATUSES.map((value) => (
@@ -372,8 +383,8 @@ export default function ChastityHistoryScreen() {
                     accessibilityLabel={statusLabel(value)} accessibilityState={{ checked: status === value, disabled: busy }} disabled={busy}
                     aria-checked={status === value} aria-disabled={busy}
                     onPress={() => { setStatus(value); setStatusOpen(false); }} style={[styles.statusOption, status === value && styles.statusSelected]}>
-                    <AppText localize={false}>{renderStatusLabel(value)}</AppText>
-                    {status === value ? <AppText localize={false}>✓</AppText> : null}
+                    <AppText localize={false} style={styles.statusText}>{renderStatusLabel(value)}</AppText>
+                    {status === value ? <AppText localize={false} style={styles.statusText}>✓</AppText> : null}
                   </Pressable>
                 ))}
               </View> : null}
@@ -383,7 +394,7 @@ export default function ChastityHistoryScreen() {
             {formError ? <AppText accessibilityRole="alert" style={styles.error}>{formError}</AppText> : null}
             <View style={styles.actions}>
               <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" disabled={busy} onPress={() => { setStatusOpen(false); setFormVisible(false); }} /></View>
-              <View style={styles.action}><PrimaryButton title={editing ? "変更する" : "追加する"} tone="tribute" disabled={busy} onPress={() => void save()} /></View>
+              <View style={styles.action}><PrimaryButton title={editing ? "変更する" : "追加する"} tone="secondary" disabled={busy} onPress={() => void save()} /></View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -403,10 +414,10 @@ export default function ChastityHistoryScreen() {
           {pendingDelete ? <>{`${dateLabel(pendingDelete.recordDate)}\n`}{renderStatusLabel(pendingDelete.status)}{"\n\n"}</> : null}
           {translateText("削除した記録は元に戻せません。", language)}
         </>}
-        confirmLabel="削除する" confirmTone="danger" onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
+        confirmLabel="削除する" confirmTone="secondary" onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
       <ConfirmModal visible={pendingPhotoDelete !== null} title="画像を削除しますか？"
         message={`${pendingPhotoDelete ? `${dateLabel(pendingPhotoDelete)}\n\n` : ""}${translateText("この日の共有画像を削除します。記録と内容は残ります。", language)}`}
-        confirmLabel="削除する" confirmTone="danger" onCancel={() => setPendingPhotoDelete(null)} onConfirm={() => void removePhoto()} />
+        confirmLabel="削除する" confirmTone="secondary" onCancel={() => setPendingPhotoDelete(null)} onConfirm={() => void removePhoto()} />
     </>
   );
 }
@@ -424,20 +435,18 @@ const styles = StyleSheet.create({
   dayMarkers: { width: "100%", height: 32, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", alignContent: "center" },
   dayIcon: { color: "#111", width: "50%", maxWidth: 17, textAlign: "center", fontSize: 12, lineHeight: 15 },
   ejaculationIcon: { color: "#d9202a", fontWeight: "900" },
-  selectedEjaculationIcon: { backgroundColor: "#fff", borderRadius: 2, overflow: "hidden" },
   dayPhoto: { width: "100%", height: 30, maxWidth: 54, borderRadius: 2 },
-  selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
-  selectedDayText: { color: "#fff" },
+  selectedDay: { borderColor: "#1667c7", borderWidth: 3 },
   futureDay: { opacity: 0.25 },
   saturdayText: { color: "#1667c7" },
   holidayText: { color: "#d92332" },
   calendarHelp: { color: "#555" },
   legend: { flexDirection: "row", flexWrap: "wrap", columnGap: 12, rowGap: 4 },
   legendText: { color: "#333", fontSize: 12, lineHeight: 18 },
-  displayOption: { flex: 1, minHeight: 40, padding: 8, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#555", borderRadius: 4 },
-  displaySelected: { backgroundColor: "#222", borderColor: "#222" },
-  displayText: { color: "#333", fontSize: 14, textAlign: "center" },
-  displaySelectedText: { color: "#fff", fontWeight: "800" },
+  displayOption: { flex: 1, minHeight: 40, padding: 8, justifyContent: "center", alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: "#000", borderRadius: 4 },
+  displaySelected: { borderWidth: 3 },
+  displayText: { color: "#000", fontSize: 14, textAlign: "center" },
+  displaySelectedText: { fontWeight: "800" },
   disabled: { opacity: 0.5 },
   totalRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   totalCount: { color: "#ff3b45", fontSize: 22, lineHeight: 30, fontWeight: "800" },
@@ -449,10 +458,11 @@ const styles = StyleSheet.create({
   formRoot: { flex: 1, backgroundColor: lightTheme.background },
   formContent: { width: "100%", maxWidth: 640, alignSelf: "center", padding: 20, gap: 18 },
   statusField: { gap: 6 },
-  statusButton: { minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: "#fff", borderRadius: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#080808" },
-  statusOptions: { borderWidth: 1, borderColor: "#777", borderRadius: 4, overflow: "hidden" },
-  statusOption: { minHeight: 48, paddingHorizontal: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#171717" },
-  statusSelected: { backgroundColor: "#403c0b" },
+  statusButton: { minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: "#000", borderRadius: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff" },
+  statusOptions: { borderWidth: 1, borderColor: "#000", borderRadius: 4, overflow: "hidden" },
+  statusOption: { minHeight: 48, paddingHorizontal: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff" },
+  statusSelected: { borderWidth: 2, borderColor: "#000" },
+  statusText: { color: "#000" },
   previewRoot: { flex: 1, paddingHorizontal: 16, gap: 12, backgroundColor: lightTheme.background },
   previewImage: { flex: 1, width: "100%", minHeight: 0 },
   error: { color: "#ff3b45" },
