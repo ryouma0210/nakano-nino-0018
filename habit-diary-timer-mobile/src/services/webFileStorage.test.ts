@@ -43,6 +43,56 @@ function legacy(name: string, contents = "legacy", purpose: WebMediaFile["purpos
 }
 
 describe("IndexedDB media storage", () => {
+  it("changes multiple usages using metadata only, keeping bytes, identity and object URL stable across reload", async () => {
+    const service = await backend();
+    await service.put(file("shared.mp4", "original"));
+    const [original] = await service.list();
+    const add = vi.spyOn(IDBObjectStore.prototype, "add");
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    await service.setUsages(original, ["training", "punishment", "endurance"]);
+    const [shared] = await service.list();
+    expect(shared).toEqual({ ...original, usages: ["training", "punishment", "endurance"] });
+    expect(await (await service.getBlob(shared)).text()).toBe("original");
+    expect(add).not.toHaveBeenCalled();
+    expect(put.mock.contexts.every((store) => (store as IDBObjectStore).name === "metadata")).toBe(true);
+    expect(createUrl).toHaveBeenCalledOnce();
+    expect(revokeUrl).not.toHaveBeenCalled();
+    vi.resetModules();
+    const [reloaded] = await (await backend()).list();
+    expect(reloaded.usages).toEqual(shared.usages);
+    expect(reloaded.purpose).toBe("training");
+  });
+
+  it("retains previous usages and URL when a metadata transaction aborts", async () => {
+    const service = await backend();
+    await service.put({ ...file("shared.mp4"), usages: ["training", "endurance"] });
+    const [original] = await service.list();
+    const put = IDBObjectStore.prototype.put;
+    const abort = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+      const request = put.call(this, value, key);
+      request.addEventListener("success", () => this.transaction.abort(), { once: true });
+      return request;
+    });
+    await expect(service.setUsages(original, ["punishment"])).rejects.toThrow("aborted");
+    abort.mockRestore();
+    expect(await service.list()).toEqual([original]);
+    expect(revokeUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty, unknown, duplicate and private-photo usages without modifying any file", async () => {
+    const service = await backend();
+    await service.put(file("shared.mp4"));
+    await service.put(file("private.png", "photo", "chastity"));
+    const originals = await service.list();
+    const shared = originals.find((item) => item.purpose === "training")!;
+    for (const usages of [[], ["training", "training"], ["chastity"], ["unknown"]]) {
+      await expect(service.setUsages(shared, usages as never)).rejects.toThrow("不正");
+    }
+    await expect(service.setUsages(originals.find((item) => item.purpose === "chastity")!, ["endurance"])).rejects.toThrow("不正");
+    await expect(service.setUsages({ purpose: "training", name: "missing.mp4" }, ["endurance"])).rejects.toThrow("no longer exists");
+    expect(await service.list()).toEqual(originals);
+  });
+
   it("stores a binary file larger than localStorage quota and reads it after a reload", async () => {
     const service = await backend();
     const bytes = new Uint8Array(6 * 1024 * 1024 + 17).fill(73);
@@ -184,6 +234,24 @@ describe("IndexedDB media storage", () => {
 });
 
 describe("atomic file restoration", () => {
+  it("restores and rolls back usage metadata alongside media generations, including equal names", async () => {
+    const service = await backend();
+    await service.put({ ...file("same.mp4", "old"), usages: ["punishment", "endurance"] });
+    await service.put(file("same.mp4", "other", "punishment"));
+    const originals = await service.list();
+    const prepared = await service.prepareRestore([{ ...file("same.mp4", "new", "endurance"), usages: ["training", "endurance"] }]);
+    await prepared.activate();
+    expect(await service.list()).toEqual([expect.objectContaining({ purpose: "endurance", usages: ["training", "endurance"] })]);
+    await expect(service.setUsages({ purpose: "endurance", name: "same.mp4" }, ["training"])).rejects.toThrow("処理中");
+    await prepared.rollback();
+    expect(await service.list()).toEqual(originals);
+    await service.remove(originals.find((item) => item.purpose === "training")!);
+    await service.put(file("same.mp4", "fresh"));
+    expect((await service.list()).find((item) => item.purpose === "training")?.usages).toBeUndefined();
+    await service.clear();
+    expect(await service.list()).toEqual([]);
+  });
+
   it("keeps old files visible during staging and rolls activation back without copying old Blobs", async () => {
     const service = await backend();
     await service.put(file("old.mp4", "original"));

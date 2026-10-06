@@ -2,10 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fileStorageService, type StoredFile } from "./fileStorageService";
 
 import { CHASTITY_STORAGE_KEY, CHASTITY_MAX_NOTE_LENGTH, CHASTITY_STATUSES, isCalendarDate, parseChastityHistory,
-  type ChastityCalendarDisplay, type ChastityRecord, type ChastityRecordInput, type SavedHistory } from "./chastityHistoryStorage";
+  type ChastityCalendarDisplay, type ChastityDailyDetails, type ChastityRecord, type ChastityRecordInput, type SavedHistory } from "./chastityHistoryStorage";
 export { CHASTITY_STORAGE_KEY, CHASTITY_MAX_NOTE_LENGTH, CHASTITY_STATUSES, CHASTITY_STATUS_LABELS, CHASTITY_STATUS_ICONS, parseChastityHistory } from "./chastityHistoryStorage";
-export type { ChastityCalendarDisplay, ChastityStatus, ChastityRecord, ChastityRecordInput } from "./chastityHistoryStorage";
-export type ChastityHistorySnapshot = { records: ChastityRecord[]; photos: Record<string, StoredFile>; calendarDisplay: ChastityCalendarDisplay };
+export type { ChastityCalendarDisplay, ChastityDailyDetails, ChastityStatus, ChastityRecord, ChastityRecordInput } from "./chastityHistoryStorage";
+export type ChastityHistorySnapshot = {
+  records: ChastityRecord[];
+  photos: Record<string, StoredFile>;
+  dailyDetails: Record<string, ChastityDailyDetails>;
+  calendarDisplay: ChastityCalendarDisplay;
+};
 
 let pendingOperation: Promise<void> = Promise.resolve();
 let idSequence = 0;
@@ -46,6 +51,7 @@ function snapshot(data: SavedHistory, files: readonly StoredFile[]): ChastityHis
   return {
     records: [...data.records].sort((a, b) => b.recordDate.localeCompare(a.recordDate) || b.createdAt.localeCompare(a.createdAt)),
     photos,
+    dailyDetails: data.dailyDetails,
     calendarDisplay: data.calendarDisplay,
   };
 }
@@ -75,6 +81,26 @@ function mutateRecords(change: (records: ChastityRecord[]) => ChastityRecord[]) 
 export const chastityHistoryService = {
   load(): Promise<ChastityHistorySnapshot> {
     return queueOperation(async () => snapshot(await readHistory(), await fileStorageService.list("chastity")));
+  },
+
+  async saveDailyDetails(recordDate: string, input: ChastityDailyDetails): Promise<ChastityHistorySnapshot> {
+    validateInputDate(recordDate);
+    // Read caller values before entering the queue, since forms may change while a write waits.
+    const { limitLevel, feelings } = input;
+    if (limitLevel !== null && (typeof limitLevel !== "number" || !Number.isInteger(limitLevel)
+      || limitLevel < 1 || limitLevel > 100)) throw new Error("限界度合いは1〜100の整数で入力してください。");
+    if (typeof feelings !== "string" || feelings.length > CHASTITY_MAX_NOTE_LENGTH) {
+      throw new Error("内容は4000文字以内で入力してください。");
+    }
+    const value = { limitLevel, feelings: feelings.trim() };
+    return queueOperation(() => fileStorageService.withExclusiveFiles(async () => {
+      const data = await readHistory();
+      const files = await fileStorageService.list("chastity");
+      const dailyDetails = { ...data.dailyDetails };
+      if (value.limitLevel === null && !value.feelings) delete dailyDetails[recordDate];
+      else dailyDetails[recordDate] = value;
+      return writeHistory({ ...data, dailyDetails }, files);
+    }));
   },
 
   async setCalendarDisplay(calendarDisplay: ChastityCalendarDisplay): Promise<ChastityHistorySnapshot> {

@@ -2,9 +2,11 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import { base64ToBlob, webFileStorage } from "./webFileStorage";
+import { fileHasPurpose, fileUsageKey, isFilePurpose, isValidFileUsages, getFileUsages, type FilePurpose, type FileUsage } from "../features/files/usages";
+import { readNativeFileUsages, writeNativeFileUsages } from "./nativeFileUsages";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
-export type FilePurpose = "training" | "punishment" | "chastity";
+export type { FilePurpose, FileUsage } from "../features/files/usages";
 
 function purposeDirectory(purpose: FilePurpose) {
   return `${uploadDirectory}${purpose}/`;
@@ -22,8 +24,8 @@ async function ensurePurposeDirectory(purpose: FilePurpose) {
   if (!info.exists) await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
 }
 
-export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose };
-export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; mimeType: string; data: string };
+export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose; usages?: FileUsage[] };
+export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; usages?: FileUsage[]; mimeType: string; data: string };
 export type RestoreStoredFile = Omit<BackupStoredFile, "data"> & (
   { uri: string; data?: never; blob?: never }
   | { data: string; uri?: never; blob?: never }
@@ -196,7 +198,7 @@ function validateRestoreFiles(files: readonly RestoreStoredFile[]) {
     // Preserve names verbatim. Replacing separators can merge two unrelated files.
     if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
       || /[\\/\u0000-\u001f]/.test(file.name)
-      || !["training", "punishment", "chastity"].includes(file.purpose)
+      || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
       || !Number.isSafeInteger(file.size) || file.size < 0
       || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
       || [typeof file.data === "string", typeof file.uri === "string", typeof Blob !== "undefined" && file.blob instanceof Blob].filter(Boolean).length !== 1
@@ -233,7 +235,8 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
     const restored = files.map((file) => {
       const blob = file.blob ?? (typeof file.data === "string" ? base64ToBlob(file.data, file.mimeType, file.size) : undefined);
       if (!blob) throw new Error(invalidRestoreFilesMessage);
-      return { name: file.name, size: file.size, purpose: file.purpose, mimeType: file.mimeType, blob };
+      return { name: file.name, size: file.size, purpose: file.purpose, mimeType: file.mimeType, blob,
+        ...(file.usages ? { usages: file.usages } : {}) };
     });
     return webFileStorage.prepareRestore(restored);
   }
@@ -243,7 +246,7 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
   const previousDirectory = `${FileSystem.documentDirectory}private-room-files-previous-${token}/`;
   try {
     await FileSystem.makeDirectoryAsync(stageDirectory, { intermediates: true });
-    for (const purpose of ["training", "punishment", "chastity"] as const) {
+    for (const purpose of ["training", "punishment", "endurance", "chastity"] as const) {
       await FileSystem.makeDirectoryAsync(`${stageDirectory}${purpose}/`, { intermediates: true });
     }
     for (const file of files) {
@@ -259,6 +262,8 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
       const info = await FileSystem.getInfoAsync(destination);
       if (!info.exists || info.isDirectory || info.size !== file.size) throw new Error(invalidRestoreFilesMessage);
     }
+    const usages = files.filter((file) => file.usages).map((file) => [fileUsageKey(file), file.usages!] as const);
+    if (usages.length) await writeNativeFileUsages(stageDirectory, Object.fromEntries(usages));
   } catch (error) {
     await cleanupRestoreDirectory(stageDirectory);
     throw error;
@@ -357,17 +362,35 @@ export const fileStorageService = {
   async list(purpose?: FilePurpose): Promise<StoredFile[]> {
     if (webAvailable()) {
       return (await webFileStorage.list())
-        .filter((file) => !purpose || file.purpose === purpose)
+        .filter((file) => !purpose || fileHasPurpose(file, purpose))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
     await ensureDirectory();
     const legacyFiles = await readFiles(uploadDirectory, "training");
     const trainingFiles = await readFiles(purposeDirectory("training"), "training");
     const punishmentFiles = await readFiles(purposeDirectory("punishment"), "punishment");
+    const enduranceFiles = await readFiles(purposeDirectory("endurance"), "endurance");
     const chastityFiles = await readFiles(purposeDirectory("chastity"), "chastity");
-    return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...chastityFiles]
-      .filter((file) => !purpose || file.purpose === purpose)
+    const usages = await readNativeFileUsages(uploadDirectory);
+    return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...enduranceFiles, ...chastityFiles]
+      .map((file) => usages[fileUsageKey(file)] ? { ...file, usages: usages[fileUsageKey(file)] } : file)
+      .filter((file) => !purpose || fileHasPurpose(file, purpose))
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
+  async setUsages(file: Pick<StoredFile, "name" | "purpose">, usages: readonly FileUsage[]): Promise<void> {
+    if (file.purpose === "chastity" || !isValidFileUsages(file.purpose, usages)) {
+      throw new Error("用途を1つ以上選択してください。");
+    }
+    const next = getFileUsages({ purpose: file.purpose, usages: [...usages] });
+    return this.withExclusiveFiles(async () => {
+      if (webAvailable()) return webFileStorage.setUsages(file, next);
+      const stored = (await this.list()).find((entry) => fileUsageKey(entry) === fileUsageKey(file));
+      if (!stored) throw new Error("ファイルが見つかりません。");
+      const metadata = await readNativeFileUsages(uploadDirectory);
+      metadata[fileUsageKey(file)] = next;
+      await writeNativeFileUsages(uploadDirectory, metadata);
+    });
   },
 
   async getBlob(file: Pick<StoredFile, "name" | "purpose">): Promise<Blob | undefined> {
@@ -455,6 +478,19 @@ export const fileStorageService = {
       return;
     }
     await FileSystem.deleteAsync(file.uri, { idempotent: true });
+    if (file.purpose !== "chastity") {
+      try {
+        const usages = await readNativeFileUsages(uploadDirectory);
+        if (Object.hasOwn(usages, fileUsageKey(file))) {
+          delete usages[fileUsageKey(file)];
+          await writeNativeFileUsages(uploadDirectory, usages);
+        }
+      } catch (error) {
+        // The media has already been removed. A stale metadata entry cannot
+        // re-create it, so do not misreport the successful deletion as failed.
+        console.warn("Could not clean up deleted file usage metadata", error);
+      }
+    }
   },
 
   async removeMany(files: readonly StoredFile[]): Promise<FileDeleteResult | null> {

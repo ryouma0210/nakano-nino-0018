@@ -1,4 +1,5 @@
 import type { FilePurpose, PreparedFileRestore, StoredFile } from "./fileStorageService";
+import { fileUsageKey, isFilePurpose, isValidFileUsages, type FileUsage } from "../features/files/usages";
 
 export type WebMediaFile = {
   name: string;
@@ -6,10 +7,23 @@ export type WebMediaFile = {
   size: number;
   mimeType: string;
   blob: Blob;
+  usages?: FileUsage[];
 };
 
 type MediaRecord = WebMediaFile & { id: string; generation: string };
 type StorageState = { key: "state"; activeGeneration: string; legacyMigrated: true };
+type UsageRecord = { key: string; usages: FileUsage[] };
+
+function usageKey(generation: string, file: Pick<WebMediaFile, "purpose" | "name">) {
+  return `usages:${generation}:${fileUsageKey(file)}`;
+}
+
+async function writeUsages(current: IDBTransaction, generation: string, file: Pick<WebMediaFile, "purpose" | "name" | "usages">) {
+  const store = current.objectStore("metadata");
+  const key = usageKey(generation, file);
+  if (file.usages) await requestResult(store.put({ key, usages: file.usages } satisfies UsageRecord));
+  else await requestResult(store.delete(key));
+}
 
 const databaseName = "nino-room-web-files-v3";
 const legacyKey = "nino-room-web-files-v2";
@@ -120,7 +134,7 @@ async function requireState(current: IDBTransaction): Promise<StorageState> {
 function validateFile(file: WebMediaFile) {
   if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
     || /[\\/\u0000-\u001f]/.test(file.name)
-    || (file.purpose !== "training" && file.purpose !== "punishment" && file.purpose !== "chastity")
+    || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
     || !Number.isSafeInteger(file.size) || file.size < 0
     || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
     || !(file.blob instanceof Blob) || file.blob.size !== file.size) {
@@ -139,8 +153,9 @@ function validateFiles(files: readonly WebMediaFile[]) {
 }
 
 function mediaRecord(file: WebMediaFile, generation: string): MediaRecord {
+  const { usages: _usages, ...media } = file;
   return {
-    ...file, id: identifier(), generation,
+    ...media, id: identifier(), generation,
     // ZIP entries may arrive as untyped Blobs; object URLs need their declared
     // media type so browser playback and later backup exports remain correct.
     blob: file.blob.type === file.mimeType.toLowerCase()
@@ -217,7 +232,10 @@ async function ensureMigrated() {
     // Another browser tab may have finished migration since our first read.
     if (await readState(current)) return;
     const store = current.objectStore("files");
-    for (const file of files) await requestResult(store.add(mediaRecord(file, generation)));
+    for (const file of files) {
+      await requestResult(store.add(mediaRecord(file, generation)));
+      await writeUsages(current, generation, file);
+    }
     await requestResult(current.objectStore("metadata").put({
       key: "state", activeGeneration: generation, legacyMigrated: true,
     } satisfies StorageState));
@@ -232,13 +250,13 @@ function revoke(id: string) {
   objectUrls.delete(id);
 }
 
-function storedFile(file: MediaRecord): StoredFile {
+function storedFile(file: MediaRecord, usages?: FileUsage[]): StoredFile {
   let uri = objectUrls.get(file.id);
   if (!uri) {
     uri = URL.createObjectURL(file.blob);
     objectUrls.set(file.id, uri);
   }
-  return { name: file.name, purpose: file.purpose, size: file.size, uri };
+  return { name: file.name, purpose: file.purpose, size: file.size, uri, ...(usages ? { usages } : {}) };
 }
 
 function assertMutable() {
@@ -255,7 +273,10 @@ async function removeGeneration(generation: string) {
     if (state.activeGeneration === generation) throw new Error("Cannot remove the active file generation.");
     const store = current.objectStore("files");
     const records = await generationRecords(current, generation);
-    for (const record of records) await requestResult(store.delete(record.id));
+    for (const record of records) {
+      await requestResult(store.delete(record.id));
+      await requestResult(current.objectStore("metadata").delete(usageKey(generation, record)));
+    }
     return records.map((record) => record.id);
   });
   removed.forEach(revoke);
@@ -277,9 +298,16 @@ export const webFileStorage = {
     await ensureMigrated();
     const files = await transaction("readonly", async (current) => {
       const state = await requireState(current);
-      return generationRecords(current, state.activeGeneration);
+      const records = await generationRecords(current, state.activeGeneration);
+      const result: { record: MediaRecord; usages?: FileUsage[] }[] = [];
+      for (const record of records) {
+        const metadata: UsageRecord | undefined = await requestResult(current.objectStore("metadata").get(usageKey(state.activeGeneration, record)));
+        if (metadata && !isValidFileUsages(record.purpose, metadata.usages)) throw new Error(invalidFilesMessage);
+        result.push({ record, ...(metadata ? { usages: metadata.usages } : {}) });
+      }
+      return result;
     });
-    return files.map(storedFile);
+    return files.map(({ record, usages }) => storedFile(record, usages));
   }),
 
   getBlob: (file: Pick<StoredFile, "name" | "purpose">) => serialized(async (): Promise<Blob> => {
@@ -302,9 +330,23 @@ export const webFileStorage = {
       const previous: MediaRecord | undefined = await requestResult(store.index("file").get([state.activeGeneration, file.purpose, file.name]));
       if (previous) await requestResult(store.delete(previous.id));
       await requestResult(store.add(mediaRecord(file, state.activeGeneration)));
+      await writeUsages(current, state.activeGeneration, file);
       return previous?.id;
     });
     if (replaced) revoke(replaced);
+  }),
+
+  setUsages: (file: Pick<StoredFile, "name" | "purpose">, usages: FileUsage[]) => serialized(async (): Promise<void> => {
+    assertMutable();
+    if (file.purpose === "chastity" || !isValidFileUsages(file.purpose, usages)) throw new Error(invalidFilesMessage);
+    await ensureMigrated();
+    await transaction("readwrite", async (current) => {
+      const state = await requireState(current);
+      const record = await requestResult(current.objectStore("files").index("file").get([state.activeGeneration, file.purpose, file.name]));
+      if (!record) throw new Error("The stored file no longer exists.");
+      // Keep the Blob record and its object URL unchanged; only metadata is edited.
+      await writeUsages(current, state.activeGeneration, { ...file, usages });
+    });
   }),
 
   remove: (file: Pick<StoredFile, "name" | "purpose">) => serialized(async (): Promise<void> => {
@@ -315,6 +357,7 @@ export const webFileStorage = {
       const store = current.objectStore("files");
       const previous: MediaRecord | undefined = await requestResult(store.index("file").get([state.activeGeneration, file.purpose, file.name]));
       if (previous) await requestResult(store.delete(previous.id));
+      await requestResult(current.objectStore("metadata").delete(usageKey(state.activeGeneration, file)));
       return previous?.id;
     });
     if (removed) revoke(removed);
@@ -325,6 +368,7 @@ export const webFileStorage = {
     await ensureMigrated();
     await transaction("readwrite", async (current) => {
       await requestResult(current.objectStore("files").clear());
+      await requestResult(current.objectStore("metadata").clear());
       await requestResult(current.objectStore("metadata").put({
         key: "state", activeGeneration: identifier(), legacyMigrated: true,
       } satisfies StorageState));
@@ -339,7 +383,10 @@ export const webFileStorage = {
     const generation = identifier();
     await transaction("readwrite", async (current) => {
       const store = current.objectStore("files");
-      for (const file of files) await requestResult(store.add(mediaRecord(file, generation)));
+      for (const file of files) {
+        await requestResult(store.add(mediaRecord(file, generation)));
+        await writeUsages(current, generation, file);
+      }
     });
     let state: "prepared" | "active" | "closed" = "prepared";
     let previousGeneration: string | null = null;

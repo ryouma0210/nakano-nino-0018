@@ -1,6 +1,6 @@
 import type { AppSettings } from "@/types/models";
 
-export type RoomAudioScene = "preparation" | "sugoroku" | "sugoroku-zone" | "sugoroku-penalty" | "othello-temptation";
+export type RoomAudioScene = "preparation" | "sugoroku" | "sugoroku-zone" | "sugoroku-penalty" | "othello-temptation" | "endurance";
 export type RoomAudioTrackName = "preparation" | "bokkisiro" | "earLick" | "ikunaSine" | "sineW" | "penaltyBgm";
 export type RoomAudioTrack = { name: RoomAudioTrackName; volume: number };
 type AudioSettings = Pick<AppSettings, "soundEnabled" | "soundVolume" | "backgroundMusicEnabled" | "musicVolume">;
@@ -15,11 +15,13 @@ export function getRoomAudioTracks(
   if (settings.soundEnabled) {
     const voices: RoomAudioTrackName[] = scene === "preparation"
       ? ["preparation", "bokkisiro"]
-      : scene === "sugoroku-zone"
-        ? ["earLick", "ikunaSine"]
-        : scene === "sugoroku-penalty"
-          ? ["earLick", "sineW"]
-          : ["earLick"];
+      : scene === "endurance"
+        ? ["earLick", "bokkisiro"]
+        : scene === "sugoroku-zone"
+          ? ["earLick", "ikunaSine"]
+          : scene === "sugoroku-penalty"
+            ? ["earLick", "sineW"]
+            : ["earLick"];
     voices.forEach((name) => tracks.push({ name, volume: settings.soundVolume }));
   }
   if ((scene === "sugoroku-penalty" || scene === "othello-temptation") && settings.backgroundMusicEnabled) {

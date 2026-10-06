@@ -3,6 +3,11 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["モード：{0}", "Mode: {0}", "모드: {0}", "模式：{0}"],
+  ["射精許可日：{0}", "Release permitted at: {0}", "사정 허가 일시: {0}", "允许射精时间：{0}"],
+  ["ルーレット：{0}/{1}回", "Roulette: {0}/{1} spins", "룰렛: {0}/{1}회", "轮盘：{0}/{1}次"],
+  ["＋{0} 延長", "+{0} extension", "+{0} 연장", "+{0} 延长"],
+  ["＋{0}\n延長", "+{0}\nextension", "+{0}\n연장", "+{0}\n延长"],
   ["検索結果：{0}件", "Search results: {0}", "검색 결과: {0}개", "搜索结果：{0}条"],
   ["最大 Lv.{0}", "Max Lv.{0}", "최대 Lv.{0}", "最高 Lv.{0}"],
   ["{0}マス目", "Space {0}", "{0}번 칸", "第{0}格"],
@@ -158,4 +163,11 @@ export const translationTemplates: readonly TranslationTemplate[] = [
   ["魅了を防御で振り払った：-{0}HP / MP+8", "You broke free of the charm by defending: -{0} HP / +8 MP", "방어로 매혹을 떨쳐냈습니다: HP -{0} / MP +8", "通过防御摆脱了魅惑：HP -{0}／MP +8"],
   ["魅了を防御で受け止めた：-{0}HP / MP+8", "You resisted the charm by defending: -{0} HP / +8 MP", "방어로 매혹을 버텼습니다: HP -{0} / MP +8", "通过防御抵抗了魅惑：HP -{0}／MP +8"],
   ["尻尾の通常攻撃：-{0}HP", "Tail strike: -{0} HP", "꼬리 일반 공격: HP -{0}", "尾巴普通攻击：HP -{0}"],
+  ["{0}日 {1}","{0} days {1}","{0}일 {1}","{0}天 {1}"],
+  ["本日の抽選：{0}回","Today's spins: {0}","오늘의 추첨: {0}회","今日抽取：{0}次"],
+  ["あと{0}回必要です。","{0} more spins required.","{0}회 더 필요합니다.","还需{0}次。"],
+  ["初期期間：{0}日間","Initial period: {0} days","초기 기간: {0}일","初始期限：{0}天"],
+  ["{0}回目","Spin {0}","{0}회차","第{0}次"],
+  ["時間延長：{0}","Time extension: {0}","시간 연장: {0}","时间延长：{0}"],
+  ["管理時間を{0}分延長","Management time extended by {0} min","관리 시간 {0}분 연장","管理时间延长{0}分钟"],
 ];

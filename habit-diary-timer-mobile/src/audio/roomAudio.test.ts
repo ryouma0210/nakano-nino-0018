@@ -7,9 +7,15 @@ const settings = {
   backgroundMusicEnabled: true,
   musicVolume: 0.35,
 };
-const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation"];
+const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation", "endurance"];
 
 describe("room audio", () => {
+  it("plays the two endurance voices together", () => {
+    expect(getRoomAudioTracks("endurance", settings, true)).toEqual([
+      { name: "earLick", volume: 0.7 },
+      { name: "bokkisiro", volume: 0.7 },
+    ]);
+  });
   it("adds the preparation voice while retaining the existing preparation loop", () => {
     expect(getRoomAudioTracks("preparation", settings, true)).toEqual([
       { name: "preparation", volume: 0.7 },
@@ -41,7 +47,7 @@ describe("room audio", () => {
   it("disables voices independently while retaining enabled penalty music", () => {
     const mutedVoices = { ...settings, soundEnabled: false };
     expect(scenes.map((scene) => getRoomAudioTracks(scene, mutedVoices, true))).toEqual([
-      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }],
+      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }], [],
     ]);
   });
 

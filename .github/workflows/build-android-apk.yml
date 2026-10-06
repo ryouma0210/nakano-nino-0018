@@ -9,6 +9,7 @@ on:
     paths:
       - "habit-diary-timer-mobile/**"
       - "shared/**"
+      - ".gitattributes"
       - ".github/workflows/build-android-apk.yml"
 
 jobs:
@@ -23,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

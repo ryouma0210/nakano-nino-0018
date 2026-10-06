@@ -1,4 +1,5 @@
 import type { FilePurpose, StoredFile } from "../../services/fileStorageService";
+import { fileHasPurpose } from "./usages";
 
 export type FileSortOrder = "newest" | "oldest" | "name" | "size";
 export type FilePurposeFilter = "all" | FilePurpose;
@@ -28,7 +29,7 @@ export function filterAndSortFiles(
 ) {
   const query = search.trim().toLocaleLowerCase();
   return files.filter((file) => (
-    (purpose === "all" || file.purpose === purpose)
+    file.purpose !== "chastity" && (purpose === "all" || fileHasPurpose(file, purpose))
     && (displayedFileName(file).toLocaleLowerCase().includes(query)
       || file.name.toLocaleLowerCase().includes(query))
   )).sort((left, right) => {

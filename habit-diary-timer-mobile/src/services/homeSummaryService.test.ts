@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildHomeSummary, homeSummaryService } from "./homeSummaryService";
 import * as webClient from "../database/client.web";
+import { MANAGEMENT_ROULETTE_KEY, type ManagementRouletteCycle, type ManagementRouletteDay, type ManagementRouletteSave } from "./managementRouletteStorage";
 
 const storage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn() }));
 const database = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
@@ -31,6 +32,14 @@ const trainingJournal = (overrides: Partial<ReturnType<typeof journal>> = {}) =>
 const punishment = (overrides = {}) => ({
   timer_name: "お仕置き", ended_at: `${today} 12:00:00`, completion_status: "completed", actual_duration_seconds: 60, ...overrides,
 });
+const rouletteDay = (date: string, count: number): ManagementRouletteDay => ({
+  date, endedAt: null,
+  draws: Array.from({ length: count }, (_, index) => ({ id: `${date}:${index + 1}`, drawnAt: `${date}T03:00:00.000Z`, candidateIndex: 0, kind: "extension", minutes: 3 })),
+});
+const rouletteCycle = (cycleId: number, days: ManagementRouletteDay[] = [], deadlineAt = "2026-09-19T07:35:00.000Z"): ManagementRouletteCycle => ({
+  cycleId, days, deadlineAt, finalInstruction: "Final instruction",
+  taskChoices: Array.from({ length: 5 }, (_, index) => ({ text: `Instruction ${index}` })),
+});
 
 describe("home daily progress", () => {
   it("keeps all rooms visible and navigable while excluding unavailable rooms from today's total", () => {
@@ -50,7 +59,7 @@ describe("home daily progress", () => {
     expect(summary.tasks.find((item) => item.id === "daily-order")?.status).toBe("未抽選");
     expect(summary.tasks.slice(-3)).toEqual([
       { id: "defeat", title: "敗北部屋", href: "/(tabs)/contract", eligible: false, completed: false, status: "未契約" },
-      { id: "management", title: "射精管理部屋", href: "/(tabs)/management", eligible: false, completed: false, status: "管理期間外" },
+      { id: "management", title: "射精管理部屋", href: "/(tabs)/management", eligible: false, completed: false, status: "管理期間外", management: { mode: null, deadlineAt: null, rouletteSpins: 0, rouletteRequired: 2 } },
       { id: "punishment", title: "お仕置き部屋", href: "/(tabs)/timer", eligible: false, completed: false, status: "対象外" },
     ]);
   });
@@ -182,6 +191,33 @@ describe("home daily progress", () => {
     expect(summary.tasks).toHaveLength(9);
     expect(summary.tasks.find((item) => item.id === "management:1"))
       .toMatchObject({ eligible: true, dayProgress: { currentDay: 1, totalDays: 1 } });
+  });
+
+  it.each([0, 1])("keeps overdue management visible when active=%i and today's roulette is complete", (isActive) => {
+    const summary = buildHomeSummary({ ...baseSnapshot(),
+      cycles: [cycle(1, { start_date: "2026-09-12", end_date: "2026-09-14", is_active: isActive })],
+      managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
+    });
+    expect(summary.tasks.find((item) => item.id === "management:1"))
+      .toMatchObject({ eligible: true, completed: true, dayProgress: { currentDay: 5, totalDays: 5 } });
+    expect(summary.completedCount).toBe(1);
+  });
+
+  it("keeps an overdue active cycle pending without counting an earlier day as complete", () => {
+    const summary = buildHomeSummary({ ...baseSnapshot(),
+      cycles: [cycle(1, { start_date: "2026-09-12", end_date: "2026-09-14" })],
+      managementTasks: [task(1, 1, { record_date: "2026-09-14", completed_at: "2026-09-14 12:00:00" })],
+    });
+    expect(summary.tasks.find((item) => item.id === "management:1"))
+      .toMatchObject({ eligible: true, completed: false, dayProgress: { currentDay: 5, totalDays: 5 } });
+  });
+
+  it("does not revive an overdue inactive cycle without a completion for today", () => {
+    const summary = buildHomeSummary({ ...baseSnapshot(),
+      cycles: [cycle(1, { start_date: "2026-09-12", end_date: "2026-09-14", is_active: 0 })],
+      managementTasks: [task(1, 1, { record_date: "2026-09-14", completed_at: "2026-09-14 12:00:00" })],
+    });
+    expect(summary.tasks.find((item) => item.id === "management")).toMatchObject({ eligible: false, completed: false });
   });
 
   it("uses only the latest active cycle per mode and keeps ungenerated instructions pending", () => {
@@ -399,6 +435,55 @@ describe("home daily progress", () => {
   });
 });
 
+describe("management details on today's tasks", () => {
+  it("uses each cycle's exact extended deadline and only the requested day's draws", () => {
+    const release = rouletteCycle(1, [rouletteDay("2026-09-15", 5), rouletteDay(today, 3), rouletteDay("2026-09-17", 4)]);
+    const chastity = rouletteCycle(2, [rouletteDay(today, 1)], "2026-09-20T01:03:00.000Z");
+    const summary = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(1), cycle(2, { mode: "chastity" })],
+      managementRoulette: { version: 1, cycles: [chastity, rouletteCycle(99, [rouletteDay(today, 9)]), release] },
+    });
+    expect(summary.tasks.find((item) => item.id === "management:1")?.management).toEqual({ mode: "release", deadlineAt: release.deadlineAt, rouletteSpins: 3, rouletteRequired: 2 });
+    expect(summary.tasks.find((item) => item.id === "management:2")?.management).toEqual({ mode: "chastity", deadlineAt: chastity.deadlineAt, rouletteSpins: 1, rouletteRequired: 2 });
+    expect(summary.eligibleCount).toBe(8); expect(summary.completedCount).toBe(0);
+  });
+
+  it("keeps an unspun new day at zero without carrying over yesterday's count", () => {
+    const summary = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(1)],
+      managementRoulette: { version: 1, cycles: [rouletteCycle(1, [rouletteDay("2026-09-15", 5), rouletteDay("2026-09-17", 4)])] },
+    });
+    expect(summary.tasks.find((item) => item.id === "management:1")?.management).toMatchObject({ rouletteSpins: 0, rouletteRequired: 2 });
+  });
+
+  it("retains metadata for today's completed management after release", () => {
+    const completedDay = { ...rouletteDay(today, 4), endedAt: `${today}T04:00:00.000Z` };
+    const saved = rouletteCycle(1, [completedDay], `${today}T03:30:00.000Z`);
+    const summary = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(1, { end_date: today, is_active: 0 })],
+      managementTasks: [task(1, 1, { completed_at: `${today} 13:00:00` })], managementRoulette: { version: 1, cycles: [saved] },
+    });
+    expect(summary.tasks.find((item) => item.id === "management:1")).toMatchObject({ eligible: true, completed: true,
+      management: { mode: "release", deadlineAt: saved.deadlineAt, rouletteSpins: 4, rouletteRequired: 2 } });
+    expect(summary.completedCount).toBe(1);
+  });
+
+  it.each(["release", "chastity"] as const)("uses the legacy local-midnight deadline for %s without initializing roulette", (mode) => {
+    const summary = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(1, { mode })],
+      managementRoulette: { version: 1, cycles: [rouletteCycle(99, [rouletteDay(today, 5)])] },
+    });
+    expect(summary.tasks.find((item) => item.id === "management:1")?.management)
+      .toEqual({ mode, deadlineAt: new Date("2026-09-18T00:00:00").toISOString(), rouletteSpins: 0, rouletteRequired: 2 });
+  });
+
+  it("uses empty details for an unstarted or no-longer-relevant period", () => {
+    for (const cycles of [[], [cycle(1, { is_active: 0 })]]) {
+      const summary = buildHomeSummary({ ...baseSnapshot(), cycles,
+        managementRoulette: { version: 1, cycles: [rouletteCycle(1, [rouletteDay(today, 5)])] },
+      });
+      expect(summary.tasks.find((item) => item.id === "management")?.management)
+        .toEqual({ mode: null, deadlineAt: null, rouletteSpins: 0, rouletteRequired: 2 });
+    }
+  });
+});
+
 describe("loading a home summary without changing saved data", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -434,6 +519,27 @@ describe("loading a home summary without changing saved data", () => {
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(database.query.mock.calls.every(([sql]) => String(sql).startsWith("SELECT "))).toBe(true);
     expect(database.queryOne.mock.calls.every(([sql]) => String(sql).startsWith("SELECT "))).toBe(true);
+  });
+
+  it("repeatedly reads saved roulette details without initializing or changing them", async () => {
+    const saved: ManagementRouletteSave = { version: 1, cycles: [rouletteCycle(1, [rouletteDay(today, 3)])] };
+    const raw = JSON.stringify(saved);
+    const original = database.queryOne.getMockImplementation()!;
+    database.queryOne.mockImplementation((sql: string, params: string[] = []) => params[0] === MANAGEMENT_ROULETTE_KEY ? { setting_value: raw } : original(sql, params));
+    const first = await homeSummaryService.load(today);
+    expect(first.tasks.find((item) => item.id === "management:1")?.management)
+      .toEqual({ mode: "release", deadlineAt: saved.cycles[0].deadlineAt, rouletteSpins: 3, rouletteRequired: 2 });
+    expect(await homeSummaryService.load(today)).toEqual(first);
+    expect(JSON.stringify(saved)).toBe(raw);
+    expect(database.execute).not.toHaveBeenCalled(); expect(storage.setItem).not.toHaveBeenCalled();
+    expect(database.queryOne.mock.calls.every(([sql]) => String(sql).startsWith("SELECT "))).toBe(true);
+  });
+
+  it.each(["broken", '{"version":1,"cycles":[{"cycleId":1}]}'])("rejects malformed roulette metadata without displaying a false zero or rewriting it: %s", async (raw) => {
+    const original = database.queryOne.getMockImplementation()!;
+    database.queryOne.mockImplementation((sql: string, params: string[] = []) => params[0] === MANAGEMENT_ROULETTE_KEY ? { setting_value: raw } : original(sql, params));
+    await expect(homeSummaryService.load(today)).rejects.toThrow("ルーレットの保存データが正しくありません。");
+    expect(database.execute).not.toHaveBeenCalled(); expect(storage.setItem).not.toHaveBeenCalled();
   });
 
   it("does not treat a corrupt stored order as completed", async () => {
@@ -515,6 +621,8 @@ describe("loading a home summary without changing saved data", () => {
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["login_bonus_last_claimed_date", today]);
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["outside_game_point_date", today]);
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["outside_game_point_today", "100"]);
+      const roulette: ManagementRouletteSave = { version: 1, cycles: [rouletteCycle(1, [rouletteDay(today, 3), rouletteDay("2026-09-17", 1)])] };
+      seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", [MANAGEMENT_ROULETTE_KEY, JSON.stringify(roulette)]);
       for (const row of [cycle(1, { start_date: "2026-09-14" }), cycle(2, { mode: "chastity", start_date: "2026-09-17" })]) {
         seed(
           "INSERT INTO management_cycles(id, mode, start_date, end_date, is_active) VALUES(?, ?, ?, ?, ?)",
@@ -561,7 +669,7 @@ describe("loading a home summary without changing saved data", () => {
         .toMatchObject({ completed: true, pointProgress: { earned: 100, limit: 100 } });
       expect(summary.tasks.find((item) => item.id === "punishment")).toMatchObject({ completed: true });
       expect(summary.tasks.find((item) => item.id === "management:1"))
-        .toMatchObject({ dayProgress: { currentDay: 3, totalDays: 5 } });
+        .toMatchObject({ dayProgress: { currentDay: 3, totalDays: 5 }, management: { mode: "release", deadlineAt: roulette.cycles[0].deadlineAt, rouletteSpins: 3, rouletteRequired: 2 } });
       expect(setItem).not.toHaveBeenCalled();
       expect(removeItem).not.toHaveBeenCalled();
       expect([...saved.entries()]).toEqual(savedBefore);
@@ -571,6 +679,7 @@ describe("loading a home summary without changing saved data", () => {
       expect(await homeSummaryService.load(today)).toEqual(summary);
 
       const tomorrowSummary = await homeSummaryService.load("2026-09-17");
+      expect(tomorrowSummary.tasks.find((item) => item.id === "management:1")?.management).toMatchObject({ rouletteSpins: 1 });
       expect(tomorrowSummary.tasks.find((item) => item.id === "outside"))
         .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 100 } });
       database.query.mockImplementation(webClient.query);

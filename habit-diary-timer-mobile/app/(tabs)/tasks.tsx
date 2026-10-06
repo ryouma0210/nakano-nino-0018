@@ -5,6 +5,7 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
+import { managementDeadlineLabel } from "@/components/managementTime";
 import { homeSummaryService, type HomeSummary } from "@/services/homeSummaryService";
 import { useDesktopLayout } from "@/hooks/useDesktopLayout";
 
@@ -113,15 +114,22 @@ export default function TasksScreen() {
                       style={({ pressed }) => [
                         styles.taskRow,
                         isDesktop && styles.desktopTaskRow,
+                        task.management && styles.managementTaskRow,
                         completed && styles.completedTask,
                         pending && styles.pendingTask,
                         !task.eligible && styles.inactiveTask,
                         pressed && (completed ? styles.completedTaskPressed : pending ? styles.pendingTaskPressed : styles.inactiveTaskPressed),
                       ]}
                     >
-                      <View style={[styles.taskBody, !task.eligible && styles.inactiveTaskBody]}>
+                      <View style={[styles.taskBody, task.management && styles.managementTaskBody, !task.eligible && styles.inactiveTaskBody]}>
                         <AppText style={[styles.taskTitle, stateText]}>{task.title}</AppText>
-                        {task.detail ? (
+                        {task.management ? (
+                          <View style={styles.managementDetails}>
+                            <AppText variant="muted" style={stateText}>{`モード：${task.management.mode === "chastity" ? "貞操帯あり" : task.management.mode === "release" ? "貞操帯なし" : "未設定"}`}</AppText>
+                            <AppText variant="muted" style={stateText}>{`射精許可日：${task.management.deadlineAt ? managementDeadlineLabel(task.management.deadlineAt) : "未設定"}`}</AppText>
+                            <AppText variant="muted" style={stateText}>{`ルーレット：${task.management.rouletteSpins}/${task.management.rouletteRequired}回`}</AppText>
+                          </View>
+                        ) : task.detail ? (
                           <View style={styles.taskDetail}>
                             <AppText variant="muted" style={stateText}>{task.detail}</AppText>
                             {task.pointProgress ? (
@@ -133,7 +141,7 @@ export default function TasksScreen() {
                           <AppText style={[styles.taskProgress, stateText]}>{task.dayProgress.currentDay}/{task.dayProgress.totalDays}日目</AppText>
                         ) : null}
                       </View>
-                      <View style={styles.taskAction}>
+                      <View style={[styles.taskAction, task.management && styles.managementTaskAction]}>
                         <AppText style={[styles.taskStatus, stateText, !task.eligible && styles.inactiveText]}>{completed ? "実施済" : task.status}</AppText>
                         <AppText style={[styles.taskLink, stateText, !task.eligible && styles.inactiveText]}>確認する →</AppText>
                       </View>
@@ -197,6 +205,10 @@ const styles = StyleSheet.create({
   inactiveText: { color: "#aaa0a6" },
   taskBody: { flex: 1, minWidth: 0, gap: 2 },
   taskDetail: { flexDirection: "row", flexWrap: "wrap", columnGap: 6 },
+  managementTaskRow: { flexDirection: "column", alignItems: "stretch", gap: 8 },
+  managementTaskBody: { flexGrow: 0, flexShrink: 0, flexBasis: "auto", width: "100%" },
+  managementDetails: { gap: 3, paddingVertical: 3 },
+  managementTaskAction: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", maxWidth: "100%" },
   taskTitle: { fontSize: 14, lineHeight: 20, fontWeight: "700" },
   taskProgress: { color: "#f4c979", fontSize: 13, lineHeight: 19, fontWeight: "700" },
   taskAction: { alignItems: "flex-end", maxWidth: "40%", gap: 3 },
