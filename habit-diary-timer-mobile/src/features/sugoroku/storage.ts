@@ -1,13 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { validateGame, type SugorokuGame } from "./game";
 
-const STORAGE_KEY = "nino-room:sugoroku:v1";
+export const SUGOROKU_STORAGE_KEY = "nino-room:sugoroku:v1";
 const HISTORY_LIMIT = 100;
+export type SugorokuAchievement = "goal-1" | "goal-2";
 
 export type SugorokuSave = {
   version: 1;
   current: SugorokuGame | null;
   history: SugorokuGame[];
+  /** Permanent unlocks, independent of the bounded game history. */
+  achievements?: SugorokuAchievement[];
 };
 
 let pendingOperation: Promise<void> = Promise.resolve();
@@ -23,6 +26,9 @@ function isSavedGame(value: unknown): value is SugorokuSave {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const saved = value as Record<string, unknown>;
   if (saved.version !== 1 || !Array.isArray(saved.history)) return false;
+  if ("achievements" in saved && (!Array.isArray(saved.achievements)
+    || saved.achievements.some((entry) => entry !== "goal-1" && entry !== "goal-2")
+    || new Set(saved.achievements).size !== saved.achievements.length)) return false;
   if (saved.current !== null && (!validateGame(saved.current) || saved.current.phase === "finished")) return false;
   if (!saved.history.every((game) => validateGame(game) && game.phase === "finished")) return false;
   const ids = new Set(saved.history.map((game) => game.id));
@@ -30,9 +36,16 @@ function isSavedGame(value: unknown): value is SugorokuSave {
   return saved.current === null || !ids.has(saved.current.id);
 }
 
-async function readSavedGame(): Promise<SugorokuSave> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (raw === null) return { version: 1, current: null, history: [] };
+export function getSugorokuAchievements(saved: Pick<SugorokuSave, "history" | "achievements">): SugorokuAchievement[] {
+  const goals = new Set<SugorokuAchievement>(saved.achievements ?? []);
+  for (const game of saved.history) {
+    if (game.phase === "finished" && (game.outcome === "goal-1" || game.outcome === "goal-2")) goals.add(game.outcome);
+  }
+  return (["goal-1", "goal-2"] as const).filter((goal) => goals.has(goal));
+}
+
+/** Validate backup restores and normalize legacy achievements without writing. */
+export function parseSugorokuSave(raw: string): SugorokuSave {
   let saved: unknown;
   try {
     saved = JSON.parse(raw);
@@ -41,7 +54,12 @@ async function readSavedGame(): Promise<SugorokuSave> {
   }
   // Never silently replace a corrupt record: this also protects valid history beside it.
   if (!isSavedGame(saved)) throw new Error("すごろくの保存データを読み込めませんでした。");
-  return saved;
+  return { ...saved, achievements: getSugorokuAchievements(saved) };
+}
+
+async function readSavedGame(): Promise<SugorokuSave> {
+  const raw = await AsyncStorage.getItem(SUGOROKU_STORAGE_KEY);
+  return raw === null ? { version: 1, current: null, history: [], achievements: [] } : parseSugorokuSave(raw);
 }
 
 function snapshotGame(game: SugorokuGame): SugorokuGame {
@@ -78,12 +96,13 @@ export async function saveSugoroku(game: SugorokuGame): Promise<SugorokuSave> {
       }
       next = { version: 1, current: snapshot, history: saved.history.slice(0, HISTORY_LIMIT) };
     }
-    // Current progress and its finished history are committed in one storage write.
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    next.achievements = getSugorokuAchievements({ history: next.history, achievements: saved.achievements });
+    // Progress, logs, history and permanent unlocks share a single storage write.
+    await AsyncStorage.setItem(SUGOROKU_STORAGE_KEY, JSON.stringify(next));
     return next;
   });
 }
 
 export function clearSugoroku(): Promise<void> {
-  return queueOperation(() => AsyncStorage.removeItem(STORAGE_KEY));
+  return queueOperation(() => AsyncStorage.removeItem(SUGOROKU_STORAGE_KEY));
 }

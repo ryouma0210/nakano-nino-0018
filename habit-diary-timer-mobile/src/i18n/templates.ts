@@ -3,12 +3,15 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["検索結果：{0}件", "Search results: {0}", "검색 결과: {0}개", "搜索结果：{0}条"],
+  ["最大 Lv.{0}", "Max Lv.{0}", "최대 Lv.{0}", "最高 Lv.{0}"],
   ["{0}マス目", "Space {0}", "{0}번 칸", "第{0}格"],
   ["マスのルールにより、{0}マス目へ移動しました。", "Moved to space {0} according to this space's rule.", "칸의 규칙에 따라 {0}번 칸으로 이동했습니다.", "根据格子的规则，已移动到第{0}格。"],
   ["ストップ{0}", "Stop {0}", "정지 칸 {0}", "停留格{0}"],
   ["残り{0}マス", "Spaces left: {0}", "남은 칸: {0}", "剩余{0}格"],
   ["残りマス：{0}", "Spaces remaining: {0}", "남은 칸: {0}", "剩余格数：{0}"],
   ["敗北マス：{0}", "Defeat space: {0}", "패배한 칸: {0}", "失败位置：{0}"],
+  ["敗北コース：{0}", "Defeat course: {0}", "패배 코스: {0}", "失败路线：{0}"],
   ["出目：{0}", "Roll: {0}", "주사위 눈: {0}", "点数：{0}"],
   ["ルール適用後：{0}", "After applying rule: {0}", "규칙 적용 후: {0}", "应用规则后：{0}"],
   ["元の出目：{0}", "Original roll: {0}", "원래 주사위 눈: {0}", "原始点数：{0}"],

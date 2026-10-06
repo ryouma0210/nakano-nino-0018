@@ -1,5 +1,4 @@
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -17,9 +16,10 @@ export default function GamesScreen() {
 
       <Card style={styles.gameCard}>
         <PrimaryButton title="すごろく" tone="defeat" onPress={() => router.push("/(tabs)/sugoroku")} />
+        <PrimaryButton title="オセロ" tone="defeat" onPress={() => router.push("/(tabs)/othello")} />
       </Card>
 
-      <PrimaryButton title="部屋へ戻る" tone="secondary" onPress={() => router.replace("/(tabs)/rooms")} />
+      <PrimaryButton title="部屋から出る" tone="secondary" onPress={() => router.replace("/(tabs)/rooms")} />
     </Screen>
   );
 }

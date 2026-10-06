@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { base64ToBlob, webFileStorage } from "./webFileStorage";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
-export type FilePurpose = "training" | "punishment";
+export type FilePurpose = "training" | "punishment" | "chastity";
 
 function purposeDirectory(purpose: FilePurpose) {
   return `${uploadDirectory}${purpose}/`;
@@ -94,6 +94,7 @@ export function mimeTypeForName(name: string) {
   const extension = name.split(".").pop()?.toLowerCase();
   const types: Record<string, string> = {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+    heic: "image/heic", heif: "image/heif", avif: "image/avif", bmp: "image/bmp",
     mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
     mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg",
     pdf: "application/pdf",
@@ -103,6 +104,28 @@ export function mimeTypeForName(name: string) {
 
 function webAvailable() {
   return Platform.OS === "web";
+}
+
+function webPickImage(): Promise<File | null> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = false;
+    input.style.display = "none";
+    document.body.appendChild(input);
+    let settled = false;
+    const finish = (file: File | null) => {
+      if (settled) return;
+      settled = true;
+      input.remove();
+      resolve(file);
+    };
+    input.addEventListener("cancel", () => finish(null), { once: true });
+    input.addEventListener("change", () => finish(input.files?.[0] ?? null), { once: true });
+    try { input.click(); }
+    catch (error) { input.remove(); reject(error); }
+  });
 }
 
 function webPickFiles(purpose: FilePurpose, onProgress?: ProgressHandler): Promise<FileImportResult | null> {
@@ -173,7 +196,7 @@ function validateRestoreFiles(files: readonly RestoreStoredFile[]) {
     // Preserve names verbatim. Replacing separators can merge two unrelated files.
     if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
       || /[\\/\u0000-\u001f]/.test(file.name)
-      || !["training", "punishment"].includes(file.purpose)
+      || !["training", "punishment", "chastity"].includes(file.purpose)
       || !Number.isSafeInteger(file.size) || file.size < 0
       || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
       || [typeof file.data === "string", typeof file.uri === "string", typeof Blob !== "undefined" && file.blob instanceof Blob].filter(Boolean).length !== 1
@@ -220,7 +243,7 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
   const previousDirectory = `${FileSystem.documentDirectory}private-room-files-previous-${token}/`;
   try {
     await FileSystem.makeDirectoryAsync(stageDirectory, { intermediates: true });
-    for (const purpose of ["training", "punishment"] as const) {
+    for (const purpose of ["training", "punishment", "chastity"] as const) {
       await FileSystem.makeDirectoryAsync(`${stageDirectory}${purpose}/`, { intermediates: true });
     }
     for (const file of files) {
@@ -341,13 +364,54 @@ export const fileStorageService = {
     const legacyFiles = await readFiles(uploadDirectory, "training");
     const trainingFiles = await readFiles(purposeDirectory("training"), "training");
     const punishmentFiles = await readFiles(purposeDirectory("punishment"), "punishment");
-    return [...legacyFiles, ...trainingFiles, ...punishmentFiles]
+    const chastityFiles = await readFiles(purposeDirectory("chastity"), "chastity");
+    return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...chastityFiles]
       .filter((file) => !purpose || file.purpose === purpose)
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 
   async getBlob(file: Pick<StoredFile, "name" | "purpose">): Promise<Blob | undefined> {
     return webAvailable() ? webFileStorage.getBlob(file) : undefined;
+  },
+
+  /** Hold the file lock until the owning record safely references the copied image. */
+  async pickImageAndStore<T>(purpose: FilePurpose, onStored: (file: StoredFile) => Promise<T>): Promise<T | null> {
+    return this.withExclusiveFiles(async () => {
+      let file: StoredFile | null = null;
+      try {
+        if (webAvailable()) {
+          const selected = await webPickImage();
+          if (!selected) return null;
+          const mimeType = selected.type || mimeTypeForName(selected.name);
+          if (!mimeType.startsWith("image/")) throw new Error("画像ファイルを選択してください。");
+          const name = storedFileName(selected.name);
+          file = { name, purpose, size: selected.size, uri: "" };
+          await webFileStorage.put({ name, purpose, size: selected.size, mimeType, blob: selected });
+          // Use the storage-owned URL, which is revoked on replacement or deletion.
+          file = (await webFileStorage.list()).find((entry) => entry.purpose === purpose && entry.name === name) ?? null;
+          if (!file) throw new Error("画像を保存できませんでした。");
+        } else {
+          const selected = await DocumentPicker.getDocumentAsync({ type: "image/*", copyToCacheDirectory: true, multiple: false });
+          if (selected.canceled) return null;
+          const asset = selected.assets[0];
+          if (!asset || !(asset.mimeType || mimeTypeForName(asset.name)).startsWith("image/")) {
+            throw new Error("画像ファイルを選択してください。");
+          }
+          await ensurePurposeDirectory(purpose);
+          const name = storedFileName(asset.name);
+          file = { name, purpose, size: asset.size ?? 0, uri: `${purposeDirectory(purpose)}${encodeURIComponent(name)}` };
+          await FileSystem.copyAsync({ from: asset.uri, to: file.uri });
+          const info = await FileSystem.getInfoAsync(file.uri);
+          if (!info.exists || info.isDirectory) throw new Error("画像を保存できませんでした。");
+          file.size = info.size;
+        }
+        return await onStored(file);
+      } catch (error) {
+        // Failed record writes must not replace the previous day's attachment.
+        if (file) await this.remove(file).catch((cleanupError) => console.warn("Could not remove an unreferenced image", cleanupError));
+        throw error;
+      }
+    });
   },
 
   async pickAndStore(purpose: FilePurpose = "training", onProgress?: ProgressHandler): Promise<FileImportResult | null> {

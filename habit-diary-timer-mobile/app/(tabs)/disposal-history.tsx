@@ -19,6 +19,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
+import { selectDisposalRecords } from "@/features/records/search";
 import { translateText, translateWeekday } from "@/i18n";
 import {
   DISPOSAL_MAX_COUNT,
@@ -37,6 +38,8 @@ export default function DisposalHistoryScreen() {
   const language = settings?.language ?? "ja";
   const locale = language === "en" ? "en-US" : language === "ko" ? "ko-KR" : language === "zh" ? "zh-CN" : "ja-JP";
   const [records, setRecords] = useState<DisposalRecord[]>([]);
+  const [keyword, setKeyword] = useState("");
+  const searching = keyword.trim().length > 0;
   const [selectedDate, setSelectedDate] = useState(toDateKey());
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
@@ -91,8 +94,8 @@ export default function DisposalHistoryScreen() {
 
   const dailyCounts = useMemo(() => getDailyDisposalCounts(records), [records]);
   const displayedRecords = useMemo(
-    () => records.filter((record) => record.recordDate === selectedDate),
-    [records, selectedDate],
+    () => selectDisposalRecords(records, selectedDate, keyword),
+    [records, selectedDate, keyword],
   );
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
@@ -116,6 +119,13 @@ export default function DisposalHistoryScreen() {
     if (firstDay > today) return;
     setVisibleMonth(next);
     setSelectedDate(firstDay.slice(0, 7) === today.slice(0, 7) ? today : firstDay);
+  }
+
+  function showDate(date: string) {
+    const [year, month] = date.split("-").map(Number);
+    setSelectedDate(date);
+    setVisibleMonth(new Date(year, month - 1, 1));
+    setKeyword("");
   }
 
   function openForm(record?: DisposalRecord) {
@@ -188,7 +198,22 @@ export default function DisposalHistoryScreen() {
     <>
       <Screen desktopLayout="single">
         <AppText variant="title">ゴミ汁廃棄履歴</AppText>
-        <Card style={styles.calendarCard}>
+        <TextField
+          testID="disposal-search"
+          label="検索"
+          accessibilityLabel={translateText("検索", language)}
+          value={keyword}
+          onChangeText={setKeyword}
+          placeholder="内容・日付・回数"
+        />
+        {searching ? <Card>
+          <AppText variant="subtitle">検索結果（全期間）</AppText>
+          {!loading && !loadFailed ? <AppText testID="disposal-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
+          <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => setKeyword("")} />
+          {loading ? <AppText variant="muted">検索結果を読み込み中…</AppText> : loadFailed ? (
+            <><AppText>記録を読み込めませんでした。</AppText><PrimaryButton title="再読み込み" tone="tribute" onPress={() => void loadRecords()} /></>
+          ) : null}
+        </Card> : <Card style={styles.calendarCard}>
           <AppText variant="subtitle" style={styles.calendarText}>廃棄カレンダー</AppText>
           <View style={styles.monthHeader}>
             <PrimaryButton title="‹" tone="secondary" onPress={() => changeMonth(-1)} />
@@ -243,9 +268,9 @@ export default function DisposalHistoryScreen() {
             })}
           </View>
           <AppText variant="muted" style={styles.calendarHelp}>日付の下の数字は、その日の廃棄回数です。</AppText>
-        </Card>
+        </Card>}
 
-        <Card>
+        {!searching ? <Card>
           <AppText localize={false} variant="subtitle">{dateLabel(selectedDate)}</AppText>
           {loading ? <AppText variant="muted">読み込み中…</AppText> : loadFailed ? (
             <PrimaryButton title="再読み込み" tone="tribute" onPress={() => void loadRecords()} />
@@ -256,20 +281,24 @@ export default function DisposalHistoryScreen() {
             </View>
           )}
           <PrimaryButton title="この日に追加" tone="tribute" disabled={busy || loading || loadFailed} onPress={() => openForm()} />
-        </Card>
+        </Card> : null}
 
         {!loading && !loadFailed && displayedRecords.length === 0 ? (
-          <Card><AppText variant="muted">選択した日の記録はありません。</AppText></Card>
+          <Card><AppText variant="muted">{searching ? "条件に一致する記録はありません。" : "選択した日の記録はありません。"}</AppText></Card>
         ) : null}
         {!loading && !loadFailed ? displayedRecords.map((record) => (
-          <Card key={record.id}>
-            <AppText variant="subtitle">{`${record.count}回`}</AppText>
-            {record.note ? <AppText localize={false}>{record.note}</AppText> : <AppText variant="muted">内容なし</AppText>}
-            <View style={styles.actions}>
-              <View style={styles.action}><PrimaryButton title="編集" tone="tribute" disabled={busy} onPress={() => openForm(record)} /></View>
-              <View style={styles.action}><PrimaryButton title="削除" tone="danger" disabled={busy} onPress={() => setPendingDelete(record)} /></View>
-            </View>
-          </Card>
+          <View key={record.id} testID={`disposal-record-${record.id}`}>
+            <Card>
+              {searching ? <AppText localize={false} variant="label">{dateLabel(record.recordDate)}</AppText> : null}
+              <AppText variant="subtitle">{`${record.count}回`}</AppText>
+              {record.note ? <AppText localize={false}>{record.note}</AppText> : <AppText variant="muted">内容なし</AppText>}
+              <View style={styles.actions}>
+                <View style={styles.action}><PrimaryButton title="編集" tone="tribute" disabled={busy} onPress={() => openForm(record)} /></View>
+                <View style={styles.action}><PrimaryButton title="削除" tone="danger" disabled={busy} onPress={() => setPendingDelete(record)} /></View>
+              </View>
+              {searching ? <PrimaryButton title="この日を表示" tone="secondary" disabled={busy} onPress={() => showDate(record.recordDate)} /> : null}
+            </Card>
+          </View>
         )) : null}
         <PrimaryButton title="タスクへ戻る" tone="tribute" onPress={() => router.replace("/(tabs)/tasks")} />
       </Screen>
@@ -297,7 +326,7 @@ export default function DisposalHistoryScreen() {
               accessibilityLabel={translateText("内容（任意）", language)}
               value={note}
               onChangeText={setNote}
-              placeholder="何をオカズにしたか（任意）"
+              placeholder={"何をオカズにゴミ汁廃棄したのかしら？w\n私にいつでも提出できるように具体的に書きなさい。"}
               multiline
               maxLength={DISPOSAL_MAX_NOTE_LENGTH}
               editable={!busy}
@@ -313,7 +342,7 @@ export default function DisposalHistoryScreen() {
       <ConfirmModal
         visible={pendingDelete !== null}
         title="記録を削除しますか？"
-        message="削除した記録は元に戻せません。"
+        message={`${pendingDelete ? `${dateLabel(pendingDelete.recordDate)}\n${translateText(`${pendingDelete.count}回`, language)}\n\n` : ""}${translateText("削除した記録は元に戻せません。", language)}`}
         confirmLabel="削除する"
         confirmTone="danger"
         onCancel={() => setPendingDelete(null)}

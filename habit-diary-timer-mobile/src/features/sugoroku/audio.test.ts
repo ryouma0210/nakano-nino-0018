@@ -15,8 +15,11 @@ function at(id: string, changes: Partial<SugorokuGame> = {}): SugorokuGame {
 }
 
 describe("sugoroku room audio", () => {
-  it("uses the base scene before a game and through the normal course's forced stops", () => {
-    expect(getSugorokuAudioScene(null)).toBe("sugoroku");
+  it("stays silent before a game starts", () => {
+    expect(getSugorokuAudioScene(null)).toBeNull();
+  });
+
+  it("starts the base scene with the game and keeps it through the normal course's forced stops", () => {
     expect(getSugorokuAudioScene(createGame())).toBe("sugoroku");
     for (const id of ["7", "14", "21", "25"]) {
       expect(getSugorokuAudioScene(at(id))).toBe("sugoroku");
@@ -55,12 +58,12 @@ describe("sugoroku room audio", () => {
     expect(getSugorokuAudioScene(rollDice(lastNegative, 6))).toBe("sugoroku");
   });
 
-  it("uses base audio for both goals and their completed results", () => {
+  it("plays both goal events and stops on their completed results", () => {
     const firstGoal = chooseRoute(completeEvent(at("25")), false);
     const secondGoal = rollDice(at("40", { phase: "ready", forceOneUntilEnd: true }), 1);
     for (const goal of [firstGoal, secondGoal]) {
       expect(getSugorokuAudioScene(goal)).toBe("sugoroku");
-      expect(getSugorokuAudioScene(completeEvent(goal))).toBe("sugoroku");
+      expect(getSugorokuAudioScene(completeEvent(goal))).toBeNull();
     }
   });
 
@@ -71,7 +74,7 @@ describe("sugoroku room audio", () => {
       expect(getSugorokuAudioScene(penaltyRoll)).toBe("sugoroku-penalty");
       const penaltyEvent = rollDice(penaltyRoll, 2);
       expect(getSugorokuAudioScene(penaltyEvent)).toBe("sugoroku-penalty");
-      expect(getSugorokuAudioScene(completeEvent(penaltyEvent))).toBe("sugoroku-penalty");
+      expect(getSugorokuAudioScene(completeEvent(penaltyEvent))).toBeNull();
     }
     expect(getSugorokuAudioScene(createGame())).toBe("sugoroku");
   });

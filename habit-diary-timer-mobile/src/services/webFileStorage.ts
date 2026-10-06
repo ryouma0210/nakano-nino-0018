@@ -120,7 +120,7 @@ async function requireState(current: IDBTransaction): Promise<StorageState> {
 function validateFile(file: WebMediaFile) {
   if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
     || /[\\/\u0000-\u001f]/.test(file.name)
-    || (file.purpose !== "training" && file.purpose !== "punishment")
+    || (file.purpose !== "training" && file.purpose !== "punishment" && file.purpose !== "chastity")
     || !Number.isSafeInteger(file.size) || file.size < 0
     || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
     || !(file.blob instanceof Blob) || file.blob.size !== file.size) {

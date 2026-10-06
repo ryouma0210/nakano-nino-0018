@@ -1,5 +1,6 @@
 import { execute, queryOne } from "@/database/client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
+import { clampPlayerLevel, ENEMY_MAX_LEVEL } from "./gameLogic";
 
 export const levelKey = "outside_game_level";
 export const hpKey = "outside_game_hp";
@@ -24,18 +25,19 @@ export function initializeLevel() {
   const today = toDateKey();
   const savedLevel = Number(readSetting(levelKey) ?? 0);
   const savedDate = readSetting(levelDateKey);
-  const level = savedDate === today ? savedLevel : Math.min(100, Math.max(0, savedLevel) + 10);
-  if (savedDate !== today) { saveSetting(levelKey, String(level)); saveSetting(levelDateKey, today); }
+  const baseLevel = Number.isFinite(savedLevel) ? Math.max(0, savedLevel) : 0;
+  const level = clampPlayerLevel(baseLevel + (savedDate === today ? 0 : 10));
+  if (savedDate !== today || level !== savedLevel) { saveSetting(levelKey, String(level)); saveSetting(levelDateKey, today); }
   return level;
 }
-function initializeDailyValue(dateKey: string, valueKey: string) {
+function initializeDailyValue(dateKey: string, valueKey: string, maximum = 100) {
   const today = toDateKey();
   if (readSetting(dateKey) !== today) { saveSetting(dateKey, today); saveSetting(valueKey, "0"); return 0; }
   const value = Number(readSetting(valueKey) ?? 0);
-  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+  return Number.isFinite(value) ? Math.max(0, Math.min(maximum, value)) : 0;
 }
 export const initializeDailyOutsidePoints = () => initializeDailyValue(dailyPointDateKey, dailyPointKey);
-export const initializeSuccubusAbsorbBonus = () => initializeDailyValue(succubusAbsorbDateKey, succubusAbsorbKey);
+export const initializeSuccubusAbsorbBonus = () => initializeDailyValue(succubusAbsorbDateKey, succubusAbsorbKey, ENEMY_MAX_LEVEL);
 export const initializeSuccubusMark = () => readSetting(succubusMarkKey) === "1";
 export const initializeDeepSuccubusMark = () => readSetting(deepSuccubusMarkKey) === "1";
 export function initializePlayerStat(key: string, fallback: number, minimum = 1) {

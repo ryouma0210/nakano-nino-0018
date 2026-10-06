@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { backupService, type BackupPayload, type PickedBackup } from "./backupService";
 import { readBackupArchive, writeBackupArchive } from "./backupArchive";
 import { disposalHistoryService } from "./disposalHistoryService";
+import { CHASTITY_STORAGE_KEY } from "./chastityHistoryStorage";
+import { loadOthello, loadOthelloHistory, OTHELLO_STORAGE_KEY, saveOthelloCurrent, saveOthelloResult, type OthelloCurrent, type OthelloHistoryEntry } from "../features/othello/storage";
+import { createGame, playMove } from "../features/othello/game";
+import { createGame as createSugorokuGame } from "../features/sugoroku/game";
+import { loadSugoroku, SUGOROKU_STORAGE_KEY } from "../features/sugoroku/storage";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, storage: new Map<string, string>(), sources: new Map<string, Uint8Array>(),
@@ -118,6 +123,159 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
+  it("round-trips shared daily photo metadata and image bytes in a complete backup", async () => {
+    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos" });
+    mocks.storage.set(CHASTITY_STORAGE_KEY, saved);
+    const photo = { name: "photo.png", purpose: "chastity", size: 3, uri: "file:///photo.png" };
+    mocks.list.mockResolvedValue([photo]);
+    mocks.sources.set(photo.uri, encoder.encode("png"));
+    await backupService.export("complete");
+    select(join(mocks.chunks));
+    const picked = (await backupService.pick())!;
+    expect(picked.payload.asyncStorage[CHASTITY_STORAGE_KEY]).toBe(saved);
+    expect(picked.files).toEqual([expect.objectContaining({ name: "photo.png", purpose: "chastity", size: 3 })]);
+    mocks.storage.delete(CHASTITY_STORAGE_KEY);
+    await backupService.restore(picked);
+    expect(mocks.storage.get(CHASTITY_STORAGE_KEY)).toBe(saved);
+    expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
+  });
+
+  it("keeps image references in save-only backups without replacing local files", async () => {
+    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos" });
+    mocks.storage.set(CHASTITY_STORAGE_KEY, saved);
+    const payload = await savePayload();
+    expect(payload.files).toBeUndefined();
+    expect(mocks.list).not.toHaveBeenCalled();
+    mocks.storage.delete(CHASTITY_STORAGE_KEY);
+    await backupService.restore(payload);
+    expect(mocks.storage.get(CHASTITY_STORAGE_KEY)).toBe(saved);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed daily photo metadata before changing database or files", async () => {
+    const payload = await savePayload();
+    payload.asyncStorage[CHASTITY_STORAGE_KEY] = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "../other.png" }, calendarDisplay: "icons" });
+    const before = [...mocks.storage];
+    await expect(backupService.restore(payload)).rejects.toThrow("貞操帯管理記録");
+    expect([...mocks.storage]).toEqual(before);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it.each(["custom_commands_v1", "seen_commands_v1", "management_command_sources_v1"])("rejects malformed %s before any restore mutation", async (key) => {
+    const payload = await savePayload();
+    payload.database.app_settings = [{ setting_key: key, setting_value: "broken", updated_at: "2026-10-06" }];
+    const before = [...mocks.storage];
+    await expect(backupService.restore(payload)).rejects.toThrow("追加命令");
+    expect([...mocks.storage]).toEqual(before);
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("round-trips a level 120 player without raising a level 100 enemy", async () => {
+    const rows = [
+      { setting_key: "outside_game_level", setting_value: "120", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_level_date", setting_value: "2026-10-06", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_succubus_absorb_today", setting_value: "100", updated_at: "2026-10-06 12:00:00" },
+    ];
+    mocks.query.mockImplementation((sql: string) => sql === "SELECT * FROM app_settings" ? structuredClone(rows) : []);
+    const payload = await savePayload();
+    expect(payload.database.app_settings).toEqual(rows);
+    mocks.query.mockReturnValue([]);
+    await backupService.restore(payload);
+    for (const row of rows) {
+      expect(mocks.execute).toHaveBeenCalledWith(
+        "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+        [row.setting_key, row.setting_value, row.updated_at],
+      );
+    }
+  });
+
+  it("round-trips completed and surrendered Othello results without stale cached history", async () => {
+    const result: OthelloHistoryEntry = {
+      id: "othello-1", startedAt: "2026-10-06T00:00:00.000Z", completedAt: "2026-10-06T00:05:00.000Z",
+      difficulty: "hard", humanCount: 40, cpuCount: 24, result: "win", reason: "completed",
+    };
+    await saveOthelloResult(result);
+    const history = await saveOthelloResult({ ...result, id: "othello-surrender", humanCount: 2, cpuCount: 2, result: "loss", reason: "surrender" });
+    const payload = await savePayload();
+    expect(JSON.parse(payload.asyncStorage[OTHELLO_STORAGE_KEY])).toEqual({ version: 1, current: null, history, achievements: ["played", "win", "hard-win"] });
+    await saveOthelloResult({ ...result, id: "after-backup" });
+    await backupService.restore(payload);
+    expect(await loadOthelloHistory()).toEqual(history);
+  });
+
+  it("rejects corrupt Othello history before changing storage or the database during restore", async () => {
+    const payload = await savePayload();
+    payload.asyncStorage[OTHELLO_STORAGE_KEY] = JSON.stringify({ version: 1, history: [{ id: "broken" }] });
+    const original = new Map(mocks.storage);
+    await expect(backupService.restore(payload)).rejects.toThrow("オセロのプレイ履歴を読み込めませんでした。");
+    expect(mocks.storage).toEqual(original);
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null, { kind: "manual", move: 19 }, { kind: "single", move: 26 },
+    { kind: "fast", paused: false }, { kind: "fast", paused: true },
+  ] as const)("restores an Othello current, history, and permanent titles with assistance %j", async (assistance) => {
+    const completed: OthelloHistoryEntry = {
+      id: "completed", startedAt: "2026-10-06T00:00:00.000Z", completedAt: "2026-10-06T00:05:00.000Z",
+      difficulty: "hard", humanCount: 40, cpuCount: 24, result: "win", reason: "completed",
+    };
+    await saveOthelloResult(completed);
+    const current: OthelloCurrent = {
+      id: "resumable", startedAt: "2026-10-06T01:00:00.000Z", difficulty: "normal", game: createGame(), assistance,
+    };
+    await saveOthelloCurrent(current);
+    const original = await loadOthello();
+    const payload = await savePayload();
+    expect(JSON.parse(payload.asyncStorage[OTHELLO_STORAGE_KEY])).toEqual(original);
+    await saveOthelloCurrent({ ...current, game: playMove(current.game, 19), assistance: null });
+    await saveOthelloResult({ ...completed, id: "after-export", difficulty: "normal" });
+    await backupService.restore(payload);
+    expect(await loadOthello()).toEqual(original);
+  });
+
+  it.each([
+    { current: { id: "broken" } },
+    { current: { id: "no-moves", startedAt: "2026-10-06T01:00:00.000Z", difficulty: "normal", game: { ...createGame(), board: Array(64).fill(1) }, assistance: null } },
+    { achievements: ["unknown-title"] }, { achievements: ["played", "played"] }, { achievements: "played" },
+  ])("rejects invalid Othello current or titles before any restore mutations: %j", async (extra) => {
+    const payload = await savePayload();
+    payload.asyncStorage[OTHELLO_STORAGE_KEY] = JSON.stringify({ version: 1, current: null, history: [], achievements: [], ...extra });
+    const original = new Map(mocks.storage);
+    await expect(backupService.restore(payload)).rejects.toThrow("オセロのプレイ履歴を読み込めませんでした。");
+    expect(mocks.storage).toEqual(original);
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("restores Sugoroku progress and retained goal titles without requiring their old history", async () => {
+    const original = {
+      version: 1, current: createSugorokuGame("2026-10-06T01:00:00.000Z"), history: [], achievements: ["goal-1", "goal-2"],
+    };
+    mocks.storage.set(SUGOROKU_STORAGE_KEY, JSON.stringify(original));
+    const payload = await savePayload();
+    expect(JSON.parse(payload.asyncStorage[SUGOROKU_STORAGE_KEY])).toEqual(original);
+    mocks.storage.delete(SUGOROKU_STORAGE_KEY);
+    await backupService.restore(payload);
+    expect(await loadSugoroku()).toEqual(original);
+  });
+
+  it.each([
+    { current: { id: "broken" } }, { achievements: ["unknown-goal"] }, { achievements: ["goal-1", "goal-1"] },
+  ])("rejects corrupt Sugoroku progress or achievements before restore writes: %j", async (extra) => {
+    const payload = await savePayload();
+    payload.asyncStorage[SUGOROKU_STORAGE_KEY] = JSON.stringify({ version: 1, current: null, history: [], achievements: [], ...extra });
+    const original = new Map(mocks.storage);
+    await expect(backupService.restore(payload)).rejects.toThrow("すごろくの保存データを読み込めませんでした。");
+    expect(mocks.storage).toEqual(original);
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
   it("round-trips disposal counts and optional notes in save backups", async () => {
     const records = await disposalHistoryService.add({ recordDate: "2000-01-01", count: 2, note: "個人のメモ\n二行目" });
     const payload = await savePayload();

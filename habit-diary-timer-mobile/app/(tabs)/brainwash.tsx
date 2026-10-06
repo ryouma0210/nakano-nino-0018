@@ -86,7 +86,7 @@ export default function BrainwashScreen() {
         />
       </Card>
       <PrimaryButton
-        title="廊下に戻る"
+        title="部屋から出る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/rooms")}
       />

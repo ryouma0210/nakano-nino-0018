@@ -34,7 +34,7 @@ export const contractSettingsSchema = z.object({
   maxPunishmentMinutes: z.number().int().min(0).max(1440).default(30), note: z.string().default(""),
   signature: z.string().optional(), signedAt: z.string().optional(),
 });
-export const dailyOrderSchema = z.object({ date: z.string(), text: z.string(), completed: z.boolean() });
+export const dailyOrderSchema = z.object({ date: z.string(), text: z.string(), completed: z.boolean(), customCommandId: z.string().min(1).optional() });
 export const realContractSchema = z.object({
   contractorName: z.string().optional(), contractDate: z.string().optional(),
   releaseMonths: z.number().int().nonnegative().optional(),

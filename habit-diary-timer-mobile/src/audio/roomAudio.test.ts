@@ -7,7 +7,7 @@ const settings = {
   backgroundMusicEnabled: true,
   musicVolume: 0.35,
 };
-const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty"];
+const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation"];
 
 describe("room audio", () => {
   it("adds the preparation voice while retaining the existing preparation loop", () => {
@@ -31,10 +31,17 @@ describe("room audio", () => {
     ]);
   });
 
+  it("plays only the ear-lick voice and temptation music for an othello temptation", () => {
+    expect(getRoomAudioTracks("othello-temptation", settings, true)).toEqual([
+      { name: "earLick", volume: 0.7 },
+      { name: "penaltyBgm", volume: 0.35 },
+    ]);
+  });
+
   it("disables voices independently while retaining enabled penalty music", () => {
     const mutedVoices = { ...settings, soundEnabled: false };
     expect(scenes.map((scene) => getRoomAudioTracks(scene, mutedVoices, true))).toEqual([
-      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }],
+      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }],
     ]);
   });
 
@@ -44,7 +51,10 @@ describe("room audio", () => {
       { name: "earLick", volume: 0.7 },
       { name: "sineW", volume: 0.7 },
     ]);
-    for (const scene of scenes.filter((name) => name !== "sugoroku-penalty")) {
+    expect(getRoomAudioTracks("othello-temptation", mutedMusic, true)).toEqual([
+      { name: "earLick", volume: 0.7 },
+    ]);
+    for (const scene of scenes.filter((name) => name !== "sugoroku-penalty" && name !== "othello-temptation")) {
       expect(getRoomAudioTracks(scene, mutedMusic, true)).toEqual(getRoomAudioTracks(scene, settings, true));
     }
   });
@@ -63,6 +73,14 @@ describe("room audio", () => {
     expect(getRoomAudioTracks("sugoroku-penalty", { ...settings, soundVolume: 0.2, musicVolume: 0 }, true)).toEqual([
       { name: "earLick", volume: 0.2 },
       { name: "sineW", volume: 0.2 },
+      { name: "penaltyBgm", volume: 0 },
+    ]);
+    expect(getRoomAudioTracks("othello-temptation", { ...settings, soundVolume: 0, musicVolume: 0.8 }, true)).toEqual([
+      { name: "earLick", volume: 0 },
+      { name: "penaltyBgm", volume: 0.8 },
+    ]);
+    expect(getRoomAudioTracks("othello-temptation", { ...settings, soundVolume: 0.2, musicVolume: 0 }, true)).toEqual([
+      { name: "earLick", volume: 0.2 },
       { name: "penaltyBgm", volume: 0 },
     ]);
   });

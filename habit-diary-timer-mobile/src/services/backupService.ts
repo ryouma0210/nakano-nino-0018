@@ -3,6 +3,10 @@ import * as DocumentPicker from "expo-document-picker";
 import { Platform } from "react-native";
 import appConfig from "../../app.json";
 import { execute, query, transaction } from "@/database/client";
+import { OTHELLO_STORAGE_KEY, parseOthelloHistory } from "../features/othello/storage";
+import { SUGOROKU_STORAGE_KEY, parseSugorokuSave } from "../features/sugoroku/storage";
+import { CHASTITY_STORAGE_KEY, parseChastityHistory } from "./chastityHistoryStorage";
+import { validateCustomCommandSettings } from "./customCommandStorage";
 import { fileStorageService, mimeTypeForName, type BackupStoredFile, type RestoreStoredFile } from "@/services/fileStorageService";
 import { readBackupArchive, writeBackupArchive, type RandomAccessReader } from "./backupArchive";
 import { backupEntryBlob, copyBackupEntry, createBackupOutput, createBackupStaging, invalidBackupMessage, openBackupSource, openNativeBackupWriter, readSmallBackup, type BackupSource } from "./backupIO";
@@ -133,6 +137,15 @@ function validatePayload(value: unknown): BackupPayload {
     throw new Error("バックアップデータが不足しています。");
   }
   if (payload.kind === "complete" && !Array.isArray(payload.files)) throw new Error("格納ファイルのデータがありません。");
+  if (Object.hasOwn(payload.asyncStorage, OTHELLO_STORAGE_KEY)) {
+    parseOthelloHistory(payload.asyncStorage[OTHELLO_STORAGE_KEY]);
+  }
+  if (Object.hasOwn(payload.asyncStorage, SUGOROKU_STORAGE_KEY)) {
+    parseSugorokuSave(payload.asyncStorage[SUGOROKU_STORAGE_KEY]);
+  }
+  if (Object.hasOwn(payload.asyncStorage, CHASTITY_STORAGE_KEY)) {
+    parseChastityHistory(payload.asyncStorage[CHASTITY_STORAGE_KEY]);
+  }
   for (const table of tables) {
     const rows = payload.database[table];
     if (!Array.isArray(rows) || rows.some((row) => !row || typeof row !== "object" || Array.isArray(row)
@@ -141,7 +154,8 @@ function validatePayload(value: unknown): BackupPayload {
       throw new Error(`${table}のデータが不正です。`);
     }
   }
-  if (payload.files?.some((file) => !file || typeof file.name !== "string" || !["training", "punishment"].includes(file.purpose)
+  validateCustomCommandSettings(payload.database.app_settings);
+  if (payload.files?.some((file) => !file || typeof file.name !== "string" || !["training", "punishment", "chastity"].includes(file.purpose)
     || typeof file.mimeType !== "string" || typeof file.data !== "string" || typeof file.size !== "number")) {
     throw new Error("格納ファイルのデータが不正です。");
   }
@@ -154,7 +168,7 @@ function validateArchiveFiles(value: unknown): asserts value is ArchiveFile[] {
   for (const [index, file] of value.entries()) {
     if (!file || typeof file !== "object" || typeof file.name !== "string" || !file.name
       || file.name === "." || file.name === ".." || /[\\/\x00-\x1f\x7f]/.test(file.name)
-      || !["training", "punishment"].includes(file.purpose) || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+      || !["training", "punishment", "chastity"].includes(file.purpose) || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
       || !Number.isSafeInteger(file.size) || file.size < 0 || file.path !== `files/${String(index).padStart(6, "0")}`
       || names.has(`${file.purpose}/${file.name}`)) throw new Error(invalidBackupMessage);
     names.add(`${file.purpose}/${file.name}`);

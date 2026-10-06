@@ -76,7 +76,7 @@ export default function FilesScreen() {
     const startingMaintenance = fileStorageService.getMaintenanceState();
     if (startingMaintenance.active) return;
     const version = ++loadVersionRef.current;
-    const nextFiles = await fileStorageService.list();
+    const nextFiles = (await fileStorageService.list()).filter((file) => file.purpose !== "chastity");
     const currentMaintenance = fileStorageService.getMaintenanceState();
     if (currentMaintenance.active || currentMaintenance.revision !== startingMaintenance.revision) return;
     if (focusedRef.current && version === loadVersionRef.current) setFiles(nextFiles);

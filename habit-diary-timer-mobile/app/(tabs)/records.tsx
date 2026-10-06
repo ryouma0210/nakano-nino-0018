@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
@@ -17,6 +17,7 @@ import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
 import { journalRepository } from "@/repositories/journalRepository";
+import { selectJournalRecords } from "@/features/records/search";
 import { journalFormSchema, type JournalFormValues } from "@/schemas/forms";
 import type { Journal } from "@/types/models";
 import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
@@ -29,13 +30,20 @@ import {
 } from "@/repositories/roomRepository";
 import { useAppModal } from "@/components/AppModalProvider";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { translateWeekday } from "@/i18n";
+import { translateText, translateWeekday } from "@/i18n";
 
 export default function RecordsScreen() {
   const { settings } = useAppAudio();
   const { showError } = useAppModal();
   const [journals, setJournals] = useState<Journal[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [loadedKeyword, setLoadedKeyword] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const loadVersion = useRef(0);
+  const searchQuery = keyword.trim();
+  const searching = searchQuery.length > 0;
+  const waitingForResults = loading || loadedKeyword !== searchQuery;
   const [selectedDate, setSelectedDate] = useState(toDateKey());
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
@@ -59,38 +67,37 @@ export default function RecordsScreen() {
     },
   });
 
-  const load = useCallback(() => {
-    managementRepository.syncCompletedJournals();
-    dailyOrderService
-      .syncCompletedJournals()
-      .finally(() => setJournals(journalRepository.list(keyword)));
-  }, [keyword]);
+  const load = useCallback(async () => {
+    const version = ++loadVersion.current;
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      managementRepository.syncCompletedJournals();
+      await dailyOrderService.syncCompletedJournals();
+      if (version !== loadVersion.current) return;
+      setJournals(journalRepository.list(searchQuery));
+    } catch {
+      if (version === loadVersion.current) setLoadFailed(true);
+    } finally {
+      if (version === loadVersion.current) {
+        setLoadedKeyword(searchQuery);
+        setLoading(false);
+      }
+    }
+  }, [searchQuery]);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    void load();
+    return () => { loadVersion.current += 1; };
+  }, [load]);
 
   const markedDates = useMemo(
     () => new Set(journals.map((journal) => journal.record_date)),
     [journals],
   );
   const displayedJournals = useMemo(
-    () => journals
-      .filter((journal) => journal.record_date === selectedDate)
-      .sort((left, right) => {
-        const priority = (journal: Journal) => {
-          if (journal.tags?.includes("敗北部屋")) return 0;
-          if (journal.tags?.includes("洗脳部屋")) return 1;
-          if (journal.tags?.includes("準備部屋")) return 2;
-          if (journal.tags?.includes("本日の命令")) return 3;
-          if (journal.tags?.includes("射精管理")) return 4;
-          if (journal.tags?.includes("調教") || journal.tags?.includes("射精記録")) return 5;
-          if (journal.tags?.includes("お仕置き")) return 6;
-          return 7;
-        };
-        return priority(left) - priority(right)
-          || left.record_time.localeCompare(right.record_time)
-          || left.id - right.id;
-      }),
-    [journals, selectedDate],
+    () => selectJournalRecords(journals, selectedDate, searchQuery),
+    [journals, selectedDate, searchQuery],
   );
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
@@ -167,6 +174,18 @@ export default function RecordsScreen() {
     setPendingDelete(journal);
   }
 
+  function changeKeyword(value: string) {
+    setPendingDateDelete(false);
+    setKeyword(value);
+  }
+
+  function showDate(date: string) {
+    const [year, month] = date.split("-").map(Number);
+    setSelectedDate(date);
+    setVisibleMonth(new Date(year, month - 1, 1));
+    changeKeyword("");
+  }
+
   function isProtectedChecklist(journal: Journal | null) {
     return Boolean(
       journal?.tags?.includes("敗北部屋") || journal?.tags?.includes("準備部屋"),
@@ -230,7 +249,7 @@ export default function RecordsScreen() {
     <Screen>
       <View style={styles.header}>
         <AppText variant="title">調教日記部屋</AppText>
-        <PrimaryButton title="登録" onPress={openCreate} />
+        {!searching ? <PrimaryButton title="登録" onPress={openCreate} /> : null}
       </View>
 
       <RoomConversation
@@ -241,13 +260,19 @@ export default function RecordsScreen() {
       />
 
       <TextField
+        testID="journal-search"
         label="検索"
+        accessibilityLabel={translateText("検索", settings?.language ?? "ja")}
         value={keyword}
-        onChangeText={setKeyword}
+        onChangeText={changeKeyword}
         placeholder="タイトル・本文・タグ"
       />
 
-      <Card style={styles.calendarCard}>
+      {searching ? <Card>
+        <AppText variant="subtitle">検索結果（全期間）</AppText>
+        {!waitingForResults && !loadFailed ? <AppText testID="journal-search-count">{`検索結果：${displayedJournals.length}件`}</AppText> : null}
+        <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => changeKeyword("")} />
+      </Card> : <Card style={styles.calendarCard}>
         <AppText variant="subtitle" style={styles.calendarTitle}>記録カレンダー</AppText>
         <View style={styles.monthHeader}>
           <PrimaryButton
@@ -331,25 +356,28 @@ export default function RecordsScreen() {
           選択中：{formatDateJa(selectedDate)}{"\n"}
           ●は記録のある日です。
         </AppText>
-      </Card>
+      </Card>}
 
-      <View style={styles.dateHeadingRow}>
+      {!searching ? <View style={styles.dateHeadingRow}>
         <AppText style={styles.dateHeading}>{formatDateJa(selectedDate)}</AppText>
         <PrimaryButton
           title="この日を削除"
           tone="danger"
+          disabled={waitingForResults || loadFailed}
           onPress={() => setPendingDateDelete(true)}
         />
-      </View>
+      </View> : null}
 
-      {displayedJournals.length === 0 ? (
+      {waitingForResults ? <AppText variant="muted">{searching ? "検索結果を読み込み中…" : "読み込み中…"}</AppText> : loadFailed ? (
+        <Card><AppText>記録を読み込めませんでした。</AppText><PrimaryButton title="再読み込み" tone="secondary" onPress={() => { void load(); }} /></Card>
+      ) : displayedJournals.length === 0 ? (
         <Card>
-          <AppText variant="muted">選択した日の記録はありません。</AppText>
+          <AppText variant="muted">{searching ? "条件に一致する記録はありません。" : "選択した日の記録はありません。"}</AppText>
         </Card>
       ) : null}
 
-      {displayedJournals.map((journal) => (
-        <View key={journal.id} style={styles.dateGroup}>
+      {!waitingForResults && !loadFailed ? displayedJournals.map((journal) => (
+        <View key={journal.id} testID={`journal-record-${journal.id}`} style={styles.dateGroup}>
           <Card style={journalCardStyle(journal)}>
             <View style={styles.journalHeader}>
               <View style={styles.grow}>
@@ -362,6 +390,7 @@ export default function RecordsScreen() {
               <AppText style={styles.typeBadge}>{journal.record_type}</AppText>
             </View>
             <AppText
+              localize={!parseTags(journal.tags ?? "").includes("自分で追加した命令")}
               numberOfLines={
                 isProtectedChecklist(journal) || isImmutableRecord(journal) ? undefined : 4
               }
@@ -393,9 +422,10 @@ export default function RecordsScreen() {
                 />
               ) : null}
             </View>
+            {searching ? <PrimaryButton title="この日を表示" tone="secondary" onPress={() => showDate(journal.record_date)} /> : null}
           </Card>
         </View>
-      ))}
+      )) : null}
 
       <PrimaryButton
         title="記録・交換メニューへ戻る"
@@ -444,7 +474,7 @@ export default function RecordsScreen() {
           {isProtectedChecklist(editing) ? (
             <Card>
               <AppText variant="label">登録済みの✅項目（変更・削除不可）</AppText>
-              <AppText>{editing?.body}</AppText>
+              <AppText localize={!editing?.tags?.split(",").includes("自分で追加した命令")}>{editing?.body}</AppText>
               <AppText variant="label">追加できる✅項目</AppText>
               {availableChecklistItems.length === 0 ? (
                 <AppText variant="muted">
@@ -535,6 +565,7 @@ export default function RecordsScreen() {
         onConfirm={async () => {
           try {
             setPendingDateDelete(false);
+            if (searching) return;
             journalRepository.removeDate(selectedDate);
             load();
           } catch (error) {
@@ -545,7 +576,7 @@ export default function RecordsScreen() {
       <ConfirmModal
         visible={pendingDelete !== null}
         title="記録を削除しますか？"
-        message={`${pendingDelete?.title ?? ""}\n\n削除した記録は元に戻せません。`}
+        message={`${pendingDelete ? formatDateJa(pendingDelete.record_date) : ""}\n${pendingDelete?.title ?? ""}\n\n削除した記録は元に戻せません。`}
         confirmLabel="削除する"
         confirmTone="danger"
         onCancel={() => setPendingDelete(null)}
