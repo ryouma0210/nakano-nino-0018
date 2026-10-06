@@ -15,14 +15,18 @@ const recordExchangeItems = [
   ["調教日記", "/(tabs)/records"],
   ["ご褒美", "/(tabs)/rewards"],
   ["コレクション", "/(tabs)/collection"],
+  ["貞操帯管理記録", "/(tabs)/chastity-history"],
+  ["ゴミ汁廃棄履歴", "/(tabs)/disposal-history"],
   ["お貢ぎ履歴", "/(tabs)/tribute"],
 ] as const;
 
 const managementSettingItems = [
   ["アプリ設定", "/(tabs)/settings"],
   ["ループ音声", "/(tabs)/loop-audio"],
+  ["命令追加", "/(tabs)/custom-orders"],
   ["ファイル格納", "/(tabs)/files"],
   ["マイページ", "/(tabs)/mypage"],
+  ["マニュアル", "/(tabs)/manual"],
   ["外部リンク", "/(tabs)/external-links"],
 ] as const;
 
@@ -31,11 +35,12 @@ type MenuTitle =
   | (typeof managementSettingItems)[number][0];
 
 function menuTone(title: MenuTitle) {
-  if (title === "アプリ設定" || title === "外部リンク") return "secondary";
+  if (title === "アプリ設定" || title === "マニュアル" || title === "外部リンク") return "secondary";
   if (title === "ご褒美") return "defeat";
   if (title === "マイページ") return "record";
-  if (title === "ファイル格納") return "preparation";
-  if (title === "お貢ぎ履歴") return "tribute";
+  if (title === "ファイル格納" || title === "命令追加") return "preparation";
+  if (title === "貞操帯管理記録") return "training";
+  if (title === "お貢ぎ履歴" || title === "ゴミ汁廃棄履歴") return "tribute";
   if (title === "ループ音声" || title === "コレクション") return "collection";
   if (title === "本日の記録" || title === "週間報告" || title === "調教日記")
     return "record";
@@ -73,14 +78,13 @@ export default function MenuScreen() {
         <AppText variant="title">{title}</AppText>
         <View style={styles.rule} />
       </View>
-      {section !== "management" ? (
-        <RoomConversation
-          characterSource={require("../../assets/characters/settings-nino.png")}
-          roomName="管理メニュー"
-          lines={roomMessages.menu.lines}
-          contractLines={roomMessages.menu.contractLines}
-        />
-      ) : null}
+      <RoomConversation
+        key={section}
+        characterSource={require("../../assets/characters/settings-nino.png")}
+        roomName={section === "management" ? "管理・設定メニュー" : "管理メニュー"}
+        lines={section === "management" ? roomMessages.managementMenu.lines : roomMessages.menu.lines}
+        contractLines={section === "management" ? roomMessages.managementMenu.contractLines : roomMessages.menu.contractLines}
+      />
       {section !== "management" ? (
         <MenuSection
           title="記録・交換メニュー"

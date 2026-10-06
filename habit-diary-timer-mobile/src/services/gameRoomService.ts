@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { queryOne } from "@/database/client";
 import { toDateKey } from "@/utils/date";
 import { pointRepository } from "@/repositories/rewardRepository";
-import { dailyOrderMessages } from "@/constants/messages";
+import { customCommandService } from "./customCommandService";
 import { journalRepository } from "@/repositories/journalRepository";
 import { contractSettingsSchema, dailyOrderSchema } from "@/schemas/storage";
 import { parseStoredJson } from "@/utils/storageValidation";
@@ -24,6 +24,7 @@ export type DailyOrder = {
   date: string;
   text: string;
   completed: boolean;
+  customCommandId?: string;
 };
 
 const defaultContract: ContractSettings = {
@@ -86,7 +87,7 @@ function saveOrderJournal(order: DailyOrder) {
       title: "本日の命令記録",
       body: `本日の命令\n${order.text}\n\n実施完了`,
       recordType: "diary",
-      tags: "本日の命令,完了,削除不可",
+      tags: order.customCommandId ? "本日の命令,完了,削除不可,自分で追加した命令" : "本日の命令,完了,削除不可",
     },
     ORDER_JOURNAL_TAG,
   );
@@ -120,16 +121,18 @@ export const dailyOrderService = {
     return queueOrderOperation(async () => {
       const existing = await loadOrder(date);
       if (existing) return existing;
-      const order: DailyOrder = { date, text: dailyOrderMessages[Math.floor(Math.random() * dailyOrderMessages.length)].text, completed: false };
+      const choices = customCommandService.pool("daily");
+      const choice = choices[Math.floor(Math.random() * choices.length)];
+      const order: DailyOrder = { date, ...choice, completed: false };
       await AsyncStorage.setItem(`${ORDER_PREFIX}${date}`, JSON.stringify(order));
       return order;
     });
   },
   async complete(order: DailyOrder) {
-    const { date, text } = order;
+    const { date, text, customCommandId } = order;
     return queueOrderOperation(async () => {
       const existing = await readOrder(date);
-      if (!existing || existing.text !== text) {
+      if (!existing || existing.text !== text || existing.customCommandId !== customCommandId) {
         throw new Error("保存済みの命令と一致しません。再読み込みしてください。");
       }
       const next = { ...existing, completed: true };
@@ -143,8 +146,16 @@ export const dailyOrderService = {
   },
   async completedTexts(): Promise<string[]> {
     return queueOrderOperation(async () => [
-      ...new Set((await readOrders()).filter((order) => order.completed).map((order) => order.text)),
+      ...new Set((await readOrders()).filter((order) => order.completed && !order.customCommandId).map((order) => order.text)),
     ]);
+  },
+  async seenTexts(): Promise<string[]> {
+    return queueOrderOperation(async () => {
+      // Completed legacy records are proof that the command was displayed.
+      // An unfinished draw may have been interrupted before the wheel stopped.
+      customCommandService.markSeen("daily", (await readOrders()).filter((order) => order.completed));
+      return customCommandService.seen("daily").map((command) => command.text);
+    });
   },
   async remove(date = toDateKey()) {
     return queueOrderOperation(() => AsyncStorage.removeItem(`${ORDER_PREFIX}${date}`));

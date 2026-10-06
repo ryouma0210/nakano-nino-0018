@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Modal, StyleSheet, View } from "react-native";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -5,16 +6,16 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 type Props = {
   visible: boolean;
   title: string;
-  message: string;
+  message: ReactNode;
   confirmLabel?: string;
-  confirmTone?: "primary" | "danger";
+  confirmTone?: "primary" | "secondary" | "danger" | "defeat";
   showCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
 export function ConfirmModal({ visible, title, message, confirmLabel = "確認", confirmTone = "primary", showCancel = true, onConfirm, onCancel }: Props) {
-  const normalizedMessage = message.replace(/\\n/g, "\n");
+  const normalizedMessage = typeof message === "string" ? message.replace(/\\n/g, "\n") : message;
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
       <View style={styles.backdrop}>

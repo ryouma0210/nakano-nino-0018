@@ -349,6 +349,103 @@ function createWebPicker() {
   };
 }
 
+describe("single daily image imports", () => {
+  it("copies one image to the native private directory and holds the lock through metadata commit", async () => {
+    installNativeRestoreFileSystem();
+    const imageUri = "file:///cache/photo.png";
+    nativeFiles.set(imageUri, "image");
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: "photo.png", uri: imageUri, size: 5, mimeType: "image/png" }] });
+    const commitStarted = deferred<StoredFile>();
+    const finishCommit = deferred<void>();
+    const result = fileStorageService.pickImageAndStore("chastity", async (file) => {
+      commitStarted.resolve(file);
+      await finishCommit.promise;
+      return file;
+    });
+    const file = await commitStarted.promise;
+    try {
+      expect(file).toMatchObject({ purpose: "chastity", size: 5 });
+      expect(file.uri).toContain(`${nativeDirectory}chastity/`);
+      expect(nativeFiles.get(file.uri)).toBe("image");
+      expect(mocks.pick).toHaveBeenCalledExactlyOnceWith({ type: "image/*", copyToCacheDirectory: true, multiple: false });
+      await expect(fileStorageService.withExclusiveFiles(async () => "reset")).rejects.toThrow("処理中");
+      expect(await fileStorageService.list("training")).not.toContainEqual(file);
+      expect(await fileStorageService.list("punishment")).not.toContainEqual(file);
+      expect(await fileStorageService.list("chastity")).toEqual([file]);
+    } finally { finishCommit.resolve(undefined); }
+    expect(await result).toEqual(file);
+    expect(fileStorageService.getMaintenanceState().active).toBe(false);
+  });
+
+  it("removes a copied native image when committing its owning record fails", async () => {
+    installNativeRestoreFileSystem();
+    nativeFiles.set("file:///cache/photo.png", "image");
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: "photo.png", uri: "file:///cache/photo.png", mimeType: "image/png" }] });
+    await expect(fileStorageService.pickImageAndStore("chastity", async () => { throw new Error("metadata full"); })).rejects.toThrow("metadata full");
+    expect(await fileStorageService.list("chastity")).toEqual([]);
+    expect(nativeFiles.get(`${nativeDirectory}legacy.mp4`)).toBe("old");
+    expect(fileStorageService.getMaintenanceState().active).toBe(false);
+  });
+
+  it("opens the web image-only picker synchronously and persists a single binary attachment across reload", async () => {
+    const web = createWebPicker();
+    const result = fileStorageService.pickImageAndStore("chastity", async (file) => file);
+    expect(web.input.click).toHaveBeenCalledOnce();
+    expect(web.input.accept).toBe("image/*");
+    expect(web.input.multiple).toBe(false);
+    web.input.files = [new File(["image"], "photo.png", { type: "image/png" })];
+    await web.emit("change");
+    const file = (await result)!;
+    expect(file.purpose).toBe("chastity");
+    expect((await fileStorageService.getBlob(file))?.type).toBe("image/png");
+    expect(await (await fileStorageService.getBlob(file))?.text()).toBe("image");
+    expect(await fileStorageService.list("training")).toEqual([]);
+    expect(await fileStorageService.list("punishment")).toEqual([]);
+    expect(await fileStorageService.totalSize()).toBe(5);
+    expect(web.setItem).not.toHaveBeenCalled();
+    vi.resetModules();
+    ({ fileStorageService } = await import("./fileStorageService"));
+    const [reloaded] = await fileStorageService.list("chastity");
+    expect(reloaded.name).toBe(file.name);
+    expect(await (await fileStorageService.getBlob(reloaded))?.text()).toBe("image");
+  });
+
+  it("cleans up unreferenced web image bytes when metadata cannot be written", async () => {
+    const web = createWebPicker();
+    const result = fileStorageService.pickImageAndStore("chastity", async () => { throw new Error("record full"); });
+    web.input.files = [new File(["image"], "photo.png", { type: "image/png" })];
+    await web.emit("change");
+    await expect(result).rejects.toThrow("record full");
+    expect(await fileStorageService.list("chastity")).toEqual([]);
+    expect(fileStorageService.getMaintenanceState().active).toBe(false);
+  });
+
+  it("rejects nonimage bytes before storing and releases the web picker lock on cancel", async () => {
+    const web = createWebPicker();
+    const commit = vi.fn();
+    const canceled = fileStorageService.pickImageAndStore("chastity", commit);
+    await web.emit("cancel");
+    await expect(canceled).resolves.toBeNull();
+    expect(fileStorageService.getMaintenanceState().active).toBe(false);
+    const rejected = fileStorageService.pickImageAndStore("chastity", commit);
+    web.input.files = [new File(["video"], "video.mp4", { type: "video/mp4" })];
+    await web.emit("change");
+    await expect(rejected).rejects.toThrow("画像ファイル");
+    expect(commit).not.toHaveBeenCalled();
+    expect(await fileStorageService.list()).toEqual([]);
+  });
+
+  it("restores a daily image under its own purpose alongside training files", async () => {
+    installNativeRestoreFileSystem();
+    const image: RestoreStoredFile = { name: "photo.png", purpose: "chastity", size: 3, mimeType: "image/png", data: "b25l" };
+    const prepared = await fileStorageService.prepareRestore([image]);
+    await prepared.activate();
+    await prepared.finalize();
+    expect((await fileStorageService.list("chastity")).map((file) => file.name)).toEqual(["photo.png"]);
+    expect(await fileStorageService.list("training")).toEqual([]);
+  });
+});
+
 describe("web file imports", () => {
   it("allows internal restore and listing under maintenance while rejecting competing work and releasing on failure", async () => {
     const web = createWebPicker();

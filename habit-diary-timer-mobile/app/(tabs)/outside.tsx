@@ -12,8 +12,8 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { pointRepository, rewardRepository } from "@/repositories/rewardRepository";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import {
-  ATTACK_MP_COST, charmDefenseCount, clamp, createSlimes, entryPosition, ESCAPE_MP_COST,
-  facingForEntry, isNear, startPositions,
+  ATTACK_MP_COST, charmDefenseCount, clamp, clampEnemyLevel, clampPlayerLevel, createSlimes, entryPosition, ESCAPE_MP_COST,
+  ENEMY_MAX_LEVEL, facingForEntry, isNear, PLAYER_MAX_LEVEL, startPositions,
   succubusForLevel, type Direction, type MapArea, type MapPosition, type MapSlime,
   type SuccubusStage,
 } from "@/features/outside/gameLogic";
@@ -896,13 +896,13 @@ export default function OutsideScreen() {
   }
 
   function adjustPlayerLevel(delta: number) {
-    const nextLevel = Math.max(1, Math.min(100, level + delta));
+    const nextLevel = clampPlayerLevel(level + delta);
     savePlayerStats(nextLevel, playerHp, playerMp);
     setMessage(`設定で主人公Lvを調整した。\n現在 Lv.${nextLevel}`);
   }
 
   function adjustSuccubusLevel(delta: number) {
-    const nextSuccubusLevel = Math.max(1, Math.min(100, succubus.level + delta));
+    const nextSuccubusLevel = clampEnemyLevel(succubus.level + delta);
     setSuccubusAbsorbBonus(nextSuccubusLevel);
     saveSetting(succubusAbsorbKey, String(nextSuccubusLevel));
     saveSetting(succubusAbsorbDateKey, toDateKey());
@@ -947,7 +947,7 @@ export default function OutsideScreen() {
     const today = toDateKey();
     const gained = Math.min(10, 100 - dailyOutsidePoints);
     const nextDailyPoints = dailyOutsidePoints + gained;
-    const nextLevel = Math.min(100, level + 1);
+    const nextLevel = clampPlayerLevel(level + 1);
     pointRepository.award(
       `outside-slime:${today}:${nextDailyPoints}`,
       gained,
@@ -998,10 +998,11 @@ export default function OutsideScreen() {
 
   function savePlayerStats(nextLevel: number, nextHp: number, nextMp: number) {
     const today = toDateKey();
-    setLevel(nextLevel);
+    const savedLevel = clampPlayerLevel(nextLevel);
+    setLevel(savedLevel);
     setPlayerHp(nextHp);
     setPlayerMp(nextMp);
-    saveSetting(levelKey, String(nextLevel));
+    saveSetting(levelKey, String(savedLevel));
     saveSetting(levelDateKey, today);
     saveSetting(hpKey, String(nextHp));
     saveSetting(mpKey, String(nextMp));
@@ -1015,7 +1016,7 @@ export default function OutsideScreen() {
     const absorbedLevel = surrendered ? level : level <= 1 ? 0 : Math.min(absorptionTarget, level);
     const nextPlayerLevel = surrendered ? 1 : Math.max(1, level - absorptionTarget);
     const missingLevel = surrendered ? 0 : absorptionTarget - absorbedLevel;
-    const nextSuccubusLevel = Math.min(100, succubus.level + absorbedLevel);
+    const nextSuccubusLevel = clampEnemyLevel(succubus.level + absorbedLevel);
     const pointsBeforeDefeat = rewardRepository.balance().available;
     recordOutsideAchievement("defeat", succubus.stage);
     if (surrendered) recordOutsideAchievement("surrender");
@@ -1349,7 +1350,7 @@ export default function OutsideScreen() {
     setPendingDamageQueue((items) => [...items, { target: "enemy", amount: Math.round(attackDamage) }]);
     if (nextEnemyHp <= 0) {
       const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
-      const victoryLevel = Math.min(100, level + 20);
+      const victoryLevel = clampPlayerLevel(level + 20);
       setBattle(nextBattle);
       if (victoryLevel > level) playEffect("levelUp");
       savePlayerStats(victoryLevel, nextBattle.hp, nextBattle.mp);
@@ -1887,7 +1888,7 @@ export default function OutsideScreen() {
           <View style={styles.statusModal}>
             <AppText style={styles.crystalModalTitle}>自分のステータス</AppText>
             <View style={styles.playerStatusModalList}>
-              <AppText style={styles.playerStatusModalLevel}>Lv.{level}</AppText>
+              <AppText style={styles.playerStatusModalLevel}>Lv.{level} / {PLAYER_MAX_LEVEL}</AppText>
               <StatGauge label="HP" value={playerHp} max={100} color="#e3364f" />
               <StatGauge label="MP" value={playerMp} max={100} color="#3f8cff" />
               <AppText style={styles.playerStatusModalText}>館の外獲得Pt　{dailyOutsidePoints}/100pt</AppText>
@@ -2045,6 +2046,7 @@ export default function OutsideScreen() {
                 <View style={styles.crystalSettingText}>
                   <AppText style={styles.crystalSettingLabel}>自分のレベル</AppText>
                   <AppText style={styles.crystalSettingValue}>現在 Lv.{level}</AppText>
+                  <AppText style={styles.crystalModalNote}>最大 Lv.{PLAYER_MAX_LEVEL}</AppText>
                 </View>
                 <View style={styles.crystalStepButtons}>
                   <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(-10)}>
@@ -2062,6 +2064,7 @@ export default function OutsideScreen() {
                   <AppText style={[styles.crystalSettingValue, { color: succubus.color }]}>
                     現在 Lv.{succubus.level}
                   </AppText>
+                  <AppText style={styles.crystalModalNote}>最大 Lv.{ENEMY_MAX_LEVEL}</AppText>
                 </View>
                 <View style={styles.crystalStepButtons}>
                   <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(-10)}>

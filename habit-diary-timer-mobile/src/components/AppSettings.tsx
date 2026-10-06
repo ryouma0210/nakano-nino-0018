@@ -8,6 +8,11 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { Screen } from "@/components/Screen";
 import { DesktopDisplaySettings } from "@/components/DesktopDisplaySettings";
 import { execute } from "@/database/client";
+import { clearSugoroku } from "@/features/sugoroku/storage";
+import { clearOthelloHistory } from "@/features/othello/storage";
+import { disposalHistoryService } from "@/services/disposalHistoryService";
+import { chastityHistoryService } from "@/services/chastityHistoryService";
+import { customCommandService } from "@/services/customCommandService";
 import { fileStorageService, formatBytes } from "@/services/fileStorageService";
 import { notificationService } from "@/services/notificationService";
 import { defaultSettings, settingsService } from "@/services/settingsService";
@@ -30,11 +35,11 @@ const partialResetItems: {
   label: string;
   description: string;
 }[] = [
-  { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置きの全記録" },
+  { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置き・すごろく・オセロ・ゴミ汁廃棄履歴・貞操帯管理の全記録と添付画像・命令の閲覧履歴" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
   { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・解約日・契約後の追加ルール" },
   { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
-  { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画" },
+  { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画・貞操帯管理の添付画像" },
 ];
 
 async function disposeBackup(backup: PickedBackup | null) {
@@ -204,6 +209,10 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
         execute("DELETE FROM app_settings");
         await settingsService.reset();
         await dailyOrderService.clearAll();
+        await clearSugoroku();
+        await clearOthelloHistory();
+        await disposalHistoryService.clear();
+        await chastityHistoryService.clear();
         await contractService.clear();
         await slaveContractService.clear();
         await notificationService.cancelAll();
@@ -241,8 +250,13 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%'");
           execute("DELETE FROM journals");
           await dailyOrderService.clearOrders();
+          await clearSugoroku();
+          await clearOthelloHistory();
+          await disposalHistoryService.clear();
+          await chastityHistoryService.clear();
           execute("DELETE FROM management_daily_tasks");
           execute("DELETE FROM management_cycles");
+          customCommandService.clearRecords();
         }
         if (selected.has("points")) {
           execute("DELETE FROM reward_redemptions");
@@ -390,6 +404,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
         />
         <AppText variant="muted">セーブデータに加えて、格納した画像・動画・音声も保存します。</AppText>
         <AppText variant="muted">完全バックアップはZIP形式、セーブデータのみはJSON形式で保存します。</AppText>
+        <AppText variant="muted">貞操帯管理の添付画像も保存する場合は、完全バックアップを選んでください。</AppText>
         <PrimaryButton
           title="バックアップから復元"
           tone="secondary"
@@ -504,7 +519,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
       <ConfirmModal
         visible={resetConfirmation}
         title="全データを初期化しますか？"
-        message="次のデータをすべて削除します。\n\n・調教日記と準備・敗北記録\n・本日の命令\n・お仕置きと射精管理の履歴\n・実績・ポイント・獲得済みご褒美\n・契約書と契約ルール\n・名前とサウンド設定\n・格納ファイル\n\nこの操作は元に戻せません。"
+        message="次のデータをすべて削除します。\n\n・調教日記と準備・敗北記録\n・本日の命令・自分で追加した命令・命令の閲覧履歴\n・お仕置きと射精管理の履歴\n・すごろくとオセロの記録\n・ゴミ汁廃棄履歴・貞操帯管理記録と添付画像\n・実績・ポイント・獲得済みご褒美\n・契約書と契約ルール\n・名前とサウンド設定\n・格納ファイル\n\nこの操作は元に戻せません。"
         confirmLabel="削除を実行"
         confirmTone="danger"
         onCancel={() => setResetConfirmation(false)}

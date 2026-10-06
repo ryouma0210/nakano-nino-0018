@@ -2,9 +2,9 @@ import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateKey, toDateTimeKey, toTimeKey } from "@/utils/date";
 import {
   managementFinalDayMessages,
-  managementInstructionMessages,
 } from "@/constants/messages";
 import { journalRepository } from "@/repositories/journalRepository";
+import { customCommandService, type CommandChoice } from "@/services/customCommandService";
 
 export type PreparationRecord = {
   record_date: string;
@@ -29,6 +29,7 @@ export type ManagementDailyTask = {
   record_date: string;
   instruction: string;
   completed_at: string | null;
+  customCommandId?: string;
 };
 
 function addDays(dateKey: string, days: number) {
@@ -46,8 +47,8 @@ function daysBetween(startDateKey: string, endDateKey: string) {
   );
 }
 
-function randomChoice(items: string[]) {
-  return items[Math.floor(Math.random() * items.length)] ?? items[0] ?? "";
+function randomChoice<T>(items: T[]) {
+  return items[Math.floor(Math.random() * items.length)] ?? items[0];
 }
 
 function deleteManagementCycleData(cycleId: number) {
@@ -62,6 +63,7 @@ function deleteManagementCycleData(cycleId: number) {
   });
   execute("DELETE FROM management_daily_tasks WHERE cycle_id=?", [cycleId]);
   execute("DELETE FROM management_cycles WHERE id=?", [cycleId]);
+  customCommandService.removeManagementSources(cycleId);
 }
 
 export const preparationRepository = {
@@ -155,24 +157,25 @@ export const defeatRepository = {
   },
 };
 
-const instructions: Record<ManagementMode, string[]> = {
-  release: managementInstructionMessages.release.map((message) => message.text),
-  chastity: managementInstructionMessages.chastity.map((message) => message.text),
-};
-
 const finalDayInstructions: Record<ManagementMode, string[]> = {
   release: managementFinalDayMessages.release.map((message) => message.text),
   chastity: managementFinalDayMessages.chastity.map((message) => message.text),
 };
 
+function withCommandSource(task: ManagementDailyTask): ManagementDailyTask {
+  const customCommandId = customCommandService.managementSource(task.cycle_id, task.record_date);
+  return customCommandId ? { ...task, customCommandId } : task;
+}
+
 function saveManagementTaskJournal(task: ManagementDailyTask) {
+  const sourceTask = withCommandSource(task);
   journalRepository.upsertSystemRecord(
     {
       recordDate: task.record_date,
       title: "射精管理記録",
       body: `射精管理の本日の指示\n${task.instruction}\n\n実施完了`,
       recordType: "diary",
-      tags: "射精管理,本日の指示,完了,削除不可",
+      tags: sourceTask.customCommandId ? "射精管理,本日の指示,完了,削除不可,自分で追加した命令" : "射精管理,本日の指示,完了,削除不可",
     },
     `射精管理タスク${task.id}`,
   );
@@ -180,7 +183,7 @@ function saveManagementTaskJournal(task: ManagementDailyTask) {
 
 function createMissingManagementTasks(cycle: ManagementCycle) {
   const totalDays = daysBetween(cycle.start_date, cycle.end_date) + 1;
-  const normalChoices = instructions[cycle.mode];
+  const normalChoices = customCommandService.pool(cycle.mode);
   const finalChoices = finalDayInstructions[cycle.mode];
   transaction(() => {
     for (let index = 0; index < totalDays; index += 1) {
@@ -190,14 +193,15 @@ function createMissingManagementTasks(cycle: ManagementCycle) {
         [cycle.id, recordDate],
       );
       if (existing) continue;
-      const instruction =
+      const choice: CommandChoice =
         recordDate >= cycle.end_date
-          ? randomChoice(finalChoices)
+          ? { text: randomChoice(finalChoices) }
           : randomChoice(normalChoices);
       execute(
         "INSERT INTO management_daily_tasks(cycle_id, record_date, instruction) VALUES(?, ?, ?)",
-        [cycle.id, recordDate, instruction],
+        [cycle.id, recordDate, choice.text],
       );
+      if (choice.customCommandId) customCommandService.setManagementSource(cycle.id, recordDate, choice.customCommandId);
     }
   });
   const savedTasks = query<ManagementDailyTask>(
@@ -329,12 +333,9 @@ export const managementRepository = {
     const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?", [cycle.id, today]);
     if (existing) {
       if (existing.completed_at) saveManagementTaskJournal(existing);
-      return existing;
+      return withCommandSource(existing);
     }
-    return queryOne<ManagementDailyTask>(
-      "SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?",
-      [cycle.id, today],
-    ) ?? null;
+    return null;
   },
 
   tasks(cycle: ManagementCycle) {
@@ -342,7 +343,7 @@ export const managementRepository = {
     return query<ManagementDailyTask>(
       "SELECT * FROM management_daily_tasks WHERE cycle_id=? ORDER BY record_date, id",
       [cycle.id],
-    );
+    ).map(withCommandSource);
   },
 
   complete(taskId: number) {
@@ -354,7 +355,7 @@ export const managementRepository = {
     );
     if (task) {
       saveManagementTaskJournal(task);
-      return task;
+      return withCommandSource(task);
     }
     throw new Error("射精管理の本日の命令を完了状態に更新できませんでした。");
   },

@@ -29,7 +29,7 @@ const preparationComments = preparationLoopMessages;
 export default function PreparationScreen() {
   const insets = useSafeAreaInsets();
   const { showError } = useAppModal();
-  const { settings, playEffect, stopEffect, setSessionAudioActive } = useAppAudio();
+  const { settings, setRoomAudioScene } = useAppAudio();
   const playerName = settings?.playerName.trim() ?? "";
   const preparationPlayer = useVideoPlayer(
     require("../../assets/videos/preparation_1.mp4"),
@@ -50,17 +50,14 @@ export default function PreparationScreen() {
   useFocusEffect(
     useCallback(() => {
       preparationPlayer.play();
-      const enabled = Boolean(settings?.soundEnabled);
-      setSessionAudioActive(enabled);
-      if (enabled) playEffect("preparationLoop");
+      setRoomAudioScene("preparation");
       return () => {
         // useVideoPlayer が画面破棄時にプレイヤーを自動解放する。
         // ここで pause() すると、解放処理との順序次第で
         // ERR_USING_RELEASED_SHARED_OBJECT が発生するため呼び出さない。
-        stopEffect("preparationLoop");
-        setSessionAudioActive(false);
+        setRoomAudioScene(null);
       };
-    }, [playEffect, preparationPlayer, setSessionAudioActive, settings?.soundEnabled, stopEffect]),
+    }, [preparationPlayer, setRoomAudioScene]),
   );
 
   useFocusEffect(useCallback(() => {
@@ -186,7 +183,7 @@ export default function PreparationScreen() {
         />
       )}
       <PrimaryButton
-        title="廊下に戻る"
+        title="部屋から出る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/rooms")}
       />

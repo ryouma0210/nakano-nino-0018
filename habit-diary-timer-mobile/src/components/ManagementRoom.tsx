@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, type ImageSourcePropType } from "react-native";
-import { router } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, StyleSheet, View, type ImageSourcePropType } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -23,6 +23,7 @@ import {
   roomMessages,
 } from "@/constants/messages";
 import { formatError } from "@/utils/error";
+import { customCommandService } from "@/services/customCommandService";
 
 function managementModeLabel(mode: ManagementMode) {
   return mode === "release" ? "貞操帯なし" : "貞操帯あり";
@@ -53,6 +54,22 @@ export function ManagementRoom({
   const [changeModeConfirmation, setChangeModeConfirmation] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const rollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const today = toDateKey();
+
+  useFocusEffect(useCallback(() => {
+    if (!cycle) return;
+    function markVisible() {
+      if (!cycle || AppState.currentState === "background" || AppState.currentState === "inactive") return;
+      try {
+        customCommandService.markSeen(mode, tasks.filter((item) => item.record_date <= today).map((item) => ({
+          text: item.instruction, customCommandId: item.customCommandId, finalDay: item.record_date >= cycle.end_date,
+        })));
+      } catch (error) { setErrorMessage(formatError(error)); }
+    }
+    markVisible();
+    const listener = AppState.addEventListener("change", (state) => { if (state === "active") markVisible(); });
+    return () => listener.remove();
+  }, [cycle, mode, tasks, today]));
 
   useEffect(
     () => () => {
@@ -155,8 +172,6 @@ export function ManagementRoom({
     onChangeMode?.();
   }
 
-  const today = toDateKey();
-
   return (
     <Screen>
       <AppText variant="title">{title}</AppText>
@@ -224,14 +239,14 @@ export function ManagementRoom({
           </Card>
           <Card>
             <AppText variant="label">本日の調教指示</AppText>
-            <AppText style={styles.instruction}>
+            <AppText style={styles.instruction} localize={!task?.customCommandId}>
               {task?.instruction
                 ? formatManagementInstruction(
-                    task.instruction,
+                    task,
                     settings?.playerName.trim() ?? "",
                   )
                 : "指示を準備中"}
-              {(settings?.language ?? "ja") === "ja" ? "よ。" : ""}
+              {!task?.customCommandId && (settings?.language ?? "ja") === "ja" ? "よ。" : ""}
             </AppText>
             <AppText>実施完了次第、完了ボタンを押してね。</AppText>
             <PrimaryButton
@@ -284,9 +299,10 @@ export function ManagementRoom({
   );
 }
 
-function formatManagementInstruction(text: string, playerName: string) {
-  const message = findManagementMessage(text);
-  return message ? formatConfiguredMessage(message, playerName) : text;
+function formatManagementInstruction(task: ManagementDailyTask, playerName: string) {
+  if (task.customCommandId) return task.instruction;
+  const message = findManagementMessage(task.instruction);
+  return message ? formatConfiguredMessage(message, playerName) : task.instruction;
 }
 
 function ManagementBoard({
@@ -320,7 +336,7 @@ function ManagementBoard({
           const isFinal = item.record_date >= cycle.end_date;
           const revealed = isPast || isToday;
           const instruction = revealed
-            ? formatManagementInstruction(item.instruction, playerName)
+            ? formatManagementInstruction(item, playerName)
             : "？？？";
           return (
             <View
@@ -339,6 +355,7 @@ function ManagementBoard({
                 {isFinal ? "射精日" : isFuture ? "未開放" : item.completed_at ? "完了" : isToday ? "本日" : "未完了"}
               </AppText>
               <AppText
+                localize={!item.customCommandId}
                 style={[
                   styles.cellText,
                   isFuture && styles.hiddenText,

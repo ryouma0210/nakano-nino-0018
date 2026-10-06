@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
@@ -17,11 +17,14 @@ import { dailyOrderService, type DailyOrder } from "@/services/gameRoomService";
 import { formatDateJa, toDateKey } from "@/utils/date";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
+import { customCommandService, type CommandChoice } from "@/services/customCommandService";
 
 type OrderSnapshot = {
   date: string;
   order: DailyOrder | null;
   completedTexts: string[];
+  seenTexts: string[];
+  choices: CommandChoice[];
 };
 
 export default function OrdersScreen() {
@@ -46,13 +49,18 @@ export default function OrdersScreen() {
       await pendingOperation.current?.catch(() => undefined);
       if (!focused.current || version !== loadVersion.current) return;
       const date = toDateKey();
-      const [order, completedTexts] = await Promise.all([
+      const [order, completedTexts, seenTexts] = await Promise.all([
         dailyOrderService.load(date),
         dailyOrderService.completedTexts(),
+        dailyOrderService.seenTexts(),
       ]);
       if (!focused.current || version !== loadVersion.current) return;
       if (date !== toDateKey()) return void refreshOrders();
-      setSnapshot({ date, order, completedTexts });
+      const choices = customCommandService.pool("daily");
+      if (order?.customCommandId && !choices.some((choice) => choice.customCommandId === order.customCommandId && choice.text === order.text)) {
+        choices.push({ text: order.text, customCommandId: order.customCommandId });
+      }
+      setSnapshot({ date, order, completedTexts, seenTexts, choices });
     } catch {
       if (focused.current && version === loadVersion.current) setLoadError(true);
     }
@@ -118,11 +126,11 @@ export default function OrdersScreen() {
       setSnapshot((current) => current ? {
         ...current,
         order: next,
-        completedTexts: next.completed
+        completedTexts: next.completed && !next.customCommandId
           ? [...new Set([...current.completedTexts, next.text])]
           : current.completedTexts,
       } : current);
-      if (action === "draw" && dailyOrderMessages.some((message) => message.text === next.text)) {
+      if (action === "draw" && snapshot.choices.some((choice) => choice.text === next.text && choice.customCommandId === next.customCommandId)) {
         setSpinId((current) => current + 1);
         setPhase("spinning");
       } else {
@@ -140,11 +148,21 @@ export default function OrdersScreen() {
   }
 
   const order = snapshot?.order ?? null;
+  useEffect(() => {
+    if (!focused.current || !order || phase !== "idle" || order.customCommandId || AppState.currentState === "background" || AppState.currentState === "inactive") return;
+    try {
+      customCommandService.markSeen("daily", [order]);
+      setSnapshot((current) => current && !current.seenTexts.includes(order.text)
+        ? { ...current, seenTexts: [...current.seenTexts, order.text] } : current);
+    } catch (error) { showError("命令の閲覧記録を保存できませんでした", error); }
+  }, [order, phase, showError]);
+
   const completedTexts = new Set(snapshot?.completedTexts ?? []);
+  const seenTexts = new Set(snapshot?.seenTexts ?? []);
   const completedIndices = dailyOrderMessages.flatMap((message, index) => completedTexts.has(message.text) ? [index] : []);
-  const selectedIndex = order ? dailyOrderMessages.findIndex((message) => message.text === order.text) : -1;
+  const selectedIndex = order ? (snapshot?.choices ?? []).findIndex((choice) => choice.text === order.text && choice.customCommandId === order.customCommandId) : -1;
   const spinning = phase === "spinning";
-  const configuredOrder = order ? findDailyOrderMessage(order.text) : undefined;
+  const configuredOrder = order && !order.customCommandId ? findDailyOrderMessage(order.text) : undefined;
 
   return (
     <Screen>
@@ -168,7 +186,7 @@ export default function OrdersScreen() {
         ) : (
           <>
             <DailyOrderWheel
-              count={dailyOrderMessages.length}
+              count={snapshot.choices.length}
               completedIndices={completedIndices}
               selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
               spinning={spinning}
@@ -191,7 +209,7 @@ export default function OrdersScreen() {
                   <AppText variant="subtitle">本日の命令</AppText>
                   {selectedIndex >= 0 ? <AppText style={styles.orderNumber} localize={false}>No. {selectedIndex + 1}</AppText> : null}
                 </View>
-                <AppText>{configuredOrder ? formatConfiguredMessage(configuredOrder, playerName) : order.text}</AppText>
+                <AppText localize={!order.customCommandId}>{configuredOrder ? formatConfiguredMessage(configuredOrder, playerName) : order.text}</AppText>
                 <PrimaryButton
                   title={phase === "saving" ? "保存中..." : order.completed ? "完了済み" : "命令完了"}
                   disabled={order.completed || phase !== "idle"}
@@ -206,14 +224,15 @@ export default function OrdersScreen() {
         <Card>
           <AppText variant="subtitle">命令一覧</AppText>
           <AppText variant="muted">{`実施済み：${completedIndices.length}/${dailyOrderMessages.length}種類`}</AppText>
-          <AppText variant="muted">未実施の命令は「???」で表示されます。命令を完了すると、一覧に内容が表示されます。</AppText>
+          <AppText variant="muted">一度表示された命令だけ、一覧で確認できます。</AppText>
           {dailyOrderMessages.map((message, index) => {
             const completed = completedTexts.has(message.text);
+            const seen = seenTexts.has(message.text);
             return (
               <View key={message.text} style={[styles.catalogRow, completed && styles.completedRow]}>
                 <AppText style={[styles.catalogNumber, completed && styles.completedText]} localize={false}>{index + 1}</AppText>
-                <AppText style={[styles.catalogText, !completed && styles.unknownText, completed && styles.completedText]}>
-                  {completed ? formatConfiguredMessage(message, playerName) : "???"}
+                <AppText style={[styles.catalogText, !seen && styles.unknownText, completed && styles.completedText]}>
+                  {seen ? formatConfiguredMessage(message, playerName) : "???"}
                 </AppText>
               </View>
             );
@@ -221,7 +240,7 @@ export default function OrdersScreen() {
         </Card>
       ) : null}
       <PrimaryButton
-        title="廊下に戻る"
+        title="部屋から出る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)/rooms")}
       />

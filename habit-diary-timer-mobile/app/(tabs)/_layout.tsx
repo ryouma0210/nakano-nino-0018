@@ -12,6 +12,9 @@ export default function TabLayout() {
         <Stack.Screen name="index" options={{ title: t("ホーム") }} />
         <Stack.Screen name="tasks" options={{ title: t("タスク") }} />
         <Stack.Screen name="rooms" options={{ title: t("廊下") }} />
+        <Stack.Screen name="games" options={{ title: t("ゲーム部屋") }} />
+        <Stack.Screen name="sugoroku" options={{ title: t("すごろく") }} />
+        <Stack.Screen name="othello" options={{ title: t("オセロ") }} />
         <Stack.Screen name="nino-room" options={{ title: t("二ノ様の控室") }} />
         <Stack.Screen name="outside" options={{ title: t("館の外") }} />
         <Stack.Screen name="menu" options={{ title: t("記録・管理メニュー") }} />
@@ -19,6 +22,8 @@ export default function TabLayout() {
         <Stack.Screen name="habits" options={{ title: t("調教部屋") }} />
         <Stack.Screen name="records" options={{ title: t("調教日記部屋") }} />
         <Stack.Screen name="tribute" options={{ title: t("お貢ぎ履歴") }} />
+        <Stack.Screen name="disposal-history" options={{ title: t("ゴミ汁廃棄履歴") }} />
+        <Stack.Screen name="chastity-history" options={{ title: t("貞操帯管理記録") }} />
         <Stack.Screen name="timer" options={{ title: t("お仕置き部屋") }} />
         <Stack.Screen name="preparation" options={{ title: t("準備部屋") }} />
         <Stack.Screen name="defeat" options={{ title: t("敗北部屋") }} />
@@ -33,6 +38,8 @@ export default function TabLayout() {
         <Stack.Screen name="contract" options={{ title: t("契約部屋") }} />
         <Stack.Screen name="files" options={{ title: t("ファイル格納部屋") }} />
         <Stack.Screen name="settings" options={{ title: t("アプリ設定") }} />
+        <Stack.Screen name="custom-orders" options={{ title: t("命令追加") }} />
+        <Stack.Screen name="manual" options={{ title: t("マニュアル") }} />
         <Stack.Screen name="external-links" options={{ title: t("外部リンク") }} />
         <Stack.Screen name="slave-contract" options={{ title: t("奴隷契約書") }} />
       </Stack>
