@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   copy: vi.fn<({ from, to }: { from: string; to: string }) => Promise<void>>(),
   move: vi.fn<({ from, to }: { from: string; to: string }) => Promise<void>>(),
   write: vi.fn(),
+  read: vi.fn(),
   list: vi.fn(),
   remove: vi.fn<(uri: string, options: { idempotent: boolean }) => Promise<void>>(),
 }));
@@ -25,6 +26,7 @@ vi.mock("expo-file-system/legacy", () => ({
   copyAsync: mocks.copy,
   moveAsync: mocks.move,
   writeAsStringAsync: mocks.write,
+  readAsStringAsync: mocks.read,
   readDirectoryAsync: mocks.list,
   EncodingType: { Base64: "base64" },
   deleteAsync: mocks.remove,
@@ -590,12 +592,23 @@ function installNativeRestoreFileSystem() {
     if (contents === undefined) throw new Error("Missing source file");
     nativeFiles.set(to, contents);
   });
-  mocks.write.mockImplementation(async (uri: string, data: string) => { nativeFiles.set(uri, atob(data)); });
+  mocks.write.mockImplementation(async (uri: string, data: string, options?: { encoding?: string }) => { nativeFiles.set(uri, options?.encoding === "base64" ? atob(data) : data); });
+  mocks.read.mockImplementation(async (uri: string) => {
+    const data = nativeFiles.get(uri);
+    if (data === undefined) throw new Error("Missing file");
+    return data;
+  });
   mocks.remove.mockImplementation(async (uri) => {
     for (const path of directories) if (path === uri || path.startsWith(uri)) directories.delete(path);
     for (const path of nativeFiles.keys()) if (path === uri || (uri.endsWith("/") && path.startsWith(uri))) nativeFiles.delete(path);
   });
   mocks.move.mockImplementation(async ({ from, to }) => {
+    if (nativeFiles.has(from)) {
+      if (nativeFiles.has(to)) throw new Error("Destination exists");
+      nativeFiles.set(to, nativeFiles.get(from)!);
+      nativeFiles.delete(from);
+      return;
+    }
     if (!directories.has(from) || directories.has(to)) throw new Error("Invalid directory move");
     for (const path of [...directories]) {
       if (path === from || path.startsWith(from)) {
@@ -625,6 +638,81 @@ function installNativeRestoreFileSystem() {
 }
 
 describe("prepared file restoration", () => {
+  it("shares a native file across all usages without copying bytes, moving media or double-counting capacity", async () => {
+    const { oldFile } = installNativeRestoreFileSystem();
+    const [original] = await fileStorageService.list("training");
+    expect(original.uri).toBe(oldFile);
+    await fileStorageService.setUsages(original, ["training", "punishment", "endurance"]);
+    const [shared] = await fileStorageService.list();
+    expect(shared).toEqual({ ...original, usages: ["training", "punishment", "endurance"] });
+    for (const purpose of ["training", "punishment", "endurance"] as const) expect(await fileStorageService.list(purpose)).toEqual([shared]);
+    expect(await fileStorageService.totalSize()).toBe(original.size);
+    expect(mocks.copy).not.toHaveBeenCalled();
+    expect(mocks.move.mock.calls.every(([{ from, to }]) => from.includes(".usages/") && to.includes(".usages/"))).toBe(true);
+    expect(nativeFiles.get(oldFile)).toBe("old");
+    vi.resetModules();
+    ({ fileStorageService } = await import("./fileStorageService"));
+    expect(await fileStorageService.list("endurance")).toEqual([shared]);
+    await fileStorageService.setUsages(shared, ["endurance"]);
+    expect(await fileStorageService.list("training")).toEqual([]);
+    expect((await fileStorageService.list("endurance"))[0].uri).toBe(oldFile);
+    await fileStorageService.removeMany([shared]);
+    expect(await fileStorageService.list("endurance")).toEqual([]);
+    expect(JSON.parse(nativeFiles.get(`${nativeDirectory}.usages/current.json`)!)).toEqual({});
+    await fileStorageService.clear();
+    expect(await fileStorageService.list()).toEqual([]);
+    expect([...nativeFiles.keys()].some((path) => path.includes(".usages/"))).toBe(false);
+  });
+
+  it("preserves native usages if installing replacement metadata fails and recovers a complete previous copy", async () => {
+    installNativeRestoreFileSystem();
+    const [original] = await fileStorageService.list();
+    await fileStorageService.setUsages(original, ["training", "endurance"]);
+    const saved = await fileStorageService.list();
+    const move = mocks.move.getMockImplementation()!;
+    mocks.move.mockImplementation(async (paths) => {
+      if (paths.from.endsWith("pending.json")) throw new Error("metadata storage full");
+      await move(paths);
+    });
+    await expect(fileStorageService.setUsages(original, ["punishment"])).rejects.toThrow("metadata storage full");
+    expect(await fileStorageService.list()).toEqual(saved);
+    expect(fileStorageService.getMaintenanceState().active).toBe(false);
+    mocks.move.mockImplementation(move);
+    await mocks.move({ from: `${nativeDirectory}.usages/current.json`, to: `${nativeDirectory}.usages/previous.json` });
+    expect(await fileStorageService.list()).toEqual(saved);
+    await fileStorageService.setUsages(original, ["punishment"]);
+    expect((await fileStorageService.list("punishment"))[0].usages).toEqual(["punishment"]);
+  });
+
+  it("restores and rolls native usage metadata back together with the physical media directory", async () => {
+    const { replacement } = installNativeRestoreFileSystem();
+    const [old] = await fileStorageService.list();
+    await fileStorageService.setUsages(old, ["punishment", "endurance"]);
+    const originals = await fileStorageService.list();
+    const restored = { ...replacement, purpose: "endurance" as const, usages: ["training", "endurance"] as ("training" | "endurance")[] };
+    const prepared = await fileStorageService.prepareRestore([restored]);
+    expect(await fileStorageService.list()).toEqual(originals);
+    await prepared.activate();
+    expect(await fileStorageService.list("training")).toEqual([expect.objectContaining({ name: "new.mp4", purpose: "endurance", usages: ["training", "endurance"] })]);
+    await prepared.rollback();
+    expect(await fileStorageService.list()).toEqual(originals);
+    expect(await fileStorageService.list("training")).toEqual([]);
+  });
+
+  it("rejects native invalid usages, missing files and concurrent updates while keeping private photos isolated", async () => {
+    installNativeRestoreFileSystem();
+    const [old] = await fileStorageService.list();
+    await expect(fileStorageService.setUsages(old, [])).rejects.toThrow("1つ以上");
+    await expect(fileStorageService.setUsages({ ...old, purpose: "chastity" }, ["training"])).rejects.toThrow("1つ以上");
+    await expect(fileStorageService.setUsages({ ...old, name: "absent.mp4" }, ["training"])).rejects.toThrow("見つかりません");
+    await fileStorageService.withExclusiveFiles(async () => {
+      await expect(fileStorageService.setUsages(old, ["training"])).rejects.toThrow("処理中");
+    });
+    const data: RestoreStoredFile = { name: "private.jpg", purpose: "chastity", usages: ["endurance"], size: 3, mimeType: "image/jpeg", data: "b25l" };
+    await expect(fileStorageService.prepareRestore([data])).rejects.toThrow("不正");
+    expect(await fileStorageService.list()).toEqual([old]);
+  });
+
   it("stages native media by copying files, switches after preparation, and finalizes idempotently", async () => {
     const { oldFile, replacement, directories } = installNativeRestoreFileSystem();
     const prepared = await fileStorageService.prepareRestore([replacement]);

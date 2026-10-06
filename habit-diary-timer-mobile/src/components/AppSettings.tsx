@@ -10,6 +10,8 @@ import { DesktopDisplaySettings } from "@/components/DesktopDisplaySettings";
 import { execute } from "@/database/client";
 import { clearSugoroku } from "@/features/sugoroku/storage";
 import { clearOthelloHistory } from "@/features/othello/storage";
+import { clearEndurance } from "@/features/endurance/service";
+import { MANAGEMENT_ROULETTE_KEY } from "@/services/managementRouletteStorage";
 import { disposalHistoryService } from "@/services/disposalHistoryService";
 import { chastityHistoryService } from "@/services/chastityHistoryService";
 import { customCommandService } from "@/services/customCommandService";
@@ -211,6 +213,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
         await dailyOrderService.clearAll();
         await clearSugoroku();
         await clearOthelloHistory();
+        clearEndurance(true);
         await disposalHistoryService.clear();
         await chastityHistoryService.clear();
         await contractService.clear();
@@ -252,10 +255,12 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           await dailyOrderService.clearOrders();
           await clearSugoroku();
           await clearOthelloHistory();
+          clearEndurance();
           await disposalHistoryService.clear();
           await chastityHistoryService.clear();
           execute("DELETE FROM management_daily_tasks");
           execute("DELETE FROM management_cycles");
+          execute("DELETE FROM app_settings WHERE setting_key=?", [MANAGEMENT_ROULETTE_KEY]);
           customCommandService.clearRecords();
         }
         if (selected.has("points")) {

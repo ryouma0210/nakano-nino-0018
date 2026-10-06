@@ -22,13 +22,25 @@ import {
 import { toDateKey } from "@/utils/date";
 import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
 
+type DailyDraft = { limitText: string; feelings: string };
+
+const notePlaceholders: Record<ChastityStatus, string> = {
+  locked: "例）2日目",
+  wetDream: "例）朝起きて確認済",
+  ejaculation: "例）寸止め失敗により、暴発してしまいました。",
+  washing: "例）お風呂場で行いました。",
+};
+
 export default function ChastityHistoryScreen() {
   const { settings } = useAppAudio();
   const { showError } = useAppModal();
   const insets = useSafeAreaInsets();
   const language = settings?.language ?? "ja";
   const locale = language === "en" ? "en-US" : language === "ko" ? "ko-KR" : language === "zh" ? "zh-CN" : "ja-JP";
-  const [snapshot, setSnapshot] = useState<ChastityHistorySnapshot>({ records: [], photos: {}, calendarDisplay: "icons" });
+  const [snapshot, setSnapshot] = useState<ChastityHistorySnapshot>({ records: [], photos: {}, dailyDetails: {}, calendarDisplay: "icons" });
+  const [dailyDrafts, setDailyDrafts] = useState<Record<string, DailyDraft>>({});
+  const [dailyError, setDailyError] = useState<{ date: string; message: string } | null>(null);
+  const [dailySavedDate, setDailySavedDate] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
   const searching = keyword.trim().length > 0;
   const [selectedDate, setSelectedDate] = useState(toDateKey());
@@ -102,6 +114,11 @@ export default function ChastityHistoryScreen() {
   }, [visibleMonth]);
   const today = toDateKey();
   const selectedPhoto = snapshot.photos[selectedDate];
+  const selectedDetails = snapshot.dailyDetails[selectedDate];
+  const dailyDraft = dailyDrafts[selectedDate] ?? {
+    limitText: selectedDetails?.limitLevel == null ? "" : String(selectedDetails.limitLevel),
+    feelings: selectedDetails?.feelings ?? "",
+  };
   const previewPhoto = previewDate ? snapshot.photos[previewDate] : undefined;
   const disabled = busy || loading || loadFailed;
   const dateLabel = (date: string) => new Intl.DateTimeFormat(locale, {
@@ -172,6 +189,47 @@ export default function ChastityHistoryScreen() {
       setFormVisible(false);
     } catch {
       if (mountedRef.current) setFormError("貞操帯管理記録の保存に失敗しました。入力内容を確認して、もう一度お試しください。");
+    } finally { endMutation(); }
+  }
+
+  function editDailyDraft(field: keyof DailyDraft, value: string) {
+    if (busyRef.current || loading || loadFailed) return;
+    setDailyDrafts((current) => ({
+      ...current,
+      [selectedDate]: { ...(current[selectedDate] ?? dailyDraft), [field]: value },
+    }));
+    setDailyError(null);
+    setDailySavedDate(null);
+  }
+
+  async function saveDailyDetails() {
+    if (disabled) return;
+    const date = selectedDate;
+    const limitText = dailyDraft.limitText.trim().normalize("NFKC");
+    const limitLevel = limitText === "" ? null : Number(limitText);
+    if (limitLevel !== null && (!/^\d{1,3}$/.test(limitText) || !Number.isInteger(limitLevel) || limitLevel < 1 || limitLevel > 100)) {
+      setDailyError({ date, message: "限界度合いは1〜100の整数で入力してください。" });
+      return;
+    }
+    if (!beginMutation()) return;
+    setDailyError(null);
+    setDailySavedDate(null);
+    try {
+      const updated = await chastityHistoryService.saveDailyDetails(date, { limitLevel, feelings: dailyDraft.feelings });
+      if (!mountedRef.current) return;
+      setSnapshot(updated);
+      setLoadFailed(false);
+      setDailyDrafts((current) => {
+        const next = { ...current };
+        delete next[date];
+        return next;
+      });
+      setDailySavedDate(date);
+    } catch (error) {
+      if (mountedRef.current) {
+        setDailyError({ date, message: "この日の入力の保存に失敗しました" });
+        if (focusedRef.current) showError("この日の入力の保存に失敗しました", error);
+      }
     } finally { endMutation(); }
   }
 
@@ -339,6 +397,20 @@ export default function ChastityHistoryScreen() {
               <View style={styles.action}><PrimaryButton title="画像を削除" tone="secondary" disabled={disabled} onPress={() => setPendingPhotoDelete(selectedDate)} /></View>
             </View>
           </> : <PrimaryButton title="画像を添付" tone="secondary" disabled={disabled} onPress={() => void pickPhoto()} />}
+          <TextField testID="chastity-daily-limit" label="この日のおちんぽ限界度合い"
+            accessibilityLabel={translateText("この日のおちんぽ限界度合い", language)}
+            placeholder="1〜100" keyboardType="number-pad" value={dailyDraft.limitText}
+            editable={!disabled} onChangeText={(value) => editDailyDraft("limitText", value)} />
+          <TextField testID="chastity-daily-feelings" label="この日のご主人様への思い"
+            accessibilityLabel={translateText("この日のご主人様への思い", language)}
+            placeholder="射精したいって気持ちを入力してください♡" multiline maxLength={CHASTITY_MAX_NOTE_LENGTH}
+            value={dailyDraft.feelings} editable={!disabled} onChangeText={(value) => editDailyDraft("feelings", value)} />
+          <AppText variant="muted">どちらも空欄で保存すると、この日の入力を消去します。</AppText>
+          {dailyError?.date === selectedDate ? <AppText testID="chastity-daily-error" style={styles.error}>{dailyError.message}</AppText> : null}
+          {dailySavedDate === selectedDate ? <AppText testID="chastity-daily-saved">この日の入力を保存しました。</AppText> : null}
+          <View testID="chastity-daily-save">
+            <PrimaryButton title="この日の入力を保存" tone="secondary" disabled={disabled} onPress={() => void saveDailyDetails()} />
+          </View>
         </Card> : null}
 
         {!loading && !loadFailed && displayedRecords.length === 0 ? <Card>
@@ -390,7 +462,8 @@ export default function ChastityHistoryScreen() {
               </View> : null}
             </View>
             <TextField testID="chastity-note" label="内容（任意）" accessibilityLabel={translateText("内容（任意）", language)}
-              value={note} onChangeText={setNote} multiline maxLength={CHASTITY_MAX_NOTE_LENGTH} editable={!busy} />
+              value={note} onChangeText={setNote} placeholder={notePlaceholders[status]}
+              multiline maxLength={CHASTITY_MAX_NOTE_LENGTH} editable={!busy} />
             {formError ? <AppText accessibilityRole="alert" style={styles.error}>{formError}</AppText> : null}
             <View style={styles.actions}>
               <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" disabled={busy} onPress={() => { setStatusOpen(false); setFormVisible(false); }} /></View>

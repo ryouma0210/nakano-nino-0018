@@ -18,12 +18,13 @@ function readSetting(key: string) {
   return queryOne<{ setting_value: string }>("SELECT setting_value FROM app_settings WHERE setting_key=?", [key])?.setting_value ?? null;
 }
 
-function writeSetting(key: string, value: unknown) {
-  transaction(() => execute(
+function writeSetting(key: string, value: unknown, insideTransaction = false) {
+  const work = () => execute(
     `INSERT INTO app_settings(setting_key, setting_value, updated_at) VALUES(?, ?, ?)
      ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
     [key, JSON.stringify(value), new Date().toISOString()],
-  ));
+  );
+  if (insideTransaction) work(); else transaction(work);
 }
 
 function builtins(category: CommandCategory): BuiltinCommand[] {
@@ -46,7 +47,7 @@ function validateInput(category: CommandCategory, text: string) {
   if (text.length > CUSTOM_COMMAND_MAX_LENGTH) throw new Error("命令の内容は4000文字以内で入力してください。");
 }
 
-function markSeen(category: CommandCategory, choices: readonly (CommandChoice & { finalDay?: boolean })[]) {
+function markSeen(category: CommandCategory, choices: readonly (CommandChoice & { finalDay?: boolean })[], insideTransaction = false) {
   const existing = seenCommands();
   const catalog = builtins(category);
   const next = [...existing];
@@ -57,7 +58,7 @@ function markSeen(category: CommandCategory, choices: readonly (CommandChoice & 
     const seen = { category, text: choice.text, finalDay: command.finalDay };
     if (!next.some((item) => sameSeen(item, seen))) next.push(seen);
   }
-  if (next.length !== existing.length) writeSetting(SEEN_COMMANDS_KEY, { version: 1, commands: next });
+  if (next.length !== existing.length) writeSetting(SEEN_COMMANDS_KEY, { version: 1, commands: next }, insideTransaction);
 }
 
 let idSequence = 0;
@@ -103,14 +104,20 @@ export const customCommandService = {
     }));
   },
   managementSource(cycleId: number, date: string) { return managementSources()[`${cycleId}:${date}`]; },
-  setManagementSource(cycleId: number, date: string, customCommandId: string) {
+  setManagementSource(cycleId: number, date: string, customCommandId: string, insideTransaction = false) {
     const sources = managementSources();
-    writeSetting(MANAGEMENT_COMMAND_SOURCES_KEY, { version: 1, sources: { ...sources, [`${cycleId}:${date}`]: customCommandId } });
+    writeSetting(MANAGEMENT_COMMAND_SOURCES_KEY, { version: 1, sources: { ...sources, [`${cycleId}:${date}`]: customCommandId } }, insideTransaction);
   },
-  removeManagementSources(cycleId: number) {
+  removeManagementSource(cycleId: number, date: string, insideTransaction = false) {
+    const sources = managementSources();
+    if (!sources[`${cycleId}:${date}`]) return;
+    delete sources[`${cycleId}:${date}`];
+    writeSetting(MANAGEMENT_COMMAND_SOURCES_KEY, { version: 1, sources }, insideTransaction);
+  },
+  removeManagementSources(cycleId: number, insideTransaction = false) {
     const sources = managementSources();
     const remaining = Object.fromEntries(Object.entries(sources).filter(([key]) => !key.startsWith(`${cycleId}:`)));
-    if (Object.keys(remaining).length !== Object.keys(sources).length) writeSetting(MANAGEMENT_COMMAND_SOURCES_KEY, { version: 1, sources: remaining });
+    if (Object.keys(remaining).length !== Object.keys(sources).length) writeSetting(MANAGEMENT_COMMAND_SOURCES_KEY, { version: 1, sources: remaining }, insideTransaction);
   },
   syncCompletedManagement() {
     const sources = managementSources();

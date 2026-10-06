@@ -1,10 +1,9 @@
 import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateKey, toDateTimeKey, toTimeKey } from "@/utils/date";
-import {
-  managementFinalDayMessages,
-} from "@/constants/messages";
 import { journalRepository } from "@/repositories/journalRepository";
-import { customCommandService, type CommandChoice } from "@/services/customCommandService";
+import { customCommandService } from "@/services/customCommandService";
+import { createMissingManagementTasks } from "../services/managementTaskService";
+import { hasManagementRoulette, isCompletedManagementRouletteDay, managementRouletteService, removeManagementRouletteCycle } from "../services/managementRouletteService";
 
 export type PreparationRecord = {
   record_date: string;
@@ -38,24 +37,17 @@ function addDays(dateKey: string, days: number) {
   return toDateKey(date);
 }
 
-function daysBetween(startDateKey: string, endDateKey: string) {
-  const start = new Date(`${startDateKey}T12:00:00`);
-  const end = new Date(`${endDateKey}T12:00:00`);
-  return Math.max(
-    0,
-    Math.round((end.getTime() - start.getTime()) / 86400000),
-  );
-}
-
-function randomChoice<T>(items: T[]) {
-  return items[Math.floor(Math.random() * items.length)] ?? items[0];
-}
-
 function deleteManagementCycleData(cycleId: number) {
   const tasks = query<{ id: number }>(
     "SELECT id FROM management_daily_tasks WHERE cycle_id=?",
     [cycleId],
   );
+  const journalTags = new Set([...tasks.map((task) => `射精管理タスク${task.id}`), `射精管理期間${cycleId}`]);
+  const journals = query<{ id: number; tags: string | null }>("SELECT id, tags FROM journals WHERE tags LIKE '%射精管理%'");
+  for (const journal of journals) {
+    // Tags are comma-separated tokens: task 1 must never match task 10.
+    if (journal.tags?.split(",").some((tag) => journalTags.has(tag))) execute("DELETE FROM journals WHERE id=?", [journal.id]);
+  }
   tasks.forEach((task) => {
     execute("DELETE FROM point_transactions WHERE source_key=?", [
       `management-task:${task.id}`,
@@ -63,7 +55,8 @@ function deleteManagementCycleData(cycleId: number) {
   });
   execute("DELETE FROM management_daily_tasks WHERE cycle_id=?", [cycleId]);
   execute("DELETE FROM management_cycles WHERE id=?", [cycleId]);
-  customCommandService.removeManagementSources(cycleId);
+  customCommandService.removeManagementSources(cycleId, true);
+  removeManagementRouletteCycle(cycleId);
 }
 
 export const preparationRepository = {
@@ -157,62 +150,24 @@ export const defeatRepository = {
   },
 };
 
-const finalDayInstructions: Record<ManagementMode, string[]> = {
-  release: managementFinalDayMessages.release.map((message) => message.text),
-  chastity: managementFinalDayMessages.chastity.map((message) => message.text),
-};
-
 function withCommandSource(task: ManagementDailyTask): ManagementDailyTask {
   const customCommandId = customCommandService.managementSource(task.cycle_id, task.record_date);
-  return customCommandId ? { ...task, customCommandId } : task;
+  return customCommandId ? { ...task, customCommandId } : { ...task };
 }
 
 function saveManagementTaskJournal(task: ManagementDailyTask) {
   const sourceTask = withCommandSource(task);
+  const heading = isCompletedManagementRouletteDay(task.cycle_id, task.record_date) ? "本日のルーレット" : "射精管理の本日の指示";
   journalRepository.upsertSystemRecord(
     {
       recordDate: task.record_date,
       title: "射精管理記録",
-      body: `射精管理の本日の指示\n${task.instruction}\n\n実施完了`,
+      body: `${heading}\n${task.instruction}\n\n実施完了`,
       recordType: "diary",
       tags: sourceTask.customCommandId ? "射精管理,本日の指示,完了,削除不可,自分で追加した命令" : "射精管理,本日の指示,完了,削除不可",
     },
     `射精管理タスク${task.id}`,
   );
-}
-
-function createMissingManagementTasks(cycle: ManagementCycle) {
-  const totalDays = daysBetween(cycle.start_date, cycle.end_date) + 1;
-  const normalChoices = customCommandService.pool(cycle.mode);
-  const finalChoices = finalDayInstructions[cycle.mode];
-  transaction(() => {
-    for (let index = 0; index < totalDays; index += 1) {
-      const recordDate = addDays(cycle.start_date, index);
-      const existing = queryOne<ManagementDailyTask>(
-        "SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?",
-        [cycle.id, recordDate],
-      );
-      if (existing) continue;
-      const choice: CommandChoice =
-        recordDate >= cycle.end_date
-          ? { text: randomChoice(finalChoices) }
-          : randomChoice(normalChoices);
-      execute(
-        "INSERT INTO management_daily_tasks(cycle_id, record_date, instruction) VALUES(?, ?, ?)",
-        [cycle.id, recordDate, choice.text],
-      );
-      if (choice.customCommandId) customCommandService.setManagementSource(cycle.id, recordDate, choice.customCommandId);
-    }
-  });
-  const savedTasks = query<ManagementDailyTask>(
-    "SELECT * FROM management_daily_tasks WHERE cycle_id=? ORDER BY record_date, id",
-    [cycle.id],
-  );
-  if (savedTasks.length < totalDays) {
-    throw new Error(
-      `射精管理の日別指示を作成できませんでした。（${savedTasks.length}/${totalDays}日分）`,
-    );
-  }
 }
 
 function findActiveManagementCycle(mode: ManagementMode) {
@@ -328,6 +283,7 @@ export const managementRepository = {
   },
 
   todayTask(cycle: ManagementCycle) {
+    cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [cycle.id]) ?? cycle;
     const today = toDateKey();
     createMissingManagementTasks(cycle);
     const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE cycle_id=? AND record_date=?", [cycle.id, today]);
@@ -339,6 +295,7 @@ export const managementRepository = {
   },
 
   tasks(cycle: ManagementCycle) {
+    cycle = queryOne<ManagementCycle>("SELECT * FROM management_cycles WHERE id=?", [cycle.id]) ?? cycle;
     createMissingManagementTasks(cycle);
     return query<ManagementDailyTask>(
       "SELECT * FROM management_daily_tasks WHERE cycle_id=? ORDER BY record_date, id",
@@ -347,6 +304,8 @@ export const managementRepository = {
   },
 
   complete(taskId: number) {
+    const existing = queryOne<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE id=?", [taskId]);
+    if (existing && hasManagementRoulette(existing.cycle_id)) throw new Error("ルーレットの課題を完了してから、本日を終了してください。");
     const completedAt = toDateTimeKey();
     execute("UPDATE management_daily_tasks SET completed_at=? WHERE id=?", [completedAt, taskId]);
     const task = queryOne<ManagementDailyTask>(
@@ -361,6 +320,7 @@ export const managementRepository = {
   },
 
   finish(cycleId: number) {
+    if (hasManagementRoulette(cycleId)) { managementRouletteService.finishManagement(cycleId); return; }
     execute("UPDATE management_cycles SET is_active=0 WHERE id=?", [cycleId]);
   },
 };

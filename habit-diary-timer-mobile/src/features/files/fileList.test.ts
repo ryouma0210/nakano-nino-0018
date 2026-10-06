@@ -7,6 +7,17 @@ function file(name: string, purpose: StoredFile["purpose"] = "training", size = 
 }
 
 describe("stored file list", () => {
+  it("uses editable usages without changing stable identity or exposing private daily photos", () => {
+    const shared = { ...file("shared.mp4"), usages: ["punishment", "endurance"] as const };
+    const stored: StoredFile = { ...shared, usages: [...shared.usages] };
+    const privatePhoto = file("daily.png", "chastity");
+    expect(filterAndSortFiles([stored, privatePhoto], "training", "", "name")).toEqual([]);
+    expect(filterAndSortFiles([stored, privatePhoto], "punishment", "", "name")).toEqual([stored]);
+    expect(filterAndSortFiles([stored, privatePhoto], "endurance", "", "name")).toEqual([stored]);
+    expect(filterAndSortFiles([stored, privatePhoto], "all", "", "name")).toEqual([stored]);
+    expect(storedFileKey(stored)).toBe("training:shared.mp4");
+  });
+
   it("combines a case-insensitive partial name search with the room filter", () => {
     const match = file("1700000000000_1_Summer Holiday.MP4");
     const otherRoom = file("1700000000001_2_summer.mp4", "punishment");

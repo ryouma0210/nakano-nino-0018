@@ -8,6 +8,7 @@ import { getWheelGeometry, getWheelSpinTarget, getWheelStopAngle } from "./daily
 type Props = {
   count: number;
   completedIndices: readonly number[];
+  labels?: readonly string[];
   selectedIndex: number | null;
   spinning: boolean;
   spinId: number;
@@ -35,7 +36,7 @@ function useReducedMotion() {
   return reduced;
 }
 
-export function DailyOrderWheel({ count, completedIndices, selectedIndex, spinning, spinId, onSpinEnd }: Props) {
+export function DailyOrderWheel({ count, completedIndices, labels, selectedIndex, spinning, spinId, onSpinEnd }: Props) {
   const { settings } = useAppAudio();
   const [width, setWidth] = useState(0);
   const rotation = useRef(new Animated.Value(0)).current;
@@ -92,10 +93,21 @@ export function DailyOrderWheel({ count, completedIndices, selectedIndex, spinni
 
   const diameter = width - rimWidth * 2;
   const geometry = diameter > 0 ? getWheelGeometry(sectorCount, diameter) : null;
-  const labelWidth = geometry ? Math.min(34, 2 * geometry.radius * 0.8 * Math.sin(Math.PI / sectorCount)) : 0;
-  const fontSize = Math.max(4, Math.min(12, Math.floor(labelWidth / 2)));
+  const labelWidth = geometry
+    ? labels
+      ? Math.min(56, 2 * geometry.radius * 0.66 * Math.sin(Math.PI / sectorCount))
+      : Math.min(34, 2 * geometry.radius * 0.8 * Math.sin(Math.PI / sectorCount))
+    : 0;
+  const fontSize = labels
+    ? settings?.language === "en"
+      ? Math.max(4, Math.min(9, Math.floor(labelWidth / 5)))
+      : Math.max(4, Math.min(11, Math.floor(labelWidth / 4)))
+    : Math.max(4, Math.min(12, Math.floor(labelWidth / 2)));
   const hubSize = Math.max(22, Math.min(46, diameter * 0.15));
   const completed = new Set(completedIndices);
+  const labelFor = (index: number) => completed.has(index)
+    ? translateText(labels?.[index] ?? String(index + 1), settings?.language ?? "ja")
+    : "???";
   const spin = rotation.interpolate({ inputRange: [0, 360], outputRange: ["0deg", "360deg"], extrapolate: "extend" });
 
   return (
@@ -106,7 +118,7 @@ export function DailyOrderWheel({ count, completedIndices, selectedIndex, spinni
       accessibilityRole="image"
       accessibilityLabel={translateText("命令ルーレット", settings?.language ?? "ja")}
       accessibilityState={{ busy: spinning }}
-      accessibilityValue={selection != null && !spinning ? { text: completed.has(selection) ? String(selection + 1) : "???" } : undefined}
+      accessibilityValue={selection != null && !spinning ? { text: labelFor(selection) } : undefined}
     >
       {geometry ? (
         <View
@@ -140,7 +152,7 @@ export function DailyOrderWheel({ count, completedIndices, selectedIndex, spinni
                 <View key={`label-${index}`} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${index * geometry.arcDegrees}deg` }] }]}>
                   <AppText
                     localize={false}
-                    numberOfLines={1}
+                    numberOfLines={labels ? 2 : 1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.6}
                     style={[
@@ -148,7 +160,7 @@ export function DailyOrderWheel({ count, completedIndices, selectedIndex, spinni
                       { left: geometry.radius - labelWidth / 2, top: geometry.radius * 0.13, width: labelWidth, fontSize, lineHeight: fontSize + 4 },
                     ]}
                   >
-                    {completed.has(index) ? index + 1 : "???"}
+                    {labelFor(index)}
                   </AppText>
                 </View>
               ))}

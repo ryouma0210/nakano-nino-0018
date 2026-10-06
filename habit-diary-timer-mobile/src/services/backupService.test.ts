@@ -7,6 +7,7 @@ import { loadOthello, loadOthelloHistory, OTHELLO_STORAGE_KEY, saveOthelloCurren
 import { createGame, playMove } from "../features/othello/game";
 import { createGame as createSugorokuGame } from "../features/sugoroku/game";
 import { loadSugoroku, SUGOROKU_STORAGE_KEY } from "../features/sugoroku/storage";
+import { createEnduranceGame, failEnduranceSlide, finishEndurance } from "../features/endurance/game";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, storage: new Map<string, string>(), sources: new Map<string, Uint8Array>(),
@@ -123,8 +124,102 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
-  it("round-trips shared daily photo metadata and image bytes in a complete backup", async () => {
-    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos" });
+  it("exports shared media once and round-trips all usages with its physical identity", async () => {
+    const shared = { name: "shared.mp4", purpose: "training", usages: ["training", "punishment", "endurance"], size: 3, uri: "file:///shared.mp4" };
+    mocks.list.mockResolvedValue([shared]);
+    mocks.sources.set(shared.uri, encoder.encode("one"));
+    await backupService.export("complete");
+    const bytes = join(mocks.chunks);
+    const entries = await readBackupArchive(reader(bytes));
+    expect(entries.map((entry) => entry.name)).toEqual(["manifest.json", "files/000000"]);
+    select(bytes);
+    const picked = (await backupService.pick())!;
+    expect(picked.files).toEqual([expect.objectContaining({ name: shared.name, purpose: "training", usages: shared.usages, size: 3 })]);
+    await backupService.restore(picked);
+    expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
+  });
+
+  it("accepts legacy JSON backups with no usages and new metadata without changing save-only files", async () => {
+    const payload = await savePayload();
+    payload.kind = "complete";
+    payload.files = [
+      { name: "old.mp4", purpose: "training", size: 3, mimeType: "video/mp4", data: "b25l" },
+      { name: "new.mp4", purpose: "endurance", usages: ["training", "endurance"], size: 3, mimeType: "video/mp4", data: "b25l" },
+    ];
+    await backupService.restore(payload);
+    expect(mocks.prepare).toHaveBeenCalledWith(payload.files);
+    mocks.prepare.mockClear();
+    delete payload.files;
+    payload.kind = "save";
+    await backupService.restore(payload);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { purpose: "training", usages: [] }, { purpose: "training", usages: ["training", "training"] },
+    { purpose: "training", usages: ["chastity"] }, { purpose: "chastity", usages: ["training"] },
+    { purpose: "endurance", usages: "endurance" },
+  ])("rejects invalid file usage metadata before any mutations: %j", async (metadata) => {
+    const payload = await savePayload();
+    payload.kind = "complete";
+    payload.files = [{ name: "shared.mp4", size: 3, mimeType: "video/mp4", data: "b25l", ...metadata } as never];
+    await expect(backupService.restore(payload)).rejects.toThrow("不正");
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+  });
+
+  it.each(["endurance_game_v1", "endurance_unlock_v1"])("rejects invalid %s before any restore mutations", async (key) => {
+    const payload = await savePayload();
+    payload.database.app_settings = [{ setting_key: key, setting_value: "broken", updated_at: "2026-10-06" }];
+    await expect(backupService.restore(payload)).rejects.toThrow("勃起我慢");
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("round-trips roulette progress, management deadlines and endurance unlocks as save data", async () => {
+    const legacy = finishEndurance({ ...createEnduranceGame("game-1", 4, "2026-10-06T00:00:00.000Z"), index: 3 }, false, "2026-10-06T01:00:00.000Z");
+    const video = finishEndurance(failEnduranceSlide(createEnduranceGame("game-6", 1, "2026-10-06T00:00:00.000Z")), false, "2026-10-06T01:00:00.000Z", { positionMs: 12_345, durationMs: 60_000 });
+    const rows = [
+      { setting_key: "management_roulette_v1", setting_value: JSON.stringify({ version: 1, cycles: [{ cycleId: 1,
+        deadlineAt: "2026-10-07T01:00:00.000Z", finalInstruction: "Finish", taskChoices: Array.from({ length: 5 }, (_, index) => ({ text: `Task ${index}` })),
+        days: [{ date: "2026-10-06", endedAt: null, draws: [
+          { id: "draw-1", drawnAt: "2026-10-06T00:00:00.000Z", candidateIndex: 5, kind: "extension", minutes: 1440 },
+          { id: "draw-2", drawnAt: "2026-10-06T00:01:00.000Z", candidateIndex: 6, kind: "task", instruction: "Task 0", completedAt: null },
+        ] }],
+      }] }), updated_at: "2026-10-06" },
+      { setting_key: "endurance_game_v1", setting_value: JSON.stringify({ version: 1, history: [video, legacy] }), updated_at: "2026-10-06" },
+      { setting_key: "endurance_unlock_v1", setting_value: "true", updated_at: "2026-10-06" },
+    ];
+    mocks.query.mockImplementation((sql: string) => sql === "SELECT * FROM app_settings" ? rows : []);
+    const payload = await savePayload();
+    expect(payload.database.app_settings).toEqual(rows);
+    await backupService.restore(payload);
+    for (const row of rows) expect(mocks.execute).toHaveBeenCalledWith(
+      "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+      [row.setting_key, row.setting_value, row.updated_at],
+    );
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid video progress before restoring database or file data", async () => {
+    const payload = await savePayload();
+    const video = finishEndurance(createEnduranceGame("game-6", 1, "2026-10-06T00:00:00.000Z"), true, "2026-10-06T01:00:00.000Z", { positionMs: 61_000, durationMs: 60_000 });
+    payload.database.app_settings = [{ setting_key: "endurance_game_v1", setting_value: JSON.stringify({ version: 1, history: [video] }) }];
+    await expect(backupService.restore(payload)).rejects.toThrow("勃起我慢");
+    expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.multiSet).not.toHaveBeenCalled();
+  });
+
+  it.each(["broken", JSON.stringify({ version: 1, cycles: [{ cycleId: 1 }] })])("rejects invalid management roulette before restoring data: %s", async (value) => {
+    const payload = await savePayload();
+    payload.database.app_settings = [{ setting_key: "management_roulette_v1", setting_value: value, updated_at: "2026-10-06" }];
+    await expect(backupService.restore(payload)).rejects.toThrow("ルーレット");
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+  });
+
+  it("round-trips daily details, shared photo metadata and image bytes in a complete backup", async () => {
+    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos",
+      dailyDetails: { "2026-10-05": { limitLevel: 100, feelings: "Today’s note\nSecond line" }, "2026-10-04": { limitLevel: null, feelings: "Note only" } } });
     mocks.storage.set(CHASTITY_STORAGE_KEY, saved);
     const photo = { name: "photo.png", purpose: "chastity", size: 3, uri: "file:///photo.png" };
     mocks.list.mockResolvedValue([photo]);
@@ -140,8 +235,9 @@ describe("bounded backup export and import", () => {
     expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
   });
 
-  it("keeps image references in save-only backups without replacing local files", async () => {
-    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos" });
+  it("keeps daily details and image references in save-only backups without replacing local files", async () => {
+    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos",
+      dailyDetails: { "2026-10-05": { limitLevel: 1, feelings: "A daily note" } } });
     mocks.storage.set(CHASTITY_STORAGE_KEY, saved);
     const payload = await savePayload();
     expect(payload.files).toBeUndefined();
@@ -150,6 +246,29 @@ describe("bounded backup export and import", () => {
     await backupService.restore(payload);
     expect(mocks.storage.get(CHASTITY_STORAGE_KEY)).toBe(saved);
     expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("accepts legacy daily histories that have no daily-detail field", async () => {
+    const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "icons" });
+    const payload = await savePayload();
+    payload.asyncStorage[CHASTITY_STORAGE_KEY] = saved;
+    await backupService.restore(payload);
+    expect(mocks.storage.get(CHASTITY_STORAGE_KEY)).toBe(saved);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it.each(["save", "complete"] as const)("rejects malformed daily details before any %s restore writes", async (kind) => {
+    const payload = await savePayload();
+    payload.kind = kind;
+    if (kind === "complete") payload.files = [];
+    payload.asyncStorage[CHASTITY_STORAGE_KEY] = JSON.stringify({ version: 1, records: [], photos: {}, calendarDisplay: "icons",
+      dailyDetails: { "2026-10-05": { limitLevel: 101, feelings: "A daily note" } } });
+    const before = [...mocks.storage];
+    await expect(backupService.restore(payload)).rejects.toThrow("貞操帯管理記録");
+    expect([...mocks.storage]).toEqual(before);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.multiSet).not.toHaveBeenCalled();
   });
 
   it("rejects malformed daily photo metadata before changing database or files", async () => {
