@@ -3,6 +3,22 @@ export type SugorokuPhase =
   | "penalty-roll" | "penalty-event" | "finished";
 
 export type SugorokuOutcome = "goal-1" | "goal-2" | "penalty";
+export type SugorokuMovementRule = "forced-one" | "minus-three" | "minus-two" | null;
+export type SugorokuLogEffect = "negative-zone" | "minus-two" | "minus-three" | "one-until-branch" | "one-until-end";
+export type SugorokuLogEntry = {
+  sequence: number;
+  kind: "roll" | "penalty-roll" | "event" | "route" | "retire" | "fail" | "finish";
+  fromTileId: string;
+  toTileId: string;
+  dice: number | null;
+  adjustedDice: number | null;
+  movement: number;
+  forcedStop: boolean;
+  rule: SugorokuMovementRule;
+  effectsAdded: SugorokuLogEffect[];
+  effectsRemoved: SugorokuLogEffect[];
+};
+export const SUGOROKU_LOG_LIMIT = 100;
 
 export type SugorokuGame = {
   version: 1;
@@ -20,6 +36,7 @@ export type SugorokuGame = {
   /** Actual distance moved, after modifiers and intervening stop spaces. */
   movement: number | null;
   rollCount: number;
+  /** Persistent normal-mode -2 debuff; retain the legacy field name for saved games. */
   nextRollReduction: 0 | 2;
   forceOneUntilBranch: boolean;
   forceOneUntilEnd: boolean;
@@ -27,6 +44,8 @@ export type SugorokuGame = {
   failureRemainingSpaces: number | null;
   penaltyRoll: number | null;
   penaltyPoints: number | null;
+  /** Absent in legacy saves; older actions are never reconstructed. */
+  logs?: SugorokuLogEntry[];
 };
 
 export type SugorokuTile = {
@@ -80,6 +99,7 @@ export function createGame(now?: string): SugorokuGame {
     diceResult: null, adjustedDiceResult: null, movement: null, rollCount: 0, nextRollReduction: 0,
     forceOneUntilBranch: false, forceOneUntilEnd: false,
     outcome: null, failureRemainingSpaces: null, penaltyRoll: null, penaltyPoints: null,
+    logs: [],
   };
 }
 
@@ -113,7 +133,7 @@ function validDie(die: unknown): die is number {
 }
 
 /** The currently effective modifier for the next movement roll. */
-export function getDiceMovementRule(state: SugorokuGame): "forced-one" | "minus-three" | "minus-two" | null {
+export function getDiceMovementRule(state: SugorokuGame): SugorokuMovementRule {
   if (state.outcome !== null) return null;
   if (state.position < 0 || state.forceOneUntilBranch || state.forceOneUntilEnd) return "forced-one";
   if (state.extended) return "minus-three";
@@ -134,7 +154,7 @@ export function getDisplayedDiceResult(state: SugorokuGame): number | null {
   return state.adjustedDiceResult ?? state.diceResult;
 }
 
-export function rollDice(state: SugorokuGame, die: number): SugorokuGame {
+function rollDiceCore(state: SugorokuGame, die: number): SugorokuGame {
   if (!validDie(die)) return state;
   if (state.phase === "penalty-roll") {
     return {
@@ -145,13 +165,11 @@ export function rollDice(state: SugorokuGame, die: number): SugorokuGame {
   }
   if (state.phase !== "ready") return state;
 
-  // Negative spaces always advance by one. The -1 modifier waits until the
-  // first ordinary roll after returning to start, so it is not lost on exit.
-  const inNegativeZone = state.position < 0;
+  // Movement debuffs persist until another rule replaces them. The negative
+  // zone temporarily overrides them with one-space movement while inside it.
   const distance = getAdjustedDiceResult(state, die);
   const next = {
     ...state, diceResult: die, adjustedDiceResult: distance, movement: 0, rollCount: state.rollCount + 1,
-    nextRollReduction: inNegativeZone ? state.nextRollReduction : 0 as const,
   };
   if (distance === 0) return next;
 
@@ -178,7 +196,7 @@ function finish(state: SugorokuGame, now?: string): SugorokuGame {
   };
 }
 
-export function completeEvent(state: SugorokuGame, now?: string): SugorokuGame {
+function completeEventCore(state: SugorokuGame, now?: string): SugorokuGame {
   if (state.phase === "goal" || state.phase === "penalty-event") return finish(state, now);
   if (state.phase === "retire") return { ...state, phase: "penalty-roll" };
   if (state.phase !== "event") return state;
@@ -189,13 +207,13 @@ export function completeEvent(state: SugorokuGame, now?: string): SugorokuGame {
   const transfer = { "12": "9", "20": "16", "37": "29" }[id];
   if (transfer) return { ...state, position: positionOf(transfer) };
   if (id === "-1") return { ...state, phase: "ready", nextRollReduction: 2 };
-  if (id === "21" && !state.extended) return { ...state, phase: "ready", forceOneUntilBranch: true };
+  if (id === "21" && !state.extended) return { ...state, phase: "ready", forceOneUntilBranch: true, nextRollReduction: 0 };
   if (id === "25" && !state.extended) return { ...state, phase: "choice" };
-  if (id === "stop-4") return { ...state, phase: "ready", forceOneUntilEnd: true };
+  if (id === "stop-4") return { ...state, phase: "ready", forceOneUntilEnd: true, nextRollReduction: 0 };
   return { ...state, phase: "ready" };
 }
 
-export function chooseRoute(state: SugorokuGame, extended: boolean): SugorokuGame {
+function chooseRouteCore(state: SugorokuGame, extended: boolean): SugorokuGame {
   if (state.phase !== "choice" || state.extended || state.position !== 25) return state;
   return extended
     ? { ...state, phase: "ready", extended: true, forceOneUntilBranch: false, nextRollReduction: 0 }
@@ -207,14 +225,67 @@ function canExit(state: SugorokuGame): boolean {
 }
 
 /** Freeze the remaining distance before entering either exit flow. */
-export function retireGame(state: SugorokuGame): SugorokuGame {
+function retireGameCore(state: SugorokuGame): SugorokuGame {
   if (!canExit(state)) return state;
   return { ...state, phase: "retire", outcome: "penalty", failureRemainingSpaces: routeRemaining(state) };
 }
 
-export function failGame(state: SugorokuGame): SugorokuGame {
+function failGameCore(state: SugorokuGame): SugorokuGame {
   if (!canExit(state)) return state;
   return { ...state, phase: "penalty-roll", outcome: "penalty", failureRemainingSpaces: routeRemaining(state) };
+}
+
+function retainedEffects(state: SugorokuGame): SugorokuLogEffect[] {
+  if (state.outcome !== null) return [];
+  const effects: SugorokuLogEffect[] = [];
+  if (state.position < 0) effects.push("negative-zone");
+  if (state.forceOneUntilEnd) effects.push("one-until-end");
+  else if (state.forceOneUntilBranch) effects.push("one-until-branch");
+  else if (state.extended) effects.push("minus-three");
+  else if (state.nextRollReduction === 2) effects.push("minus-two");
+  return effects;
+}
+
+function logTransition(state: SugorokuGame, next: SugorokuGame, kind: SugorokuLogEntry["kind"]): SugorokuGame {
+  if (next === state) return state;
+  const previousLogs = state.logs ?? [];
+  const from = getCurrentTile(state);
+  const to = getCurrentTile(next);
+  const isRoll = kind === "roll" || kind === "penalty-roll";
+  const before = retainedEffects(state);
+  const after = retainedEffects(next);
+  const entry: SugorokuLogEntry = {
+    sequence: (previousLogs[previousLogs.length - 1]?.sequence ?? 0) + 1,
+    kind, fromTileId: from.id, toTileId: to.id,
+    dice: isRoll ? next.diceResult : null,
+    adjustedDice: isRoll ? next.adjustedDiceResult ?? next.diceResult : null,
+    movement: next.position - state.position,
+    forcedStop: kind === "roll" && next.position !== state.position && to.kind === "stop",
+    rule: isRoll ? getDiceMovementRule(state) : null,
+    effectsAdded: after.filter((effect) => !before.includes(effect)),
+    effectsRemoved: before.filter((effect) => !after.includes(effect)),
+  };
+  return { ...next, logs: [...previousLogs, entry].slice(-SUGOROKU_LOG_LIMIT) };
+}
+
+export function rollDice(state: SugorokuGame, die: number): SugorokuGame {
+  return logTransition(state, rollDiceCore(state, die), state.phase === "penalty-roll" ? "penalty-roll" : "roll");
+}
+
+export function completeEvent(state: SugorokuGame, now?: string): SugorokuGame {
+  return logTransition(state, completeEventCore(state, now), state.phase === "goal" || state.phase === "penalty-event" ? "finish" : "event");
+}
+
+export function chooseRoute(state: SugorokuGame, extended: boolean): SugorokuGame {
+  return logTransition(state, chooseRouteCore(state, extended), "route");
+}
+
+export function retireGame(state: SugorokuGame): SugorokuGame {
+  return logTransition(state, retireGameCore(state), "retire");
+}
+
+export function failGame(state: SugorokuGame): SugorokuGame {
+  return logTransition(state, failGameCore(state), "fail");
 }
 
 export function getTileRuleDescription(id: string): string {
@@ -223,11 +294,11 @@ export function getTileRuleDescription(id: string): string {
   if (id === "12") return "イベント完了後、３マス戻ります。";
   if (id === "20") return "イベント完了後、４マス戻ります。";
   if (id === "37") return "イベント完了後、２９のマスへ移動します。";
-  if (id === "-1") return "マイナスゾーンでは１マスずつ進みます。通常コースでは、スタートに戻った後の次の出目から２を引きます。";
+  if (id === "-1") return "マイナスゾーンでは１マスずつ進みます。通常モードでは、スタートに戻った後は出目から２を引きます。このデバフは、２１マス目の命令完了で強制１マス移動に置き換わります。";
   if (id.startsWith("-")) return "マイナスゾーンでは、サイコロの出目に関係なく１マスずつ進みます。";
-  if (id === "21") return "必ず止まります。通常コースでは、完了後から２５の分岐まで１マスずつ進みます。";
+  if (id === "21") return "必ず止まります。通常モードでは、命令完了後から２５の分岐まで強制１マス移動となり、それまでのデバフを置き換えます。";
   if (id === "25") return "必ず止まります。初回の完了後、ゴールするか延長するか選べます。延長後は選び直せません。";
-  if (id === "stop-4") return "必ず止まります。イベント完了後は、ゲーム終了まで１マスずつ進みます。";
+  if (id === "stop-4") return "必ず止まります。命令完了後は、それまでのデバフを置き換え、ゲーム終了まで強制１マス移動になります。";
   if (id.startsWith("stop-") || id === "7" || id === "14") return "通過する場合も必ず止まり、残りの出目は持ち越しません。";
   if (id === "start") return "サイコロを振って進みます。延長コースでは出目から３を引き、０以下ならその場で振り直します。";
   if (id === "retire") return "イベント完了後、ペナルティのサイコロを振ります。";
@@ -242,6 +313,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function nonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function validLogEffects(value: unknown): value is SugorokuLogEffect[] {
+  return Array.isArray(value) && value.length <= 5 && new Set(value).size === value.length
+    && value.every((effect) => ["negative-zone", "minus-two", "minus-three", "one-until-branch", "one-until-end"].includes(effect));
+}
+
+function validLogs(value: unknown): value is SugorokuLogEntry[] {
+  if (!Array.isArray(value) || value.length > SUGOROKU_LOG_LIMIT) return false;
+  return value.every((entry, index) => {
+    if (!isRecord(entry) || !nonNegativeInteger(entry.sequence) || entry.sequence === 0) return false;
+    if (index > 0 && entry.sequence !== value[index - 1].sequence + 1) return false;
+    if (!["roll", "penalty-roll", "event", "route", "retire", "fail", "finish"].includes(entry.kind as string)) return false;
+    if (typeof entry.fromTileId !== "string" || typeof entry.toTileId !== "string") return false;
+    const from = tilesById.get(entry.fromTileId);
+    const to = tilesById.get(entry.toTileId);
+    if (!from || !to || typeof entry.movement !== "number" || !Number.isInteger(entry.movement) || entry.movement < -finalPosition - 6 || entry.movement > 6) return false;
+    if (from.position !== null && to.position !== null && entry.movement !== to.position - from.position) return false;
+    if (typeof entry.forcedStop !== "boolean" || (entry.forcedStop && (entry.kind !== "roll" || to.kind !== "stop" || entry.movement <= 0))) return false;
+    if (entry.rule !== null && !["forced-one", "minus-two", "minus-three"].includes(entry.rule as string)) return false;
+    if (!validLogEffects(entry.effectsAdded) || !validLogEffects(entry.effectsRemoved)) return false;
+    const removedEffects = entry.effectsRemoved;
+    if (entry.effectsAdded.some((effect) => removedEffects.includes(effect))) return false;
+    if (entry.kind === "roll" || entry.kind === "penalty-roll") {
+      if (!validDie(entry.dice) || !nonNegativeInteger(entry.adjustedDice) || entry.adjustedDice > 6 || entry.movement < 0 || entry.movement > entry.adjustedDice) return false;
+      const adjusted = entry.rule === "forced-one" ? 1 : Math.max(0, entry.dice - (entry.rule === "minus-two" ? 2 : entry.rule === "minus-three" ? 3 : 0));
+      if (entry.adjustedDice !== adjusted) return false;
+      return entry.kind !== "penalty-roll" || (entry.rule === null && entry.movement === 0);
+    }
+    return entry.dice === null && entry.adjustedDice === null && entry.rule === null;
+  });
 }
 
 /** Reject malformed or contradictory saves before they can drive the UI. */
@@ -263,6 +365,7 @@ export function validateGame(value: unknown): value is SugorokuGame {
   if (value.failureRemainingSpaces !== null && !nonNegativeInteger(value.failureRemainingSpaces)) return false;
   if (value.penaltyRoll !== null && !validDie(value.penaltyRoll)) return false;
   if (value.penaltyPoints !== null && !nonNegativeInteger(value.penaltyPoints)) return false;
+  if ("logs" in value && !validLogs(value.logs)) return false;
 
   const state = value as SugorokuGame;
   if ("adjustedDiceResult" in value) {

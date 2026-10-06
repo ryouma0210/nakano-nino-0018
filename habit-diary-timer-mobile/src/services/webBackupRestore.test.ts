@@ -147,6 +147,50 @@ afterEach(() => {
 });
 
 describe("APP backups restored into Web IndexedDB", () => {
+  it("restores shared daily photos and statuses into IndexedDB and exports them after reloading", async () => {
+    const historyKey = "nino-room:chastity-history:v1";
+    const saved = JSON.stringify({ version: 1, calendarDisplay: "photos", photos: { "2026-10-05": "daily.png" }, records: [
+      { id: "daily-1", recordDate: "2026-10-05", status: "locked", note: "personal note", createdAt: "2026-10-05T00:00:00.000Z", updatedAt: "2026-10-05T00:00:00.000Z" },
+      { id: "daily-2", recordDate: "2026-10-05", status: "washing", note: "", createdAt: "2026-10-05T01:00:00.000Z", updatedAt: "2026-10-05T01:00:00.000Z" },
+    ] });
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+    const manifest = { ...payload(), version: 2, asyncStorage: { [historyKey]: saved }, files: [
+      { name: "daily.png", mimeType: "image/png", purpose: "chastity", size: bytes.length, path: "files/000000" },
+    ] };
+    const parts: BlobPart[] = [];
+    await writeBackupArchive([
+      { name: "manifest.json", ...source(encoder.encode(JSON.stringify(manifest))) },
+      { name: "files/000000", ...source(bytes) },
+    ], { write: async (part) => { parts.push(new Uint8Array(part)); } });
+    select(new File(parts, "daily.zip", { type: "application/zip" }));
+    const { backupService, fileStorageService } = await services();
+    const picked = (await backupService.pick())!;
+    await backupService.restore(picked);
+    const { chastityHistoryService } = await import("./chastityHistoryService");
+    const loaded = await chastityHistoryService.load();
+    expect(loaded.records.map((record) => record.status)).toEqual(["washing", "locked"]);
+    expect(loaded.calendarDisplay).toBe("photos");
+    expect(Object.keys(loaded.photos)).toEqual(["2026-10-05"]);
+    expect(new Uint8Array(await (await fetch(loaded.photos["2026-10-05"].uri)).arrayBuffer())).toEqual(bytes);
+    expect(await fileStorageService.list("training")).toEqual([]);
+    expect(await fileStorageService.list("punishment")).toEqual([]);
+    URL.revokeObjectURL(loaded.photos["2026-10-05"].uri);
+    vi.resetModules();
+    const reloaded = await services();
+    const tracker = (await import("./chastityHistoryService")).chastityHistoryService;
+    const persisted = await tracker.load();
+    expect(persisted.records).toEqual(loaded.records);
+    expect(persisted.photos["2026-10-05"].uri).not.toBe(loaded.photos["2026-10-05"].uri);
+    expect(new Uint8Array(await (await fetch(persisted.photos["2026-10-05"].uri)).arrayBuffer())).toEqual(bytes);
+    await reloaded.backupService.export("complete");
+    const entries = await readBackupArchive(source(new Uint8Array(await downloads[0].arrayBuffer())));
+    const exported = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
+    expect(exported.asyncStorage[historyKey]).toBe(saved);
+    expect(exported.files).toEqual(manifest.files);
+    expect(await entries[1].read(0, bytes.length)).toEqual(bytes);
+    expect(localSet.mock.calls.some(([key]) => key === legacyKey)).toBe(false);
+  });
+
   it("restores media exceeding localStorage capacity, persists across reload and exports the original bytes and MIME", async () => {
     const media = Uint8Array.from({ length: 6 * 1024 * 1024 + 37 }, (_, index) => (index * 31 + 7) % 251);
     select(await appArchive(media));

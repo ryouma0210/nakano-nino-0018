@@ -7,7 +7,9 @@ import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 
 const rooms = [
+  ["本日のタスク", "/(tabs)/tasks"],
   ["部屋に移動（廊下）", "/(tabs)/rooms"],
+  ["ゲーム部屋", "/(tabs)/games"],
   ["二ノ様の控室", "/(tabs)/nino-room"],
   ["館の外へ", "/(tabs)/outside"],
   ["記録・交換メニュー", "/(tabs)/menu?section=record"],
@@ -34,15 +36,19 @@ export default function HomeScreen() {
               <PrimaryButton
                 title={title}
                 tone={
-                  href.includes("section=record")
-                    ? "secondary"
-                    : href.includes("section=management")
-                      ? "secondary"
-                      : href === "/(tabs)/outside"
-                        ? "collection"
-                      : href === "/(tabs)/nino-room"
-                      ? "defeat"
-                      : "contract"
+                  href === "/(tabs)/tasks"
+                    ? "order"
+                    : href === "/(tabs)/games"
+                      ? "preparation"
+                      : href.includes("section=record")
+                        ? "secondary"
+                        : href.includes("section=management")
+                          ? "secondary"
+                          : href === "/(tabs)/outside"
+                            ? "collection"
+                            : href === "/(tabs)/nino-room"
+                              ? "defeat"
+                              : "contract"
                 }
                 onPress={() => router.push(href)}
               />

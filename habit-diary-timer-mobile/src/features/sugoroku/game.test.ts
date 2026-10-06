@@ -85,16 +85,66 @@ describe("neutral sugoroku route", () => {
     expect(state).toMatchObject({ position: 0, phase: "ready", nextRollReduction: 2 });
     expect(getDiceMovementRule(state)).toBe("minus-two");
     state = rollDice(state, 6);
-    expect(state).toMatchObject({ position: 4, phase: "event", movement: 4, nextRollReduction: 0 });
-    expect(getDiceMovementRule(state)).toBeNull();
+    expect(state).toMatchObject({ position: 4, phase: "event", movement: 4, nextRollReduction: 2 });
+    expect(getDiceMovementRule(state)).toBe("minus-two");
   });
 
-  it.each([1, 2])("consumes -2 once when die %i cannot move, allowing an ordinary reroll", (die) => {
+  it.each([1, 2])("retains the -2 debuff when die %i cannot move, including on repeated rerolls", (die) => {
     const state = at("start", { nextRollReduction: 2 });
     const next = rollDice(state, die);
-    expect(next).toMatchObject({ phase: "ready", position: 0, movement: 0, diceResult: die, adjustedDiceResult: 0, nextRollReduction: 0, rollCount: 1 });
+    expect(next).toMatchObject({ phase: "ready", position: 0, movement: 0, diceResult: die, adjustedDiceResult: 0, nextRollReduction: 2, rollCount: 1 });
     expect(getDisplayedDiceResult(next)).toBe(0);
-    expect(rollDice(next, 3)).toMatchObject({ phase: "event", position: 3, movement: 3 });
+    const repeated = rollDice(next, die);
+    expect(getDiceMovementRule(repeated)).toBe("minus-two");
+    expect(rollDice(repeated, 3)).toMatchObject({ phase: "event", position: 1, movement: 1, nextRollReduction: 2 });
+  });
+
+  it("reapplies -1 after a second visit from 8 and keeps the debuff through stop 7", () => {
+    let state = at("8");
+    for (let visit = 1; visit <= 2; visit += 1) {
+      state = completeEvent(state);
+      expect(getCurrentTile(state).id).toBe("-6");
+      state = completeEvent(state);
+      for (let position = -5; position <= -1; position += 1) {
+        state = rollDice(state, 6);
+        expect(state).toMatchObject({ position, movement: 1, adjustedDiceResult: 1 });
+        state = completeEvent(state);
+      }
+      state = rollDice(state, 6);
+      expect(state).toMatchObject({ position: 0, phase: "ready", nextRollReduction: 2 });
+      expect(getDiceMovementRule(state)).toBe("minus-two");
+      state = completeEvent(rollDice(state, 6));
+      expect(state).toMatchObject({ position: 4, adjustedDiceResult: 4, nextRollReduction: 2 });
+      state = completeEvent(rollDice(state, 6));
+      expect(state).toMatchObject({ position: 7, adjustedDiceResult: 4, movement: 3, nextRollReduction: 2 });
+      expect(getDiceMovementRule(state)).toBe("minus-two");
+      if (visit === 1) state = rollDice(state, 3);
+    }
+    expect(validateGame(state)).toBe(true);
+  });
+
+  it("keeps -2 through stops 7 and 14, then replaces it only when the 21 event completes", () => {
+    let state = rollDice(completeEvent(at("-1")), 6);
+    for (const position of [4, 7, 11, 14, 18, 21]) {
+      state = rollDice(state, 6);
+      expect(state.position).toBe(position);
+      expect(getDiceMovementRule(state)).toBe("minus-two");
+      if (position !== 21) {
+        state = completeEvent(state);
+        expect(getDiceMovementRule(state)).toBe("minus-two");
+      }
+    }
+    state = completeEvent(state);
+    expect(state).toMatchObject({ forceOneUntilBranch: true, nextRollReduction: 0 });
+    expect(getDiceMovementRule(state)).toBe("forced-one");
+    expect(rollDice(state, 6)).toMatchObject({ position: 22, adjustedDiceResult: 1, movement: 1 });
+  });
+
+  it.each(["2", "6", "13"])("keeps the -2 debuff after %s sends the player back to start", (id) => {
+    const restarted = completeEvent(at(id, { nextRollReduction: 2 }));
+    expect(restarted).toMatchObject({ position: 0, nextRollReduction: 2 });
+    expect(getDiceMovementRule(restarted)).toBe("minus-two");
+    expect(rollDice(restarted, 6)).toMatchObject({ position: 4, adjustedDiceResult: 4 });
   });
 
   it("advances one at a time from 21 until the first 25 choice", () => {
@@ -132,7 +182,22 @@ describe("neutral sugoroku route", () => {
     expect(completeEvent(at("21", { extended: true })).forceOneUntilBranch).toBe(false);
     const restarted = completeEvent(at("26"));
     expect(restarted).toMatchObject({ extended: true, position: 0 });
+    expect(getDiceMovementRule(restarted)).toBe("minus-three");
     expect(rollDice(restarted, 6)).toMatchObject({ position: 3, movement: 3 });
+  });
+
+  it("resumes the hard-mode -3 debuff after traversing the negative zone again", () => {
+    let state = completeEvent(at("8", { extended: true }));
+    state = completeEvent(state);
+    for (let position = -5; position <= -1; position += 1) {
+      state = completeEvent(rollDice(state, 6));
+      expect(state.position).toBe(position);
+      expect(getDiceMovementRule(state)).toBe("forced-one");
+    }
+    state = rollDice(state, 6);
+    expect(state.position).toBe(0);
+    expect(getDiceMovementRule(state)).toBe("minus-three");
+    expect(rollDice(state, 6)).toMatchObject({ position: 3, adjustedDiceResult: 3 });
   });
 
   it.each([1, 2, 3])("keeps the extended player ready when die %i produces zero movement", (die) => {
@@ -156,13 +221,14 @@ describe("neutral sugoroku route", () => {
 
     const extended = at("start", { extended: true, nextRollReduction: 2 });
     expect(getDiceMovementRule(extended)).toBe("minus-three");
-    expect(rollDice(extended, 6)).toMatchObject({ position: 3, movement: 3, nextRollReduction: 0 });
+    expect(rollDice(extended, 6)).toMatchObject({ position: 3, movement: 3 });
     expect(getDiceMovementRule(createGame(startedAt))).toBeNull();
   });
 
   it("keeps stop-4's one-space rule through the end, overriding reduced dice", () => {
-    let state = completeEvent(at("stop-4"));
+    let state = completeEvent(at("stop-4", { nextRollReduction: 2 }));
     expect(state.forceOneUntilEnd).toBe(true);
+    expect(state.nextRollReduction).toBe(0);
     expect(getDiceMovementRule(state)).toBe("forced-one");
     for (const id of ["38", "39", "40", "goal-2"]) {
       state = rollDice(state, 1);
@@ -220,10 +286,10 @@ describe("sugoroku adjusted dice faces", () => {
     expect(getDisplayedDiceResult(exited)).toBe(1);
   });
 
-  it("keeps a saved correction after the one-time rule has been consumed", () => {
+  it("keeps both the adjusted face and the active debuff through a save roundtrip", () => {
     const rolled = rollDice(at("start", { nextRollReduction: 2 }), 6);
     const restored = JSON.parse(JSON.stringify(completeEvent(rolled))) as SugorokuGame;
-    expect(getDiceMovementRule(restored)).toBeNull();
+    expect(getDiceMovementRule(restored)).toBe("minus-two");
     expect(getDisplayedDiceResult(restored)).toBe(4);
     expect(validateGame(restored)).toBe(true);
   });
@@ -405,5 +471,112 @@ describe("sugoroku saved-state validation", () => {
 
   it("provides nonempty descriptions for every configurable tile", () => {
     for (const tile of SUGOROKU_TILES) expect(getTileRuleDescription(tile.id).length).toBeGreaterThan(0);
+  });
+});
+
+describe("sugoroku progress log", () => {
+  it("records rolls, actual movement and forced stops without mutating previous entries", () => {
+    const initial = at("5", { phase: "ready" });
+    const before = JSON.parse(JSON.stringify(initial));
+    const next = rollDice(initial, 6);
+    expect(next.logs).toHaveLength(1);
+    expect(next.logs![0]).toEqual({
+      sequence: 1, kind: "roll", fromTileId: "5", toTileId: "7", dice: 6, adjustedDice: 6,
+      movement: 2, forcedStop: true, rule: null, effectsAdded: [], effectsRemoved: [],
+    });
+    expect(initial).toEqual(before);
+    const stopped = completeEvent(next);
+    expect(stopped.logs!.map((entry) => entry.sequence)).toEqual([1, 2]);
+    expect(stopped.logs![1]).toMatchObject({ kind: "event", fromTileId: "7", toTileId: "7", effectsRemoved: [] });
+    expect(next.logs).toHaveLength(1);
+  });
+
+  it("records a corrected zero roll without inventing movement", () => {
+    const next = rollDice(at("start", { nextRollReduction: 2 }), 1);
+    expect(next.logs![0]).toMatchObject({ fromTileId: "start", toTileId: "start", dice: 1, adjustedDice: 0, movement: 0, forcedStop: false, rule: "minus-two" });
+  });
+
+  it("distinguishes rule-driven transfer to the negative zone from the next one-square roll", () => {
+    const moved = completeEvent(at("8"));
+    expect(moved.logs![0]).toMatchObject({ kind: "event", fromTileId: "8", toTileId: "-6", movement: -14, dice: null, effectsAdded: ["negative-zone"] });
+    const ready = completeEvent(moved);
+    const next = rollDice(ready, 6);
+    expect(next.logs!.at(-1)).toMatchObject({ kind: "roll", fromTileId: "-6", toTileId: "-5", dice: 6, adjustedDice: 1, movement: 1, rule: "forced-one" });
+  });
+
+  it("records the pending -2 effect inside the negative zone and its return to normal movement", () => {
+    const next = completeEvent(at("-1"));
+    expect(next.logs![0]).toMatchObject({ effectsAdded: ["minus-two"], effectsRemoved: [] });
+    const start = rollDice(next, 5);
+    expect(start.logs!.at(-1)).toMatchObject({ fromTileId: "-1", toTileId: "start", rule: "forced-one", adjustedDice: 1, effectsRemoved: ["negative-zone"] });
+    const reduced = rollDice(start, 6);
+    expect(reduced.logs!.at(-1)).toMatchObject({ dice: 6, adjustedDice: 4, rule: "minus-two", effectsRemoved: [] });
+  });
+
+  it("records the replacement of -2 at 21 and the hard-course modifier at the branch", () => {
+    const next = completeEvent(at("21", { nextRollReduction: 2 }));
+    expect(next.logs![0]).toMatchObject({ effectsAdded: ["one-until-branch"], effectsRemoved: ["minus-two"] });
+    const atBranch = { ...next, position: 25, phase: "event" as const };
+    const hard = chooseRoute(completeEvent(atBranch), true);
+    expect(hard.logs!.at(-1)).toMatchObject({ kind: "route", effectsAdded: ["minus-three"], effectsRemoved: ["one-until-branch"] });
+  });
+
+  it("retains the hard-course modifier after returning from 26 and records its replacement at stop-4", () => {
+    const returned = completeEvent(at("26", { extended: true }));
+    expect(returned.logs![0]).toMatchObject({ fromTileId: "26", toTileId: "start", effectsAdded: [], effectsRemoved: [] });
+    const next = completeEvent(at("stop-4", { extended: true }));
+    expect(next.logs![0]).toMatchObject({ effectsAdded: ["one-until-end"], effectsRemoved: ["minus-three"] });
+  });
+
+  it("records retire, penalty roll and completion as separate actions", () => {
+    const next = completeEvent(rollDice(completeEvent(retireGame(at("-5"))), 3), completedAt);
+    expect(next.logs!.map((entry) => entry.kind)).toEqual(["retire", "event", "penalty-roll", "finish"]);
+    expect(next.logs![0]).toMatchObject({ fromTileId: "-5", toTileId: "retire", effectsRemoved: ["negative-zone"] });
+    expect(next.logs![2]).toMatchObject({ dice: 3, adjustedDice: 3, movement: 0, rule: null });
+    expect(next.logs![3]).toMatchObject({ fromTileId: "penalty", toTileId: "penalty", dice: null });
+  });
+
+  it("never adds a log for rejected actions", () => {
+    const state = createGame(startedAt);
+    expect(rollDice(state, 0)).toBe(state);
+    expect(completeEvent(state)).toBe(state);
+    expect(chooseRoute(state, true)).toBe(state);
+    expect(state.logs).toEqual([]);
+  });
+
+  it("keeps the latest 100 entries with continuing sequence numbers", () => {
+    let state = at("start", { nextRollReduction: 2 });
+    for (let index = 0; index < 125; index += 1) state = rollDice(state, 1);
+    expect(state.logs).toHaveLength(100);
+    expect(state.logs![0].sequence).toBe(26);
+    expect(state.logs!.at(-1)?.sequence).toBe(125);
+    expect(validateGame(state)).toBe(true);
+  });
+
+  it("accepts absent legacy logs but rejects explicit malformed logs", () => {
+    const legacy = rollDice(createGame(startedAt), 3);
+    delete legacy.logs;
+    expect(validateGame(legacy)).toBe(true);
+    for (const logs of [undefined, null, {}, "log", [null], Array(101).fill({})]) {
+      expect(validateGame({ ...legacy, logs })).toBe(false);
+    }
+  });
+
+  it.each([
+    { sequence: 0 }, { sequence: 1.5 }, { kind: "unknown" }, { fromTileId: "missing" },
+    { toTileId: "missing" }, { movement: -1 }, { movement: 7 }, { dice: 9 },
+    { adjustedDice: 3 }, { forcedStop: true }, { rule: "unknown" },
+    { effectsAdded: ["unknown"] }, { effectsRemoved: null },
+    { effectsAdded: ["minus-two", "minus-two"] },
+    { effectsAdded: ["minus-two"], effectsRemoved: ["minus-two"] },
+  ])("rejects malformed recorded actions: %j", (changes) => {
+    const state = rollDice(createGame(startedAt), 6);
+    expect(validateGame({ ...state, logs: [{ ...state.logs![0], ...changes }] })).toBe(false);
+  });
+
+  it("rejects duplicate or out-of-order log sequence numbers", () => {
+    const state = completeEvent(rollDice(createGame(startedAt), 3));
+    expect(validateGame({ ...state, logs: [state.logs![0], { ...state.logs![1], sequence: 1 }] })).toBe(false);
+    expect(validateGame({ ...state, logs: [state.logs![1], state.logs![0]] })).toBe(false);
   });
 });

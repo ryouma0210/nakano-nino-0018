@@ -13,6 +13,7 @@ import { SugorokuArtwork, SugorokuMapModal } from "@/features/sugoroku/SugorokuA
 import { SugorokuDice } from "@/features/sugoroku/SugorokuDice";
 import { SugorokuRules } from "@/features/sugoroku/SugorokuRules";
 import { SugorokuTimer } from "@/features/sugoroku/SugorokuTimer";
+import { SugorokuLogModal } from "@/features/sugoroku/SugorokuLogModal";
 import { getSugorokuAudioScene } from "@/features/sugoroku/audio";
 import { getSugorokuInstruction } from "@/features/sugoroku/instructions";
 import {
@@ -39,6 +40,7 @@ function GameResult({ game }: { game: SugorokuGame }) {
   return (
     <>
       <AppText style={[styles.resultLabel, styles.resultFailure]}>未達成</AppText>
+      <AppText variant="muted" style={styles.resultFailure}>{`敗北コース：${game.extended ? "ハードモード" : "通常モード"}`}</AppText>
       {defeatTile ? <AppText variant="muted" style={styles.resultFailure}>{`敗北マス：${defeatTile.label}`}</AppText> : null}
       <AppText variant="muted" style={styles.resultFailure}>{`残りマス：${getRemainingSpaces(game)}`}</AppText>
       {game.penaltyPoints !== null ? <AppText variant="muted" style={styles.resultFailure}>{`ペナルティ：${game.penaltyPoints}`}</AppText> : null}
@@ -46,10 +48,11 @@ function GameResult({ game }: { game: SugorokuGame }) {
   );
 }
 
-function PlayHistoryModal({ visible, history, onClose }: {
+function PlayHistoryModal({ visible, history, onClose, onViewLog }: {
   visible: boolean;
   history: readonly SugorokuGame[];
   onClose: () => void;
+  onViewLog: (game: SugorokuGame) => void;
 }) {
   const insets = useSafeAreaInsets();
   if (!visible) return null;
@@ -79,7 +82,16 @@ function PlayHistoryModal({ visible, history, onClose }: {
             style={styles.historyList}
             data={history.slice(0, 100)}
             keyExtractor={(entry) => entry.id}
-            renderItem={({ item }) => <View style={styles.historyRow}><GameResult game={item} /></View>}
+            renderItem={({ item }) => {
+              const date = new Date(item.completedAt ?? item.startedAt);
+              return (
+                <View style={styles.historyRow}>
+                  <AppText style={styles.historyDate}>{`${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`}</AppText>
+                  <GameResult game={item} />
+                  <PrimaryButton title="進行ログを見る" tone="secondary" onPress={() => onViewLog(item)} />
+                </View>
+              );
+            }}
             ListEmptyComponent={<AppText variant="muted">まだプレイ履歴はありません。</AppText>}
           />
         </View>
@@ -99,6 +111,8 @@ export default function SugorokuScreen() {
   const [showRules, setShowRules] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [logGame, setLogGame] = useState<SugorokuGame | null>(null);
+  const logFromHistory = useRef(false);
   const [exitAction, setExitAction] = useState<"retire" | "fail" | null>(null);
   const [movementNotice, setMovementNotice] = useState<{ message: string } | null>(null);
   const [rollPreview, setRollPreview] = useState<DiceRollPreview | null>(null);
@@ -108,7 +122,7 @@ export default function SugorokuScreen() {
   const generation = useRef(0);
   const busy = useRef(false);
   const pendingSave = useRef<Promise<SugorokuSave> | null>(null);
-  const audioScene = getSugorokuAudioScene(game);
+  const audioScene = loading || loadFailed ? null : getSugorokuAudioScene(game);
 
   useFocusEffect(useCallback(() => {
     setRoomAudioScene(audioScene);
@@ -122,6 +136,8 @@ export default function SugorokuScreen() {
     setExitAction(null);
     setShowMap(false);
     setShowHistory(false);
+    setLogGame(null);
+    logFromHistory.current = false;
     setMovementNotice(null);
     activeRoll.current = null;
     setRollPreview(null);
@@ -155,6 +171,8 @@ export default function SugorokuScreen() {
       setMovementNotice(null);
       setShowMap(false);
       setShowHistory(false);
+      setLogGame(null);
+      logFromHistory.current = false;
     };
   }, [refresh]));
 
@@ -272,7 +290,7 @@ export default function SugorokuScreen() {
   const diceRule = rollPreview ? rollPreview.rule : game ? getDiceMovementRule(game) : null;
   const diceRuleLabel = diceRule === "forced-one" ? "強制1マス移動"
     : diceRule === "minus-three" ? "出た目 −3"
-      : diceRule === "minus-two" ? "次の出た目 −2" : null;
+      : diceRule === "minus-two" ? "出た目 −2" : null;
   const finished = game?.phase === "finished";
   const reachedGoal = game?.outcome === "goal-1" || game?.outcome === "goal-2";
   const canRoll = game?.phase === "ready" || game?.phase === "penalty-roll";
@@ -312,14 +330,14 @@ export default function SugorokuScreen() {
                 <Card>
                   {tileSummary}
                   <AppText>サイコロを振って、マスを進みながらゴールを目指しましょう。</AppText>
-                  <PrimaryButton title="ゲームを始める" tone="save" disabled={disabled} onPress={() => void persist(createGame())} />
+                  <PrimaryButton title="ゲーム開始" tone="defeat" disabled={disabled} onPress={() => void persist(createGame())} />
                 </Card>
               ) : finished ? (
                 <Card>
                   <AppText variant="subtitle">ゲーム終了</AppText>
                   <GameResult game={game} />
                   <AppText variant="muted">結果を履歴に保存しました。</AppText>
-                  <PrimaryButton title="新しいゲーム" tone="save" disabled={disabled} onPress={() => void persist(createGame())} />
+                  <PrimaryButton title="新しいゲーム" tone="defeat" disabled={disabled} onPress={() => void persist(createGame())} />
                 </Card>
               ) : (
                 <>
@@ -352,11 +370,16 @@ export default function SugorokuScreen() {
                     </View>
                   </View>
                   <Card>
-                    {displayedDice !== null || diceRuleLabel ? <View style={styles.diceResults} testID="sugoroku-dice-results">
+                    {displayedDice !== null ? <View style={styles.diceResults} testID="sugoroku-dice-results">
                       {displayedDice !== null ? <AppText accessibilityLiveRegion="polite">{diceResultLabel}</AppText> : null}
                       {showsAdjustedResult && rawDice !== null ? <AppText variant="muted">{`元の出目：${rawDice}`}</AppText> : null}
-                      {diceRuleLabel ? <AppText style={styles.diceRule}>{diceRuleLabel}</AppText> : null}
                     </View> : null}
+                    {diceRuleLabel ? (
+                      <View style={styles.debuff} testID="sugoroku-debuff">
+                        <AppText style={styles.debuffTitle}>デバフ付与中</AppText>
+                        <AppText style={styles.diceRule}>{diceRuleLabel}</AppText>
+                      </View>
+                    ) : null}
                     <AppText variant="subtitle">マスのルール</AppText>
                     <AppText>{getTileRuleDescription(tile.id)}</AppText>
                   </Card>
@@ -366,6 +389,7 @@ export default function SugorokuScreen() {
           )}
 
           <Card>
+            {game ? <PrimaryButton title="進行ログを見る" tone="secondary" disabled={disabled} onPress={() => { logFromHistory.current = false; setLogGame(game); }} /> : null}
             <PrimaryButton title="マップを確認" tone="secondary" onPress={() => setShowMap(true)} />
             <PrimaryButton title={showRules ? "遊び方を表示中" : "遊び方を見る"} tone="secondary" onPress={() => setShowRules((value) => !value)} />
             {showRules ? <SugorokuRules /> : null}
@@ -403,7 +427,8 @@ export default function SugorokuScreen() {
         </Modal>
       ) : null}
       <SugorokuMapModal visible={showMap} onClose={() => setShowMap(false)} />
-      <PlayHistoryModal visible={showHistory} history={history} onClose={() => setShowHistory(false)} />
+      <PlayHistoryModal visible={showHistory} history={history} onClose={() => setShowHistory(false)} onViewLog={(entry) => { logFromHistory.current = true; setShowHistory(false); setLogGame(entry); }} />
+      <SugorokuLogModal game={logGame} onClose={() => { setLogGame(null); if (logFromHistory.current) setShowHistory(true); logFromHistory.current = false; }} />
       {movementNotice ? (
         <View pointerEvents="none" style={styles.noticeOverlay}>
           <View style={styles.noticeBubble}>
@@ -436,6 +461,8 @@ const styles = StyleSheet.create({
   actions: { flex: 1, minWidth: 0, gap: 10 },
   diceResults: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 },
   diceRule: { color: "#f3d985", fontWeight: "700" },
+  debuff: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, padding: 10, borderWidth: 1, borderColor: "#bf733d", borderRadius: 4, backgroundColor: "#281c12" },
+  debuffTitle: { color: "#ffbd8a", fontWeight: "800" },
   diceOverlay: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.8)" },
   diceDialog: { width: "100%", maxWidth: 320, padding: 20, gap: 12, alignItems: "center", borderWidth: 1, borderColor: "#fff", borderRadius: 8, backgroundColor: "#080d14" },
   score: { fontWeight: "800", fontSize: 20, lineHeight: 28, color: "#f3d985" },
@@ -448,4 +475,5 @@ const styles = StyleSheet.create({
   historyTitle: { flex: 1, color: "#fff" },
   historyList: { flex: 1, minHeight: 0 },
   historyRow: { gap: 3, borderTopWidth: 1, borderColor: "#333", paddingVertical: 12 },
+  historyDate: { color: "#fff", fontWeight: "800", marginBottom: 4 },
 });

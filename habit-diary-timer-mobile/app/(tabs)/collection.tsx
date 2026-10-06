@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
@@ -38,6 +38,10 @@ import {
 } from "@/utils/contract";
 import { secondsToClock } from "@/utils/date";
 import { unlockedOutsideTitles } from "@/features/outside/achievements";
+import { getOutsideLossMemoryLabel } from "@/features/outside/lossMemoryLabel";
+import { earnedGameTitles } from "@/features/games/achievements";
+import { loadOthello } from "@/features/othello/storage";
+import { getSugorokuAchievements, loadSugoroku } from "@/features/sugoroku/storage";
 import { downloadUriOnWeb } from "@/utils/webDownload";
 
 const rewardVideos = [
@@ -117,17 +121,29 @@ export default function CollectionScreen() {
   const playerName = settings?.playerName.trim() ?? "";
   const [rewards, setRewards] = useState<RewardRedemption[]>([]);
   const [contract, setContract] = useState<ContractSettings | null>(null);
+  const [gameTitles, setGameTitles] = useState<ReturnType<typeof earnedGameTitles>>([]);
+  const [titlesError, setTitlesError] = useState(false);
+  const loadVersion = useRef(0);
 
   const load = useCallback(() => {
+    const version = ++loadVersion.current;
     setRewards(rewardRepository.acquired());
-    contractService.load().then(setContract);
+    contractService.load().then((value) => { if (version === loadVersion.current) setContract(value); }).catch(console.error);
+    setTitlesError(false);
+    void Promise.allSettled([loadOthello(), loadSugoroku()]).then(([othello, sugoroku]) => {
+      if (version !== loadVersion.current) return;
+      setGameTitles(earnedGameTitles(othello.status === "fulfilled" ? othello.value.achievements : [],
+        sugoroku.status === "fulfilled" ? getSugorokuAchievements(sugoroku.value) : []));
+      setTitlesError(othello.status === "rejected" || sugoroku.status === "rejected");
+    });
+    return () => { loadVersion.current += 1; };
   }, []);
   useFocusEffect(load);
 
   const sortedRewards = [...rewards].sort(
     (left, right) => left.points_spent - right.points_spent || left.id - right.id,
   );
-  const titles = unlockedTitles(contract);
+  const titles = [...unlockedTitles(contract), ...gameTitles];
   const achievements = achievementRepository.summary();
 
   return (
@@ -142,6 +158,10 @@ export default function CollectionScreen() {
 
       <Card style={styles.achievementCard}>
         <AppText variant="subtitle">称号</AppText>
+        {titlesError ? <>
+          <AppText>ゲームの称号を読み込めませんでした。</AppText>
+          <PrimaryButton title="再読み込み" tone="secondary" onPress={load} />
+        </> : null}
         {titles.length === 0 ? (
           <AppText variant="muted">まだ称号を獲得していません。</AppText>
         ) : null}
@@ -229,9 +249,13 @@ export default function CollectionScreen() {
 }
 
 function RewardText({ item, playerName }: { item: RewardRedemption; playerName: string }) {
+  const isOutsideMemory = item.reward_key === "outside-loss-memory";
   return (
     <View style={styles.collectionRow}>
-      <AppText>{formatRewardText(item, playerName)}</AppText>
+      {isOutsideMemory ? <AppText variant="label">館の外：敗北シーン回想</AppText> : null}
+      <AppText>{isOutsideMemory
+        ? getOutsideLossMemoryLabel(item.reward_content)
+        : formatRewardText(item, playerName)}</AppText>
       <RewardMetadata item={item} />
     </View>
   );

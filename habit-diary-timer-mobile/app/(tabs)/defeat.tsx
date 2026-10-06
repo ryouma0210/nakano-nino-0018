@@ -253,7 +253,7 @@ function DefeatContent({ savedChecks }: { savedChecks: string[] | undefined }) {
           onPress={complete}
         />
         <PrimaryButton
-          title="廊下に戻る"
+          title="部屋から出る"
           tone="secondary"
           onPress={() => router.replace("/(tabs)/rooms")}
         />
