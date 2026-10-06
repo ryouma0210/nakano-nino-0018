@@ -10,6 +10,7 @@ on:
       - "nino-room-windows/**"
       - "shared/**"
       - "habit-diary-timer-mobile/**"
+      - ".gitattributes"
       - ".github/workflows/build-windows-app.yml"
 
 jobs:
@@ -23,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

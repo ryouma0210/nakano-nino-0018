@@ -7,6 +7,9 @@ import { OTHELLO_STORAGE_KEY, parseOthelloHistory } from "../features/othello/st
 import { SUGOROKU_STORAGE_KEY, parseSugorokuSave } from "../features/sugoroku/storage";
 import { CHASTITY_STORAGE_KEY, parseChastityHistory } from "./chastityHistoryStorage";
 import { validateCustomCommandSettings } from "./customCommandStorage";
+import { isFilePurpose, isValidFileUsages } from "../features/files/usages";
+import { validateEnduranceSettings } from "../features/endurance/storage";
+import { validateManagementRouletteSettings } from "./managementRouletteStorage";
 import { fileStorageService, mimeTypeForName, type BackupStoredFile, type RestoreStoredFile } from "@/services/fileStorageService";
 import { readBackupArchive, writeBackupArchive, type RandomAccessReader } from "./backupArchive";
 import { backupEntryBlob, copyBackupEntry, createBackupOutput, createBackupStaging, invalidBackupMessage, openBackupSource, openNativeBackupWriter, readSmallBackup, type BackupSource } from "./backupIO";
@@ -85,6 +88,7 @@ async function exportFile(kind: BackupKind) {
     const source = await openBackupSource(file.uri, blob);
     try {
       manifestFiles.push({ name: file.name, purpose: file.purpose, size: source.size,
+        ...(file.usages ? { usages: file.usages } : {}),
         mimeType: blob?.type || (file.uri.startsWith("data:") ? file.uri.slice(5, file.uri.indexOf(";")) : mimeTypeForName(file.name)),
         path: `files/${String(index).padStart(6, "0")}` });
     } finally { source.close(); }
@@ -155,7 +159,9 @@ function validatePayload(value: unknown): BackupPayload {
     }
   }
   validateCustomCommandSettings(payload.database.app_settings);
-  if (payload.files?.some((file) => !file || typeof file.name !== "string" || !["training", "punishment", "chastity"].includes(file.purpose)
+  validateEnduranceSettings(payload.database.app_settings);
+  validateManagementRouletteSettings(payload.database.app_settings);
+  if (payload.files?.some((file) => !file || typeof file.name !== "string" || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
     || typeof file.mimeType !== "string" || typeof file.data !== "string" || typeof file.size !== "number")) {
     throw new Error("格納ファイルのデータが不正です。");
   }
@@ -168,7 +174,7 @@ function validateArchiveFiles(value: unknown): asserts value is ArchiveFile[] {
   for (const [index, file] of value.entries()) {
     if (!file || typeof file !== "object" || typeof file.name !== "string" || !file.name
       || file.name === "." || file.name === ".." || /[\\/\x00-\x1f\x7f]/.test(file.name)
-      || !["training", "punishment", "chastity"].includes(file.purpose) || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+      || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages) || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
       || !Number.isSafeInteger(file.size) || file.size < 0 || file.path !== `files/${String(index).padStart(6, "0")}`
       || names.has(`${file.purpose}/${file.name}`)) throw new Error(invalidBackupMessage);
     names.add(`${file.purpose}/${file.name}`);

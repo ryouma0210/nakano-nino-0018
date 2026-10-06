@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Image as NativeImage, Platform, Pressable as NativePressable, StyleSheet, View } from "react-native";
+import { Image as NativeImage, Modal, Platform, Pressable as NativePressable, ScrollView, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
 import {
@@ -20,6 +20,7 @@ import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { FileGalleryViewer } from "@/features/files/FileGalleryViewer";
 import { useCompletionNotice } from "@/features/files/useCompletionNotice";
+import { FILE_USAGES, getFileUsages, type FileUsage } from "@/features/files/usages";
 import { useAppModal } from "@/components/AppModalProvider";
 import {
   fileStorageService,
@@ -35,6 +36,8 @@ import {
   type FilePurposeFilter,
   type FileSortOrder,
 } from "@/features/files/fileList";
+
+const usageLabels: Record<FileUsage, string> = { training: "調教用", punishment: "お仕置き用", endurance: "勃起我慢用" };
 
 export default function FilesScreen() {
   const { showError, showNotice } = useAppModal();
@@ -67,6 +70,8 @@ export default function FilesScreen() {
   const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [selected, setSelected] = useState<StoredFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile[] | null>(null);
+  const [editingFile, setEditingFile] = useState<StoredFile | null>(null);
+  const [editingUsages, setEditingUsages] = useState<FileUsage[]>([]);
   const [videoThumbnails, setVideoThumbnails] = useState<
     Record<string, GeneratedVideoThumbnail>
   >({});
@@ -102,6 +107,7 @@ export default function FilesScreen() {
         loadVersionRef.current++;
         setSelected(null);
         setPendingDelete(null);
+        setEditingFile(null);
         setSelectedKeys(new Set());
         setSelectionMode(false);
         setFiles([]);
@@ -173,7 +179,7 @@ export default function FilesScreen() {
     };
   }, [files]);
 
-  async function upload(purpose: "training" | "punishment") {
+  async function upload(purpose: FileUsage) {
     if (filesBusy) return;
     try {
       const result = await fileStorageService.pickAndStore(purpose);
@@ -190,6 +196,22 @@ export default function FilesScreen() {
 
   function remove(file: StoredFile) {
     if (!filesBusy) setPendingDelete([file]);
+  }
+
+  function editUsages(file: StoredFile) {
+    if (filesBusy) return;
+    setEditingFile(file);
+    setEditingUsages(getFileUsages(file));
+  }
+
+  async function saveUsages() {
+    if (filesBusy || !editingFile || editingUsages.length === 0) return;
+    try {
+      await fileStorageService.setUsages(editingFile, editingUsages);
+      setEditingFile(null);
+    } catch (error) {
+      showError("ファイルの用途を変更できませんでした。", error);
+    }
   }
 
   function toggleSelection(file: StoredFile) {
@@ -250,8 +272,12 @@ export default function FilesScreen() {
         <View style={styles.grow}>
           <PrimaryButton title="お仕置き用" tone="save" disabled={filesBusy} onPress={() => upload("punishment")} />
         </View>
+        <View style={styles.grow}>
+          <PrimaryButton title="勃起我慢用" tone="save" disabled={filesBusy} onPress={() => upload("endurance")} />
+        </View>
       </View>
       <AppText variant="muted">複数のファイルをまとめて選択できます。</AppText>
+      <AppText variant="muted">格納後に用途を複数選べます。同じファイルを追加し直す必要はありません。</AppText>
       {maintenance.active ? <AppText accessibilityLiveRegion="polite">ファイルを処理中です。完了してからもう一度お試しください。</AppText> : null}
       {importing ? (
         <AppText accessibilityLiveRegion="polite">
@@ -292,6 +318,7 @@ export default function FilesScreen() {
             ["all", "すべて"],
             ["training", "調教用"],
             ["punishment", "お仕置き用"],
+            ["endurance", "勃起我慢用"],
           ] as const).map(([value, label]) => (
             <Pressable
               key={value}
@@ -452,6 +479,14 @@ export default function FilesScreen() {
               <AppText style={styles.compactDeleteText}>×</AppText>
             </Pressable> : null}
           </View>
+          <View style={styles.usageLabels}>
+            {getFileUsages(file).map((usage) => <AppText key={usage} style={styles.usageLabel}>{usageLabels[usage]}</AppText>)}
+          </View>
+          {!selectionMode ? (
+            <Pressable disabled={filesBusy} onPress={() => editUsages(file)} accessibilityRole="button" style={styles.usageEdit}>
+              <AppText style={styles.usageEditText}>用途を変更</AppText>
+            </Pressable>
+          ) : null}
         </View>
       ))}
       </View>
@@ -468,12 +503,35 @@ export default function FilesScreen() {
       {selected ? (
         <FileGalleryViewer files={visibleFiles} selectedKey={storedFileKey(selected)} onSelect={setSelected} onClose={() => setSelected(null)} />
       ) : null}
+      <Modal visible={editingFile !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!filesBusy) setEditingFile(null); }}>
+        <View style={styles.modalBackdrop}>
+          <ScrollView style={styles.usageDialog} contentContainerStyle={styles.usageDialogContent}>
+            <AppText variant="subtitle">用途を変更</AppText>
+            <AppText localize={false} numberOfLines={3}>{editingFile ? displayedFileName(editingFile) : ""}</AppText>
+            <AppText>用途を1つ以上選択してください。</AppText>
+            {FILE_USAGES.map((usage) => (
+              <Pressable key={usage} disabled={filesBusy} accessibilityRole="checkbox"
+                accessibilityState={{ checked: editingUsages.includes(usage), disabled: filesBusy }}
+                accessibilityLabel={usageLabels[usage]}
+                onPress={() => setEditingUsages((previous) => previous.includes(usage) ? previous.filter((value) => value !== usage) : [...previous, usage])}
+                style={styles.usageChoice}>
+                <AppText localize={false}>{editingUsages.includes(usage) ? "☑" : "☐"}</AppText>
+                <AppText>{usageLabels[usage]}</AppText>
+              </Pressable>
+            ))}
+            <AppText variant="muted">複数の用途を選んでも、ファイルの使用容量は増えません。</AppText>
+            <PrimaryButton title="保存" tone="save" disabled={filesBusy || editingUsages.length === 0} onPress={saveUsages} />
+            <PrimaryButton title="キャンセル" tone="secondary" disabled={filesBusy} onPress={() => setEditingFile(null)} />
+          </ScrollView>
+        </View>
+      </Modal>
       <ConfirmModal
         visible={pendingDelete !== null}
         title="選択したファイルを削除しますか？"
         message={[
           `選択した${pendingDelete?.length ?? 0}件のファイルを削除します。`,
           ...(pendingDelete?.length === 1 ? [displayedFileName(pendingDelete[0])] : []),
+          "削除すると、設定したすべての用途から取り除かれます。",
           "削除したファイルは元に戻せません。",
         ].join("\n\n")}
         confirmLabel="削除する"
@@ -626,6 +684,14 @@ const styles = StyleSheet.create({
   },
   videoLabelText: { color: "#fff", fontSize: 9, fontWeight: "900" },
   compactName: { fontSize: 9, lineHeight: 12 },
+  usageLabels: { flexDirection: "row", flexWrap: "wrap", gap: 4, paddingVertical: 5 },
+  usageLabel: { fontSize: 9, color: "#ccc" },
+  usageEdit: { minHeight: 36, alignItems: "center", justifyContent: "center", backgroundColor: "#fff", borderRadius: 3 },
+  usageEditText: { color: "#111", fontSize: 11, fontWeight: "700" },
+  modalBackdrop: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.88)" },
+  usageDialog: { width: "100%", maxWidth: 420, maxHeight: "90%", backgroundColor: "#080808", borderWidth: 1, borderColor: "#fff" },
+  usageDialogContent: { padding: 20, gap: 12 },
+  usageChoice: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 12 },
   compactDelete: {
     width: 22,
     height: 22,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CHASTITY_STORAGE_KEY, chastityHistoryService, parseChastityHistory, type ChastityRecordInput } from "./chastityHistoryService";
+import { CHASTITY_STORAGE_KEY, chastityHistoryService, parseChastityHistory, type ChastityDailyDetails, type ChastityRecordInput } from "./chastityHistoryService";
 import type { StoredFile } from "./fileStorageService";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), removeKey: vi.fn(), list: vi.fn(), removeFile: vi.fn(), pick: vi.fn(), exclusive: vi.fn() }));
@@ -35,7 +35,7 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("chastity records and shared daily photographs", () => {
   it("loads empty without writing and retains several independent statuses on the same day", async () => {
-    expect(await chastityHistoryService.load()).toEqual({ records: [], photos: {}, calendarDisplay: "icons" });
+    expect(await chastityHistoryService.load()).toEqual({ records: [], photos: {}, dailyDetails: {}, calendarDisplay: "icons" });
     expect(mocks.set).not.toHaveBeenCalled();
     await chastityHistoryService.add(input);
     vi.setSystemTime(new Date(2026, 9, 6, 13));
@@ -43,7 +43,7 @@ describe("chastity records and shared daily photographs", () => {
     expect(records.map((record) => record.status)).toEqual(["washing", "locked"]);
     expect(records[1].note).toBe("自分のメモ\n  二行目");
     expect(new Set(records.map((record) => record.id)).size).toBe(2);
-    expect(await chastityHistoryService.load()).toEqual({ records, photos: {}, calendarDisplay: "icons" });
+    expect(await chastityHistoryService.load()).toEqual({ records, photos: {}, dailyDetails: {}, calendarDisplay: "icons" });
   });
 
   it("edits dates/status/notes preserving identity and does not move or remove the shared photo", async () => {
@@ -156,6 +156,7 @@ describe("chastity records and shared daily photographs", () => {
 
   it("clears only its records and every owned image, including unreferenced leftovers, without nesting a file lock", async () => {
     await chastityHistoryService.add(input);
+    await chastityHistoryService.saveDailyDetails(input.recordDate, { limitLevel: 25, feelings: "A daily note" });
     await chastityHistoryService.pickPhoto(input.recordDate);
     files.push(photo("orphan.png"));
     mocks.exclusive.mockClear();
@@ -164,7 +165,7 @@ describe("chastity records and shared daily photographs", () => {
     expect(mocks.list).toHaveBeenLastCalledWith("chastity");
     expect(mocks.removeKey).toHaveBeenCalledExactlyOnceWith(CHASTITY_STORAGE_KEY);
     expect(files).toEqual([]);
-    expect(await chastityHistoryService.load()).toEqual({ records: [], photos: {}, calendarDisplay: "icons" });
+    expect(await chastityHistoryService.load()).toEqual({ records: [], photos: {}, dailyDetails: {}, calendarDisplay: "icons" });
   });
 
   it("rejects unknown record edits/deletions and invalid input without changing history", async () => {
@@ -198,5 +199,137 @@ describe("chastity records and shared daily photographs", () => {
       { ...base, photos: { "2026-10-05": "same.png", "2026-10-04": "same.png" } },
       { ...base, calendarDisplay: "unknown" },
     ]) expect(() => parseChastityHistory(JSON.stringify(invalid))).toThrow("読み込めません");
+  });
+});
+
+describe("independent daily details", () => {
+  const firstDate = "2026-10-05";
+  const otherDate = "2026-10-04";
+  const details: ChastityDailyDetails = { limitLevel: 50, feelings: "Today’s note\nSecond line" };
+
+  it("accepts legacy histories without details and preserves records and photo references", async () => {
+    const { records } = await chastityHistoryService.add(input);
+    const legacy = { version: 1, records, photos: { [firstDate]: "missing.png" }, calendarDisplay: "photos" };
+    raw = JSON.stringify(legacy);
+    expect(parseChastityHistory(raw)).toEqual({ ...legacy, dailyDetails: {} });
+    expect((await chastityHistoryService.load()).dailyDetails).toEqual({});
+    expect(raw).toBe(JSON.stringify(legacy));
+    await chastityHistoryService.saveDailyDetails(firstDate, details);
+    expect(parseChastityHistory(raw)).toEqual({ ...legacy, dailyDetails: { [firstDate]: details } });
+  });
+
+  it("saves and updates each date independently while leaving multiple status records and shared photos intact", async () => {
+    await chastityHistoryService.add(input);
+    await chastityHistoryService.add({ ...input, status: "washing" });
+    const before = (await chastityHistoryService.pickPhoto(firstDate))!;
+    await chastityHistoryService.saveDailyDetails(firstDate, details);
+    await chastityHistoryService.saveDailyDetails(otherDate, { limitLevel: null, feelings: " Note only " });
+    const changed = await chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: 100, feelings: "  Updated\n  Note  " });
+    expect(changed.records).toEqual(before.records);
+    expect(changed.photos).toEqual(before.photos);
+    expect(changed.dailyDetails).toEqual({
+      [firstDate]: { limitLevel: 100, feelings: "Updated\n  Note" },
+      [otherDate]: { limitLevel: null, feelings: "Note only" },
+    });
+    expect(await chastityHistoryService.load()).toEqual(changed);
+    expect(mocks.removeFile).not.toHaveBeenCalled();
+  });
+
+  it("supports details without records or a photo, both level boundaries, and the full note length", async () => {
+    await chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: 1, feelings: "" });
+    const saved = await chastityHistoryService.saveDailyDetails(otherDate, { limitLevel: 100, feelings: "x".repeat(4000) });
+    expect(saved.records).toEqual([]);
+    expect(saved.photos).toEqual({});
+    expect(saved.dailyDetails).toEqual({
+      [firstDate]: { limitLevel: 1, feelings: "" },
+      [otherDate]: { limitLevel: 100, feelings: "x".repeat(4000) },
+    });
+    expect(parseChastityHistory(raw).dailyDetails).toEqual(saved.dailyDetails);
+  });
+
+  it("clears just that date's details when both fields are blank", async () => {
+    await chastityHistoryService.add(input);
+    await chastityHistoryService.pickPhoto(firstDate);
+    await chastityHistoryService.saveDailyDetails(firstDate, details);
+    const before = await chastityHistoryService.saveDailyDetails(otherDate, details);
+    const cleared = await chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: null, feelings: " \n " });
+    expect(cleared).toEqual({ ...before, dailyDetails: { [otherDate]: details } });
+    expect(parseChastityHistory(raw).dailyDetails).toEqual({ [otherDate]: details });
+    expect(mocks.removeFile).not.toHaveBeenCalled();
+  });
+
+  it("preserves both dates' details across record, photo and calendar mutations", async () => {
+    await chastityHistoryService.saveDailyDetails(firstDate, details);
+    const expected = (await chastityHistoryService.saveDailyDetails(otherDate, { limitLevel: 1, feelings: "" })).dailyDetails;
+    const added = await chastityHistoryService.add(input);
+    expect(added.dailyDetails).toEqual(expected);
+    expect((await chastityHistoryService.update(added.records[0].id, { ...input, recordDate: otherDate })).dailyDetails).toEqual(expected);
+    expect((await chastityHistoryService.remove(added.records[0].id)).dailyDetails).toEqual(expected);
+    expect((await chastityHistoryService.pickPhoto(firstDate))!.dailyDetails).toEqual(expected);
+    expect((await chastityHistoryService.pickPhoto(firstDate))!.dailyDetails).toEqual(expected);
+    expect((await chastityHistoryService.setCalendarDisplay("photos")).dailyDetails).toEqual(expected);
+    expect((await chastityHistoryService.removePhoto(firstDate)).dailyDetails).toEqual(expected);
+  });
+
+  it("snapshots caller values, serializes overlapping changes, and does not retain returned objects", async () => {
+    const changing = { ...details };
+    const first = chastityHistoryService.saveDailyDetails(firstDate, changing);
+    changing.limitLevel = 99;
+    changing.feelings = "Changed after save started";
+    const second = chastityHistoryService.saveDailyDetails(otherDate, { limitLevel: 1, feelings: "" });
+    const record = chastityHistoryService.add(input);
+    const [savedFirst] = await Promise.all([first, second, record]);
+    expect(savedFirst.dailyDetails[firstDate]).toEqual(details);
+    const loaded = await chastityHistoryService.load();
+    expect(loaded.records).toHaveLength(1);
+    expect(loaded.dailyDetails).toEqual({ [firstDate]: details, [otherDate]: { limitLevel: 1, feelings: "" } });
+    loaded.dailyDetails[firstDate].feelings = "Not saved";
+    expect((await chastityHistoryService.load()).dailyDetails[firstDate]).toEqual(details);
+    expect(mocks.exclusive).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([0, 101, 1.5, "50", undefined, NaN])("rejects invalid levels without writing: %s", async (limitLevel) => {
+    await expect(chastityHistoryService.saveDailyDetails(firstDate, { ...details, limitLevel } as ChastityDailyDetails)).rejects.toThrow("1〜100");
+    expect(mocks.set).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid dates and note values before changing history", async () => {
+    for (const date of ["2026-02-30", "2026-10-07"]) {
+      await expect(chastityHistoryService.saveDailyDetails(date, details)).rejects.toThrow("日付");
+    }
+    for (const feelings of ["x".repeat(4001), null, 5]) {
+      await expect(chastityHistoryService.saveDailyDetails(firstDate, { ...details, feelings } as ChastityDailyDetails)).rejects.toThrow("4000文字");
+    }
+    expect(mocks.set).not.toHaveBeenCalled();
+  });
+
+  it("preserves saved data on a write failure and permits retry", async () => {
+    const before = await chastityHistoryService.saveDailyDetails(firstDate, details);
+    mocks.set.mockRejectedValueOnce(new Error("disk full"));
+    await expect(chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: null, feelings: "" })).rejects.toThrow("disk full");
+    expect(await chastityHistoryService.load()).toEqual(before);
+    expect((await chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: 1, feelings: "Retry" })).dailyDetails[firstDate])
+      .toEqual({ limitLevel: 1, feelings: "Retry" });
+  });
+
+  it("refuses to overwrite corrupt details even when clearing them", async () => {
+    raw = JSON.stringify({ version: 1, records: [], photos: {}, calendarDisplay: "icons", dailyDetails: { [firstDate]: { limitLevel: 101, feelings: "" } } });
+    const corrupted = raw;
+    await expect(chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: null, feelings: "" })).rejects.toThrow("読み込めません");
+    expect(raw).toBe(corrupted);
+    expect(mocks.set).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed daily-detail maps, dates, levels and notes in stored or backup data", () => {
+    const base = { version: 1, records: [], photos: {}, calendarDisplay: "icons" };
+    const invalidEntries = [
+      null, [], {}, { limitLevel: null }, { feelings: "" },
+      ...[0, 101, 1.5, "50"].map((limitLevel) => ({ limitLevel, feelings: "" })),
+      { limitLevel: 50, feelings: null }, { limitLevel: 50, feelings: "x".repeat(4001) },
+    ];
+    for (const dailyDetails of [null, [], "details", { "2026-02-30": details },
+      ...invalidEntries.map((value) => ({ [firstDate]: value }))]) {
+      expect(() => parseChastityHistory(JSON.stringify({ ...base, dailyDetails }))).toThrow("読み込めません");
+    }
   });
 });

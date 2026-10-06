@@ -17,8 +17,15 @@ export type ChastityRecord = {
   updatedAt: string;
 };
 export type ChastityRecordInput = Pick<ChastityRecord, "recordDate" | "status"> & { note?: string };
+export type ChastityDailyDetails = { limitLevel: number | null; feelings: string };
 export type ChastityCalendarDisplay = "icons" | "photos";
-export type SavedHistory = { version: 1; records: ChastityRecord[]; photos: Record<string, string>; calendarDisplay: ChastityCalendarDisplay };
+export type SavedHistory = {
+  version: 1;
+  records: ChastityRecord[];
+  photos: Record<string, string>;
+  dailyDetails: Record<string, ChastityDailyDetails>;
+  calendarDisplay: ChastityCalendarDisplay;
+};
 
 const invalidHistoryMessage = "貞操帯管理記録の保存データを読み込めませんでした。";
 
@@ -47,22 +54,36 @@ function isRecord(value: unknown): value is ChastityRecord {
     && isTimestamp(record.createdAt) && isTimestamp(record.updatedAt);
 }
 
+function isDailyDetails(value: unknown): value is ChastityDailyDetails {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const details = value as Record<string, unknown>;
+  return (details.limitLevel === null || (typeof details.limitLevel === "number"
+    && Number.isInteger(details.limitLevel) && details.limitLevel >= 1 && details.limitLevel <= 100))
+    && typeof details.feelings === "string" && details.feelings.length <= CHASTITY_MAX_NOTE_LENGTH;
+}
+
 /** Validate before restoring a backup, without touching records or image files. */
 export function parseChastityHistory(raw: string | null): SavedHistory {
-  if (raw === null) return { version: 1, records: [], photos: {}, calendarDisplay: "icons" };
+  if (raw === null) return { version: 1, records: [], photos: {}, dailyDetails: {}, calendarDisplay: "icons" };
   let saved: unknown;
   try { saved = JSON.parse(raw); } catch { throw new Error(invalidHistoryMessage); }
   if (!saved || typeof saved !== "object" || Array.isArray(saved)) throw new Error(invalidHistoryMessage);
   const data = saved as Record<string, unknown>;
+  // Version 1 histories created before daily details remain valid without this field.
+  const dailyDetails = Object.hasOwn(data, "dailyDetails") ? data.dailyDetails : {};
   if (data.version !== 1 || !Array.isArray(data.records) || !data.records.every(isRecord)
     || (data.calendarDisplay !== "icons" && data.calendarDisplay !== "photos")
     || new Set(data.records.map((record) => record.id)).size !== data.records.length
     || !data.photos || typeof data.photos !== "object" || Array.isArray(data.photos)
     || Object.entries(data.photos).some(([date, name]) => !isCalendarDate(date) || typeof name !== "string"
       || !name || name === "." || name === ".." || /[\\/\u0000-\u001f\u007f]/.test(name))
-    || new Set(Object.values(data.photos)).size !== Object.keys(data.photos).length) {
+    || new Set(Object.values(data.photos)).size !== Object.keys(data.photos).length
+    || !dailyDetails || typeof dailyDetails !== "object" || Array.isArray(dailyDetails)
+    || Object.entries(dailyDetails).some(([date, details]) => !isCalendarDate(date) || !isDailyDetails(details))) {
     throw new Error(invalidHistoryMessage);
   }
-  return { version: 1, records: data.records, photos: data.photos as Record<string, string>, calendarDisplay: data.calendarDisplay };
+  return {
+    version: 1, records: data.records, photos: data.photos as Record<string, string>,
+    dailyDetails: dailyDetails as Record<string, ChastityDailyDetails>, calendarDisplay: data.calendarDisplay,
+  };
 }
-

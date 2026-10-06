@@ -3,8 +3,9 @@ import { query, queryOne } from "../database/client";
 import { contractSettingsSchema, dailyOrderSchema } from "../schemas/storage";
 import { toDateKey } from "../utils/date";
 import { trainingNeedsPunishment } from "../features/training/trainingOutcome";
-import type { ManagementCycle, ManagementDailyTask } from "../repositories/roomRepository";
+import type { ManagementCycle, ManagementDailyTask, ManagementMode } from "../repositories/roomRepository";
 import type { DailyOrder } from "./gameRoomService";
+import { MANAGEMENT_MINIMUM_DAILY_SPINS, MANAGEMENT_ROULETTE_KEY, parseManagementRoulette, type ManagementRouletteSave } from "./managementRouletteStorage";
 
 export type HomeTask = {
   id: string;
@@ -12,6 +13,7 @@ export type HomeTask = {
   detail?: string;
   dayProgress?: { currentDay: number; totalDays: number };
   pointProgress?: { earned: number; limit: number };
+  management?: { mode: ManagementMode | null; deadlineAt: string | null; rouletteSpins: number; rouletteRequired: number };
   eligible: boolean;
   completed: boolean;
   status: string;
@@ -40,6 +42,7 @@ type HomeSnapshot = {
   punishmentHistories: HomePunishmentHistory[];
   cycles: ManagementCycle[];
   managementTasks: ManagementDailyTask[];
+  managementRoulette?: ManagementRouletteSave;
 };
 
 type HomeJournal = {
@@ -160,23 +163,33 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
 
   let hasManagementTask = false;
   for (const cycle of snapshot.cycles) {
-    if (cycle.start_date > snapshot.date || cycle.end_date < snapshot.date) continue;
+    if (cycle.start_date > snapshot.date || cycle.end_date < cycle.start_date) continue;
     const task = snapshot.managementTasks.find((item) => item.cycle_id === cycle.id && item.record_date === snapshot.date);
     const active = Number(cycle.is_active) === 1 && latestActiveCycles.get(cycle.mode) === cycle.id;
     // Completing the final day marks the cycle inactive. Keep that completed
     // task in today's total so finishing it does not reduce the progress count.
-    const finishedToday = Number(cycle.is_active) === 0 && cycle.end_date === snapshot.date && Boolean(task?.completed_at);
+    const finishedToday = Number(cycle.is_active) === 0 && cycle.end_date <= snapshot.date && Boolean(task?.completed_at);
     if (!active && !finishedToday) continue;
     // Calendar dates in UTC avoid local daylight-saving changes affecting day counts.
     const start = Date.parse(`${cycle.start_date}T00:00:00Z`);
     const currentDay = Math.round((Date.parse(`${snapshot.date}T00:00:00Z`) - start) / 86400000) + 1;
-    const totalDays = Math.round((Date.parse(`${cycle.end_date}T00:00:00Z`) - start) / 86400000) + 1;
+    // Passing the deadline does not release an active period. Keep today's
+    // required roulette visible, including when release is completed late.
+    const plannedDays = Math.round((Date.parse(`${cycle.end_date}T00:00:00Z`) - start) / 86400000) + 1;
+    const totalDays = Math.max(plannedDays, currentDay);
     if (!Number.isFinite(currentDay) || !Number.isFinite(totalDays) || currentDay < 1 || currentDay > totalDays) continue;
+    const roulette = snapshot.managementRoulette?.cycles.find((saved) => saved.cycleId === cycle.id);
     tasks.push({
       id: `management:${cycle.id}`,
       title: "射精管理部屋",
       detail: cycle.mode === "release" ? "貞操帯なし" : "貞操帯あり",
       dayProgress: { currentDay, totalDays },
+      management: {
+        mode: cycle.mode,
+        deadlineAt: roulette?.deadlineAt ?? new Date(`${cycle.end_date}T00:00:00`).toISOString(),
+        rouletteSpins: roulette?.days.find((day) => day.date === snapshot.date)?.draws.length ?? 0,
+        rouletteRequired: MANAGEMENT_MINIMUM_DAILY_SPINS,
+      },
       eligible: true,
       completed: Boolean(task?.completed_at),
       status: task?.completed_at ? "完了済み" : "未完了",
@@ -188,6 +201,7 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
     tasks.push({
       id: "management", title: "射精管理部屋", href: "/(tabs)/management",
       eligible: false, completed: false, status: "管理期間外",
+      management: { mode: null, deadlineAt: null, rouletteSpins: 0, rouletteRequired: MANAGEMENT_MINIMUM_DAILY_SPINS },
     });
   }
 
@@ -274,6 +288,9 @@ export const homeSummaryService = {
       ),
       cycles: query<ManagementCycle>("SELECT * FROM management_cycles"),
       managementTasks: query<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE record_date=?", [date]),
+      managementRoulette: parseManagementRoulette(queryOne<{ setting_value: string }>(
+        "SELECT setting_value FROM app_settings WHERE setting_key=? LIMIT 1", [MANAGEMENT_ROULETTE_KEY],
+      )?.setting_value ?? null),
     });
   },
 };

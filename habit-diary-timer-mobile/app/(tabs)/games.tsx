@@ -26,6 +26,7 @@ export default function GamesScreen() {
       <Card style={styles.gameCard}>
         <PrimaryButton title="すごろく" tone="defeat" onPress={() => router.push("/(tabs)/sugoroku")} />
         <PrimaryButton title="オセロ" tone="defeat" onPress={() => router.push("/(tabs)/othello")} />
+        <PrimaryButton title="勃起我慢" tone="defeat" onPress={() => router.push("/(tabs)/endurance")} />
       </Card>
 
       <PrimaryButton title="部屋から出る" tone="secondary" onPress={() => router.replace("/(tabs)/rooms")} />

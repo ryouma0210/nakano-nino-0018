@@ -178,7 +178,7 @@ export default function SugorokuScreen() {
 
   useEffect(() => {
     if (!movementNotice) return;
-    const timer = setTimeout(() => setMovementNotice(null), 3000);
+    const timer = setTimeout(() => setMovementNotice(null), 5000);
     return () => clearTimeout(timer);
   }, [movementNotice]);
 

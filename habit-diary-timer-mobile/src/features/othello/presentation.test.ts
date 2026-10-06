@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getRoomAudioTracks } from "../../audio/roomAudio";
 import { arrangeFinishedBoard, createGame, getLegalMoves, getScore, playMove, type Cell, type GameState } from "./game";
-import { getCpuAdvantageCue, getHardPressureCue, getMoveFlips, getOthelloAudioScene } from "./presentation";
+import { getCpuAdvantageCue, getHardPressureCue, getMoveFlips, getOthelloAudioScene, shouldShowFinalDialogue } from "./presentation";
 
 function singleMove(): GameState {
   const board: Cell[] = Array<Cell>(64).fill(1);
@@ -36,6 +36,26 @@ function humanPassAt(occupied: number): GameState {
   }
   return playMove({ ...createGame(), board, turn: -1 }, 0);
 }
+
+describe("result dialogue visibility", () => {
+  it.each([1, -1, 0] as const)("keeps the normal result dialogue for winner %i", (winner) => {
+    const finished: GameState = { ...createGame(), status: "finished", turn: null, winner };
+    expect(shouldShowFinalDialogue(finished, false, false)).toBe(true);
+    expect(shouldShowFinalDialogue(finished, false, true)).toBe(false);
+  });
+
+  it.each([1, -1, 0] as const)("only announces the CPU's victory after fast play, winner %i", (winner) => {
+    const finished: GameState = { ...createGame(), status: "finished", turn: null, winner };
+    expect(shouldShowFinalDialogue(finished, true, false)).toBe(winner === -1);
+    expect(shouldShowFinalDialogue(finished, true, true)).toBe(false);
+  });
+
+  it("does not announce results before start or during a match", () => {
+    expect(shouldShowFinalDialogue(null, false, false)).toBe(false);
+    expect(shouldShowFinalDialogue(createGame(), false, false)).toBe(false);
+    expect(shouldShowFinalDialogue(createGame(), true, false)).toBe(false);
+  });
+});
 
 describe("CPU advantage dialogue cues", () => {
   it.each([[0, 1, 2], [7, 6, 5], [56, 57, 58], [63, 62, 61]])("announces a legal capture of corner %i", (corner, human, cpu) => {

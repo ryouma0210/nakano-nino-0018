@@ -1,10 +1,16 @@
 import { getFlips, getLegalMoves, getScore, type Difficulty, type GameState } from "./game";
 
-export const HARD_PRESSURE_DIALOGUE_MS = 2000;
-export const CPU_ADVANTAGE_DIALOGUE_MS = 1400;
+export const HARD_PRESSURE_DIALOGUE_MS = 5000;
+export const CPU_ADVANTAGE_DIALOGUE_MS = 5000;
 export const DISC_FLIP_DURATION_MS = 520;
+export const FAST_PLAY_SPEED = 5;
 export type HardPressureCue = "single" | "pass";
 export type CpuAdvantageCue = "corner" | "capture";
+
+/** Keep fast play quiet, except for the CPU's victory after the final flip. */
+export function shouldShowFinalDialogue(game: GameState | null, fastFinish: boolean, flipPending: boolean): boolean {
+  return game?.status === "finished" && !flipPending && (!fastFinish || game.winner === -1);
+}
 
 /** Describe the actual chosen move, without announcing an illegal or human move. */
 export function getCpuAdvantageCue(game: GameState | null, move: number): CpuAdvantageCue | null {

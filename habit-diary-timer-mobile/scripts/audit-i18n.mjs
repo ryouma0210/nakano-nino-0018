@@ -42,6 +42,9 @@ for (const file of [...await listFiles(path.join(root, "app")), ...await listFil
   const sourceText = await readFile(file, "utf8");
   const source = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const inspect = (node) => {
+    // Static asset/module paths are identifiers, never translated UI copy.
+    if (ts.isStringLiteralLike(node) && ts.isCallExpression(node.parent)
+      && ts.isIdentifier(node.parent.expression) && node.parent.expression.text === "require") return;
     if (ts.isTemplateExpression(node)) {
       const fullKey = node.head.text + node.templateSpans.map((span, index) => `{${index}}${span.literal.text}`).join("");
       const isDate = /^\{0\}年\{1\}月(?:\{2\}日(?:（\{3\}）)?)?$/.test(fullKey);

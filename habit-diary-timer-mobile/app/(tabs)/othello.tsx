@@ -39,11 +39,13 @@ import {
 import {
   CPU_ADVANTAGE_DIALOGUE_MS,
   DISC_FLIP_DURATION_MS,
+  FAST_PLAY_SPEED,
   getCpuAdvantageCue,
   getHardPressureCue,
   getMoveFlips,
   getOthelloAudioScene,
   HARD_PRESSURE_DIALOGUE_MS,
+  shouldShowFinalDialogue,
   type CpuAdvantageCue,
 } from "@/features/othello/presentation";
 
@@ -58,7 +60,7 @@ const INVITATIONS = [
   "私のおすすめの場所は、こ・こ♡",
 ];
 const TURN_DELAY_MS = 500;
-const ACTION_DIALOGUE_MS = 1200;
+const ACTION_DIALOGUE_MS = 5000;
 const HARD_PRESSURE_MESSAGES = {
   single: "1個しか置けないね♡ちゃんと脳みそ働かしなさい♡",
   pass: "置ける場所・・・無くなったわね♡ふふ♡なんでかしら♡",
@@ -218,7 +220,7 @@ export default function OthelloScreen() {
           ? {
               game: next,
               from: previous.board,
-              duration: DISC_FLIP_DURATION_MS / (fast ? 2 : 1),
+              duration: DISC_FLIP_DURATION_MS / (fast ? FAST_PLAY_SPEED : 1),
             }
           : null;
       flipAnimationRef.current = animation;
@@ -412,7 +414,7 @@ export default function OthelloScreen() {
       assistance?.kind === "single"
         ? ACTION_DIALOGUE_MS
         : assistance?.kind === "fast"
-          ? TURN_DELAY_MS / 2
+          ? TURN_DELAY_MS / FAST_PLAY_SPEED
           : advantagePlan
             ? CPU_ADVANTAGE_DIALOGUE_MS
             : isCpuTurn
@@ -870,7 +872,7 @@ export default function OthelloScreen() {
                     : "両者とも打てなくなったため、対局終了です。"}
                 </AppText>
               ) : null}
-              {finalDialogue && !fastFinish && !flipPending ? (
+              {finalDialogue && shouldShowFinalDialogue(game, fastFinish, flipPending) ? (
                 <AppText
                   testID="othello-result-dialogue"
                   accessibilityLiveRegion="polite"
@@ -977,7 +979,7 @@ export default function OthelloScreen() {
                     <AppText testID="othello-fast-status" variant="muted">
                       {assistance.paused
                         ? "自動対局を一時停止中"
-                        : "2倍速で自動対局中"}
+                        : "5倍速で自動対局中"}
                     </AppText>
                     <PrimaryButton
                       title={
