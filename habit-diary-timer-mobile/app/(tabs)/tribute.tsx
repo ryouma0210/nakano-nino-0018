@@ -543,7 +543,6 @@ function DateSelector({
                   styles.dayText,
                   dayOfWeek === 6 && styles.saturdayText,
                   (dayOfWeek === 0 || holiday) && styles.holidayText,
-                  selected && styles.selectedDayText,
                 ]}
               >
                 {day}
@@ -552,7 +551,6 @@ function DateSelector({
                 style={[
                   styles.dayAmount,
                   amountTone === "income" ? styles.dayIncomeAmount : styles.daySpendingAmount,
-                  selected && styles.selectedDayText,
                 ]}
               >
                 {formatYen(amount)}
@@ -703,11 +701,10 @@ const styles = StyleSheet.create({
     borderColor: "#d7d7d7",
     backgroundColor: "#fff",
   },
-  selectedDay: { borderColor: "#fff", backgroundColor: lightTheme.danger },
+  selectedDay: { borderColor: "#1667c7", borderWidth: 3 },
   dayText: { color: "#111", fontWeight: "800" },
   saturdayText: { color: "#1667c7" },
   holidayText: { color: "#d92332" },
-  selectedDayText: { color: "#fff" },
   dayAmount: {
     width: "100%",
     maxWidth: "100%",

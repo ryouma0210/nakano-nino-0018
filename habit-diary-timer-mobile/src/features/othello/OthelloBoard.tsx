@@ -1,4 +1,5 @@
-import { StyleSheet, View } from "react-native";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { Animated, Easing, StyleSheet, View } from "react-native";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
 import { LocalizedPressable } from "@/components/LocalizedPressable";
@@ -18,13 +19,46 @@ type Props = {
   temptingMove: number | null;
   lastMove: number | null;
   interactive?: boolean;
+  flipFrom?: Board;
+  flipDurationMs?: number;
+  animationActive?: boolean;
+  onFlipComplete?: (board: Board) => void;
   onMove: (index: number) => void;
 };
 
-export function OthelloBoard({ board, legalMoves, temptingMove, lastMove, interactive = true, onMove }: Props) {
+export function OthelloBoard({ board, legalMoves, temptingMove, lastMove, interactive = true, flipFrom, flipDurationMs = 520, animationActive = true, onFlipComplete, onMove }: Props) {
   const { settings } = useAppAudio();
   const language = settings?.language ?? "ja";
   const t = (value: string) => translateText(value, language);
+  const flipProgress = useRef(new Animated.Value(0)).current;
+  const progress = useRef(0);
+
+  useEffect(() => {
+    const listener = flipProgress.addListener(({ value }) => { progress.current = value; });
+    return () => flipProgress.removeListener(listener);
+  }, [flipProgress]);
+
+  useLayoutEffect(() => {
+    progress.current = 0;
+    flipProgress.setValue(0);
+  }, [board, flipFrom, flipProgress]);
+
+  useEffect(() => {
+    if (!flipFrom || !animationActive) return;
+    const animation = Animated.timing(flipProgress, {
+      toValue: 1,
+      duration: Math.max(0, flipDurationMs * (1 - progress.current)),
+      easing: Easing.linear,
+      // Keep the current fraction available so a background/modal pause resumes in place.
+      useNativeDriver: false,
+    });
+    animation.start(({ finished }) => { if (finished) onFlipComplete?.(board); });
+    return () => animation.stop();
+  }, [animationActive, board, flipDurationMs, flipFrom, flipProgress, onFlipComplete]);
+
+  const flipScale = flipProgress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.02, 1] });
+  const previousOpacity = flipProgress.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: [1, 1, 0, 0] });
+  const nextOpacity = flipProgress.interpolate({ inputRange: [0, 0.5, 0.51, 1], outputRange: [0, 0, 1, 1] });
 
   return (
     <View testID="othello-board" style={styles.wrapper}>
@@ -41,6 +75,7 @@ export function OthelloBoard({ board, legalMoves, temptingMove, lastMove, intera
               {COLUMNS.map((column, col) => {
                 const index = row * 8 + col;
                 const cell = board[index];
+                const flipping = flipFrom && flipFrom[index] !== 0 && cell !== 0 && flipFrom[index] !== cell;
                 const legal = legalMoves.includes(index);
                 const tempting = legal && temptingMove === index;
                 const coordinate = `${column}${row + 1}`;
@@ -56,7 +91,12 @@ export function OthelloBoard({ board, legalMoves, temptingMove, lastMove, intera
                     onPress={() => onMove(index)}
                     style={({ pressed }) => [styles.cell, (row + col) % 2 === 0 && styles.alternateCell, tempting && styles.temptingCell, pressed && legal && styles.pressedCell]}
                   >
-                    {cell !== 0 ? <View style={[styles.stone, cell === 1 ? styles.white : styles.purple, lastMove === index && styles.lastStone]} /> : tempting ? (
+                    {flipping ? (
+                      <Animated.View testID={`othello-flip-${coordinate}`} style={[styles.flippingStone, { transform: [{ scaleX: flipScale }] }]}>
+                        <Animated.View style={[styles.stoneFace, flipFrom[index] === 1 ? styles.white : styles.purple, { opacity: previousOpacity }]} />
+                        <Animated.View style={[styles.stoneFace, cell === 1 ? styles.white : styles.purple, { opacity: nextOpacity }]} />
+                      </Animated.View>
+                    ) : cell !== 0 ? <View style={[styles.stone, cell === 1 ? styles.white : styles.purple, lastMove === index && styles.lastStone]} /> : tempting ? (
                       <AppText localize={false} accessible={false} style={styles.temptingMark}>◎</AppText>
                     ) : legal ? <View style={styles.legalDot} /> : null}
                   </LocalizedPressable>
@@ -85,6 +125,8 @@ const styles = StyleSheet.create({
   temptingCell: { backgroundColor: "#653b56", borderWidth: 2, borderColor: "#ff91c7" },
   pressedCell: { opacity: 0.65 },
   stone: { width: "76%", aspectRatio: 1, borderRadius: 100, borderWidth: 1, borderColor: "#555" },
+  flippingStone: { width: "76%", aspectRatio: 1 },
+  stoneFace: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, borderRadius: 100, borderWidth: 1 },
   purple: { backgroundColor: "#a855f7", borderColor: "#e9c8ff" },
   white: { backgroundColor: "#f5f3eb", borderColor: "#d4d4cc" },
   lastStone: { borderWidth: 2, borderColor: "#e8bb5d" },

@@ -382,6 +382,54 @@ describe("CPU-favorable automatic play", () => {
     expect(state.winner).toBe(-1);
   });
 
+  it("fills the board when an equal winning margin could leave two squares empty", () => {
+    const board: Board = [
+      0, -1, -1, -1, -1, -1, -1, -1,
+      -1, 1, -1, -1, 0, -1, -1, -1,
+      -1, -1, -1, -1, -1, 1, -1, -1,
+      -1, -1, -1, -1, -1, -1, -1, -1,
+      -1, -1, -1, -1, -1, -1, 0, -1,
+      -1, -1, -1, -1, -1, -1, -1, -1,
+      -1, -1, -1, -1, -1, 0, -1, -1,
+      -1, 1, -1, -1, -1, 1, -1, -1,
+    ];
+    // Exhaustive cooperative outcomes: 0 => purple 61 / white 3 / empty 0;
+    // 12 => purple 60 / white 2 / empty 2. Both margins are +58, but the
+    // old margin-only objective could end early at 12 instead of filling.
+    let state = playing(board, -1);
+    expect(chooseAssistedMove(state, deterministic)).toBe(0);
+    while (state.status === "playing") {
+      const move = chooseAssistedMove(state, deterministic);
+      expect(getLegalMoves(state.board, state.turn!)).toContain(move);
+      state = playMove(state, move!);
+    }
+    expect(state.winner).toBe(-1);
+    expect(getScore(state.board)).toEqual({ black: 3, white: 61, empty: 0 });
+  });
+
+  it("uses the bounded search budget to find a larger cooperative endgame win", () => {
+    const board: Board = [
+      1, -1, -1, -1, -1, -1, 1, -1,
+      1, -1, 1, 0, -1, 1, 0, -1,
+      1, 1, 1, -1, 1, -1, -1, -1,
+      1, -1, -1, -1, 1, -1, -1, 0,
+      -1, -1, -1, 0, 0, -1, -1, -1,
+      -1, -1, -1, -1, -1, 1, -1, 1,
+      -1, -1, -1, 1, -1, -1, 1, 0,
+      -1, -1, 0, -1, -1, -1, -1, -1,
+    ];
+    // Independent exhaustive continuations: 58 achieves purple 57 / white 7;
+    // 55 achieves 56 / 8, while 11 and 14 achieve only 54 / 10.
+    let state = playing(board, -1);
+    expect(chooseAssistedMove(state, deterministic)).toBe(58);
+    while (state.status === "playing") {
+      const move = chooseAssistedMove(state, deterministic);
+      expect(getLegalMoves(state.board, state.turn!)).toContain(move);
+      state = playMove(state, move!);
+    }
+    expect(getScore(state.board)).toEqual({ black: 7, white: 57, empty: 0 });
+  });
+
   it("returns null for finished games and missing turns", () => {
     const finished = playMove(playing(boardWith({ 0: 0, 1: -1 }, 1)), 0);
     expect(finished.status).toBe("finished");
@@ -502,6 +550,39 @@ describe("hard CPU reply restriction and endgame coverage", () => {
     // Independent exhaustive outcomes: 21 guarantees purple 59 / white 5 /
     // empty 0. Move 45 ends purple 58 / white 3 / empty 3 (a larger margin).
     expect(chooseCpuMove(board, "hard", deterministic)).toBe(21);
+  });
+
+  it("sees a guaranteed larger win before the last ten empty squares", () => {
+    const board: Board = [
+      0, 1, 0, -1, -1, -1, -1, -1,
+      0, 0, 1, -1, -1, -1, -1, -1,
+      0, 1, 1, 1, -1, -1, -1, -1,
+      1, 1, 1, -1, -1, -1, -1, -1,
+      1, 1, 1, -1, -1, 1, -1, 1,
+      1, 1, 1, 1, 0, -1, 1, 0,
+      1, 1, 1, 1, 1, 0, 1, 0,
+      1, 1, 1, 1, 1, 1, 0, 0,
+    ];
+    // Independent exhaustive minimax: 55 guarantees purple 42 / white 21 /
+    // empty 1. The previous four-ply choice 44 guarantees only 35 / 28 / 1.
+    expect(getScore(board).empty).toBe(11);
+    expect(chooseCpuMove(board, "hard", deterministic)).toBe(55);
+  });
+
+  it("keeps pursuing a larger victory without overlooking a forced loss", () => {
+    const board: Board = [
+      -1, -1, 0, -1, -1, -1, -1, 0,
+      -1, 1, 1, -1, 1, -1, 0, -1,
+      -1, 1, 0, 1, 1, 1, 1, 1,
+      -1, -1, 1, 1, 1, -1, 1, -1,
+      -1, 1, -1, 1, -1, 1, -1, -1,
+      -1, -1, 1, 1, 1, -1, -1, -1,
+      -1, 1, 1, 1, 1, -1, -1, -1,
+      0, 0, 1, 0, 0, 0, 0, 0,
+    ];
+    // Independent exhaustive minimax: 2 and 60 win 39-25. The previous
+    // four-ply choice 59 loses 29-35 against the human's best replies.
+    expect([2, 60]).toContain(chooseCpuMove(board, "hard", deterministic));
   });
 
   it("fills every square with purple only when legal moves can actually achieve it", () => {

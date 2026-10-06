@@ -85,7 +85,7 @@ export default function DefeatScreen() {
       )}
       <PrimaryButton
         title="タスクへ戻る"
-        tone="secondary"
+        tone="order"
         onPress={() => router.replace("/(tabs)/tasks")}
       />
     </Screen>

@@ -73,6 +73,61 @@ export const roomMessages: Record<string, RoomMessages> = {
       plainMessage("奴隷としての記録もご褒美も、全部ここで私に管理されるのよ♡")
     ],
   },
+  // 管理・設定メニュー：app/(tabs)/menu.tsx?section=management
+  managementMenu: {
+    lines: [
+      namedMessage("使いやすいように、ここで設定を整えましょう。"),
+      plainMessage("命令の追加やファイルの整理も、ここからできるわ。"),
+    ],
+    contractLines: [
+      namedMessage("約束を続けられるように、自分の設定も確認しておきなさい。"),
+      plainMessage("大事な記録は、バックアップも忘れないこと。"),
+    ],
+  },
+  // ゲーム部屋：app/(tabs)/games.tsx
+  games: {
+    lines: [
+      namedMessage("今日はどのゲームで私と勝負する？"),
+      plainMessage("すごろくとオセロ、遊びたい方を選びなさい。"),
+    ],
+    contractLines: [
+      namedMessage("約束したからには、最後まで落ち着いて勝負しなさい。"),
+      plainMessage("勝っても負けても、結果はちゃんと振り返るのよ。"),
+    ],
+  },
+  // 命令追加：app/(tabs)/custom-orders.tsx
+  customOrders: {
+    lines: [
+      namedMessage("追加したい命令は、ここに書いておきなさい。"),
+      plainMessage("どこに追加するか選んでから、内容を確認してね。"),
+    ],
+    contractLines: [
+      namedMessage("自分で追加するなら、後で読んでも分かるように書きなさい。"),
+      plainMessage("約束した内容も大切にしながら、少しずつ整えていきましょう。"),
+    ],
+  },
+  // 貞操帯管理記録：app/(tabs)/chastity-history.tsx
+  chastityHistory: {
+    lines: [
+      namedMessage("今日の状態を、忘れないうちに記録しておきなさい。"),
+      plainMessage("日付と種類を選んで、必要ならメモや写真も残せるわ。"),
+    ],
+    contractLines: [
+      namedMessage("約束を振り返れるように、記録は正確に残しなさい。"),
+      plainMessage("同じ日の変化も、一つずつ記録しておくのよ。"),
+    ],
+  },
+  // ゴミ汁廃棄履歴：app/(tabs)/disposal-history.tsx
+  disposalHistory: {
+    lines: [
+      namedMessage("回数とメモを残して、日々の記録を見返せるようにしましょう。"),
+      plainMessage("メモは任意よ。まずは日付と回数を確かめてね。"),
+    ],
+    contractLines: [
+      namedMessage("約束を続けているか、記録を見ながら振り返りなさい。"),
+      plainMessage("記録をため込まずに、その日のうちに整理しておくのよ。"),
+    ],
+  },
   // ループ音声：app/(tabs)/loop-audio.tsx
   loopAudio: {
     lines: [
