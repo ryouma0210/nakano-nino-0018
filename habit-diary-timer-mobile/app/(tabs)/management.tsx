@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { ManagementRoom } from "@/components/ManagementRoom";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -55,7 +56,7 @@ export default function ManagementScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">射精管理部屋</AppText>
+      <PageTitle>射精管理部屋</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/chastity-nino.png")}
         roomName="射精管理部屋"

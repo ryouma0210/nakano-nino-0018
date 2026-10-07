@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Animated, Image as NativeImage, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { Animated, AppState, BackHandler, Image as NativeImage, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { router, useFocusEffect, useNavigation } from "expo-router";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { contractService } from "@/services/gameRoomService";
@@ -30,6 +30,7 @@ import { recordOutsideAchievement } from "@/features/outside/achievements";
 import { claimQuest, dailyQuestViews, storyQuestViews, type QuestView } from "@/features/outside/quests";
 import { CenterArea, LeftArea, RightArea, TopArea } from "@/components/outside/areas";
 import { useOutsideKeyboardControls } from "@/features/outside/useOutsideKeyboardControls";
+import { createModalExitController } from "@/features/outside/modalExit";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
@@ -389,6 +390,7 @@ function playerSpriteForFacing(facing: Direction) {
 }
 
 export default function OutsideScreen() {
+  const navigation = useNavigation();
   const { playEffect, stopEffect, setBgmMode } = useAppAudio();
   const insets = useSafeAreaInsets();
   const fadeOpacity = useRef(new Animated.Value(0)).current;
@@ -413,6 +415,15 @@ export default function OutsideScreen() {
   const [playerFacing, setPlayerFacing] = useState<Direction>("down");
   const [crystalOpen, setCrystalOpen] = useState(false);
   const [questCrystalOpen, setQuestCrystalOpen] = useState(false);
+  const [questExitPending, setQuestExitPending] = useState(false);
+  const outsideFocused = useRef(false);
+  const questExit = useMemo(() => createModalExitController({
+    requestFrame: (callback) => requestAnimationFrame(callback),
+    cancelFrame: (handle) => cancelAnimationFrame(handle),
+    canNavigate: () => outsideFocused.current && navigation.isFocused()
+      && AppState.currentState !== "background" && AppState.currentState !== "inactive",
+    navigate: () => router.replace("/(tabs)"),
+  }), [navigation]);
   const [dailyQuests, setDailyQuests] = useState<QuestView[]>(dailyQuestViews);
   const [storyQuests, setStoryQuests] = useState<QuestView[]>(storyQuestViews);
   const [warningSignOpen, setWarningSignOpen] = useState(false);
@@ -459,7 +470,7 @@ export default function OutsideScreen() {
   const [displayedCharmTurns, setDisplayedCharmTurns] = useState(0);
   const [displayedTemptationGauge, setDisplayedTemptationGauge] = useState(0);
   const [displayedBattleAilments, setDisplayedBattleAilments] = useState<BattleAilments>(noBattleAilments);
-  const mapModalOpen = crystalOpen || questCrystalOpen || warningSignOpen || statusModalOpen || playerStatusModalOpen;
+  const mapModalOpen = crystalOpen || questCrystalOpen || questExitPending || warningSignOpen || statusModalOpen || playerStatusModalOpen;
   const canMove = phase === "explore" && mapStep === 0 && !isMovingArea && !mapModalOpen;
 
   const resetToCrossroad = useCallback(() => {
@@ -484,6 +495,38 @@ export default function OutsideScreen() {
   }, [resetToCrossroad]);
 
   useFocusEffect(resetToCrossroad);
+
+  useFocusEffect(useCallback(() => {
+    outsideFocused.current = true;
+    questExit.cancel();
+    setQuestExitPending(false);
+    const cancelExit = () => {
+      questExit.cancel();
+      setQuestExitPending(false);
+    };
+    const unsubscribe = navigation.addListener("beforeRemove", cancelExit);
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!questExit.isPending()) return false;
+      cancelExit();
+      return true;
+    });
+    const appState = AppState.addEventListener("change", (state) => {
+      if ((state === "background" || state === "inactive") && questExit.isPending()) cancelExit();
+    });
+    return () => {
+      outsideFocused.current = false;
+      questExit.cancel();
+      unsubscribe();
+      back.remove();
+      appState.remove();
+    };
+  }, [navigation, questExit]));
+
+  useEffect(() => {
+    // Android removes its native Modal host when visible becomes false and has no onDismiss.
+    // Queue only after that close has committed, never in the button's close-state update.
+    if (Platform.OS === "android" && questExitPending && !questCrystalOpen) questExit.modalClosed();
+  }, [questCrystalOpen, questExit, questExitPending]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -647,16 +690,28 @@ export default function OutsideScreen() {
   }
 
   function openQuestCrystal() {
+    if (questExit.isPending()) return;
     setMessage("");
     refreshQuests();
     setQuestCrystalOpen(true);
   }
 
   function closeQuestCrystal() {
+    questExit.cancel();
+    setQuestExitPending(false);
     setQuestCrystalOpen(false);
     setMapPosition(questCrystalExitPosition);
     setPlayerFacing("down");
     setMessage("青いクリスタルでクエストを確認した。");
+  }
+
+  function leaveQuestCrystal() {
+    if (!questCrystalOpen || !questExit.request()) return;
+    setQuestExitPending(true);
+    setQuestCrystalOpen(false);
+    // A cancelled exit leaves the player outside the crystal's interaction radius.
+    setMapPosition(questCrystalExitPosition);
+    setPlayerFacing("down");
   }
 
   function receiveQuestReward(kind: "daily" | "story", questId: string) {
@@ -1773,7 +1828,7 @@ export default function OutsideScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} pointerEvents={questExitPending ? "none" : "auto"}>
       <View style={[
         styles.mapScreen,
         {
@@ -1952,9 +2007,10 @@ export default function OutsideScreen() {
       <Modal
         visible={questCrystalOpen}
         transparent
-        animationType="fade"
+        animationType={Platform.OS === "android" ? "none" : "fade"}
         statusBarTranslucent
         onRequestClose={closeQuestCrystal}
+        onDismiss={() => questExit.modalClosed()}
       >
         <View style={[styles.crystalModalBackdrop, { paddingTop: Math.max(20, insets.top), paddingBottom: Math.max(20, insets.bottom) }]}>
           <View style={[styles.crystalModal, styles.questModal]}>
@@ -2031,10 +2087,8 @@ export default function OutsideScreen() {
               <PrimaryButton
                 title="館の中へ"
                 tone="record"
-                onPress={() => {
-                  setQuestCrystalOpen(false);
-                  router.replace("/(tabs)");
-                }}
+                disabled={questExitPending}
+                onPress={leaveQuestCrystal}
               />
             </ScrollView>
           </View>

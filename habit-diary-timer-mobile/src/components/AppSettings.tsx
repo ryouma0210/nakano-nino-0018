@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -306,7 +307,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
 
   return (
     <Screen>
-      <AppText variant="title">アプリ設定</AppText>
+      <PageTitle>アプリ設定</PageTitle>
       <DesktopDisplaySettings />
       <Card>
         <AppText variant="subtitle">サウンド設定</AppText>

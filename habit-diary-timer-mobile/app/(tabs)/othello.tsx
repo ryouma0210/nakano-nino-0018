@@ -3,6 +3,7 @@ import { AppState, StyleSheet, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { LocalizedPressable } from "@/components/LocalizedPressable";
@@ -102,7 +103,7 @@ export default function OthelloScreen() {
   const [fastFinish, setFastFinish] = useState(false);
   const [active, setActive] = useState(false);
   const [dialog, setDialog] = useState<
-    "restart" | "leave" | "surrender" | null
+    "restart" | "leave" | "lobby" | "surrender" | null
   >(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -630,7 +631,7 @@ export default function OthelloScreen() {
     commit(playMove(snapshot, index));
   }
 
-  function openDialog(value: "restart" | "leave" | "surrender") {
+  function openDialog(value: "restart" | "leave" | "lobby" | "surrender") {
     jobVersion.current += 1;
     setDialog(value);
   }
@@ -701,16 +702,51 @@ export default function OthelloScreen() {
     }
   }
 
-  async function saveAndLeave() {
+  function showLobby(snapshot: OthelloCurrent | null) {
+    // Invalidate queued AI/dialogue work and reads before dropping the displayed board.
+    jobVersion.current += 1;
+    historyVersion.current += 1;
+    progressVersion.current += 1;
+    historyLoaded.current = true;
+    loadedResumeId.current = undefined;
+    handledResume.current = undefined;
+    resumeRequest.current = undefined;
+    if (resumeId !== undefined) router.setParams({ resumeId: undefined });
+    setHistoryLoading(false);
+    setHistoryError(false);
+    setResumable(snapshot);
+    setProgressStatus("idle");
+    setResumeUnavailable(false);
+    setPressureAcknowledged(null);
+    updateActionTarget(null);
+    setHistoryOpen(false);
+    setRulesOpen(false);
+    setDialog(null);
+    setShowFinalPosition(false);
+    setSaveStatus("idle");
+    setFinishReason("completed");
+    pendingResult.current = null;
+    setMatch(null);
+    commit(null);
+  }
+
+  async function saveAndLeave(destination: "games" | "lobby" = "games") {
     if (transitionRef.current || !progressSnapshot) return;
     transitionRef.current = true;
     setTransitioning(true);
     jobVersion.current += 1;
-    if (await persistProgress(progressSnapshot)) {
-      activeRef.current = false;
-      setActive(false);
-      setDialog(null);
-      router.replace("/(tabs)/games");
+    const snapshot: OthelloCurrent =
+      destination === "lobby" && progressSnapshot.assistance?.kind === "fast"
+        ? { ...progressSnapshot, assistance: { kind: "fast", paused: true } }
+        : progressSnapshot;
+    if (await persistProgress(snapshot)) {
+      if (destination === "lobby") showLobby(snapshot);
+      else {
+        activeRef.current = false;
+        setActive(false);
+        setDialog(null);
+        router.replace("/(tabs)/games");
+      }
     } else setDialog(null);
     transitionRef.current = false;
     setTransitioning(false);
@@ -720,6 +756,12 @@ export default function OthelloScreen() {
     if (resultPending) return;
     if (game?.status === "playing") openDialog("leave");
     else router.replace("/(tabs)/games");
+  }
+
+  function returnToLobby() {
+    if (resultPending || transitionRef.current || !currentGame.current) return;
+    if (currentGame.current.status === "playing") openDialog("lobby");
+    else showLobby(null);
   }
 
   const status = finished
@@ -742,9 +784,7 @@ export default function OthelloScreen() {
   return (
     <Screen desktopLayout="single">
       <View style={styles.container}>
-        <AppText variant="title" accessibilityRole="header">
-          オセロ
-        </AppText>
+        <PageTitle>オセロ</PageTitle>
         {resumeUnavailable ? (
           <Card><AppText>保存中のゲームが見つかりません。ゲーム部屋で進行状況を確認してください。</AppText></Card>
         ) : null}
@@ -1105,6 +1145,14 @@ export default function OthelloScreen() {
             }}
           />
         </Card>
+        {game !== null ? (
+          <PrimaryButton
+            title="開始前画面へ戻る"
+            tone="secondary"
+            disabled={resultPending || transitioning}
+            onPress={returnToLobby}
+          />
+        ) : null}
         <PrimaryButton
           title="ゲーム部屋へ戻る"
           tone="secondary"
@@ -1142,23 +1190,25 @@ export default function OthelloScreen() {
         title={
           dialog === "surrender"
             ? "降参しますか？"
-            : dialog === "leave"
+            : dialog === "leave" || dialog === "lobby"
               ? "対局を保存して戻りますか？"
               : "対局をやり直しますか？"
         }
         message={
           dialog === "surrender"
             ? "この対局をあなたの敗北として、プレイ履歴に記録します。"
-            : dialog === "leave"
+            : dialog === "leave" || dialog === "lobby"
               ? "盤面と手番を保存します。次回は「続きから」で再開できます。"
               : "途中の対局を削除して、強さを選び直します。"
         }
         confirmLabel={
           dialog === "surrender"
             ? "敗北する"
-            : dialog === "leave"
-              ? "ゲーム部屋へ戻る"
-              : "やり直す"
+            : dialog === "lobby"
+              ? "開始前画面へ戻る"
+              : dialog === "leave"
+                ? "ゲーム部屋へ戻る"
+                : "やり直す"
         }
         confirmTone={
           dialog === "surrender"
@@ -1184,8 +1234,8 @@ export default function OthelloScreen() {
               winner: -1,
               passedPlayer: null,
             });
-          } else if (dialog === "leave") {
-            void saveAndLeave();
+          } else if (dialog === "leave" || dialog === "lobby") {
+            void saveAndLeave(dialog === "lobby" ? "lobby" : "games");
           } else void chooseAgain();
         }}
       />

@@ -5,6 +5,7 @@ import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
 import * as FileSystem from "expo-file-system/legacy";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -251,7 +252,7 @@ export default function RewardsScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">ご褒美</AppText>
+      <PageTitle>ご褒美</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/home-nino.png")}
         roomName="ご褒美"

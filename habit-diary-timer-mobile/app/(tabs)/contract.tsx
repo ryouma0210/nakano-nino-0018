@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -130,9 +131,9 @@ export default function ContractScreen() {
 
   return (
     <Screen>
-      <AppText variant="title" style={styles.contractText}>
+      <PageTitle titleStyle={styles.contractText}>
         契約部屋
-      </AppText>
+      </PageTitle>
       {signed ? (
         <>
           <Card style={styles.contractCard}>

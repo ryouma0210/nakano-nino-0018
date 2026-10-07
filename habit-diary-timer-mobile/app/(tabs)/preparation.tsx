@@ -5,6 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useEventListener } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -112,7 +113,7 @@ export default function PreparationScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">準備部屋</AppText>
+      <PageTitle>準備部屋</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/preparation-nino.png")}
         roomName="準備部屋"

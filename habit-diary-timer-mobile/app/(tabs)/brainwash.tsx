@@ -5,6 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -47,7 +48,7 @@ export default function BrainwashScreen() {
 
   return (
     <Screen style={styles.screen}>
-      <AppText variant="title" style={styles.title}>洗脳部屋</AppText>
+      <PageTitle titleStyle={styles.title}>洗脳部屋</PageTitle>
       <RoomConversation
         characterVideoSource={require("../../assets/videos/sennou.mp4")}
         roomName="洗脳部屋"
