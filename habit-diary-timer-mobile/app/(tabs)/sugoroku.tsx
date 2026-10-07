@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Modal, StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
@@ -24,6 +24,7 @@ import {
 import type { SugorokuSave } from "@/features/sugoroku/storage";
 import { loadRewardedSugoroku as loadSugoroku, saveRewardedSugoroku as saveSugoroku } from "@/services/gameCompletionService";
 import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
+import { matchesGameResumeRequest } from "@/features/games/progress";
 
 type DiceRollStage = "rolling" | "result" | "rule" | "adjusting" | "committing";
 type DiceRollPreview = {
@@ -106,12 +107,16 @@ function PlayHistoryModal({ visible, history, onClose, onViewLog }: {
 }
 
 export default function SugorokuScreen() {
+  const { resumeId } = useLocalSearchParams<{ resumeId?: string | string[] }>();
+  const resumeRequest = useRef(resumeId);
+  resumeRequest.current = resumeId;
   const { showError } = useAppModal();
   const { setRoomAudioScene } = useAppAudio();
   const [saved, setSaved] = useState<SugorokuSave | null>(null);
   const [game, setGame] = useState<SugorokuGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [resumeUnavailable, setResumeUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showMap, setShowMap] = useState(false);
@@ -136,8 +141,10 @@ export default function SugorokuScreen() {
 
   const refresh = useCallback(async () => {
     const version = ++generation.current;
+    const requestedId = resumeRequest.current;
     setLoading(true);
     setLoadFailed(false);
+    setResumeUnavailable(false);
     setExitAction(null);
     setShowMap(false);
     setShowHistory(false);
@@ -152,7 +159,13 @@ export default function SugorokuScreen() {
       const next = await loadSugoroku();
       if (!focused.current || generation.current !== version) return;
       setSaved(next);
-      setGame(next.current);
+      const requestedGameMissing = requestedId !== undefined && !matchesGameResumeRequest(requestedId, next.current?.id);
+      setResumeUnavailable(requestedGameMissing);
+      setGame(requestedGameMissing ? null : next.current);
+      if (matchesGameResumeRequest(requestedId, next.current?.id) && resumeRequest.current === requestedId) {
+        // A successful link is a one-time request, not a constraint on the next game.
+        router.setParams({ resumeId: undefined });
+      }
     } catch (error) {
       if (!focused.current || generation.current !== version) return;
       setLoadFailed(true);
@@ -327,6 +340,10 @@ export default function SugorokuScreen() {
             <Card>
               <AppText>保存データを読み込めません。再読み込みしてください。</AppText>
               <PrimaryButton title="再読み込み" onPress={() => void refresh()} />
+            </Card>
+          ) : resumeUnavailable ? (
+            <Card>
+              <AppText>保存中のゲームが見つかりません。ゲーム部屋で進行状況を確認してください。</AppText>
             </Card>
           ) : (
             <>

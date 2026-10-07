@@ -15,6 +15,7 @@ export default function TasksScreen() {
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [summaryError, setSummaryError] = useState(false);
   const [displayDate, setDisplayDate] = useState(() => toDateKey());
+  const [taskFilter, setTaskFilter] = useState<"all" | "pending">("pending");
   const loadVersion = useRef(0);
 
   const refreshSummary = useCallback(() => {
@@ -34,6 +35,7 @@ export default function TasksScreen() {
   useFocusEffect(useCallback(() => {
     let active = true;
     let nextDayTimer: ReturnType<typeof setTimeout> | null = null;
+    setTaskFilter("pending");
 
     function clearNextDayTimer() {
       if (nextDayTimer !== null) clearTimeout(nextDayTimer);
@@ -66,7 +68,7 @@ export default function TasksScreen() {
   }, [refreshSummary]));
 
   const pendingTasks = summary?.tasks.filter((task) => task.eligible && !task.completed) ?? [];
-  const visibleTasks = summary?.tasks ?? [];
+  const visibleTasks = taskFilter === "pending" ? pendingTasks : summary?.tasks ?? [];
 
   return (
     <Screen>
@@ -103,9 +105,30 @@ export default function TasksScreen() {
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${summary.eligibleCount > 0 ? (summary.completedCount / summary.eligibleCount) * 100 : 0}%` }]} />
             </View>
+            <AppText variant="label">今日の項目</AppText>
+            <View style={styles.taskFilters}>
+              {([
+                ["all", "すべて"],
+                ["pending", "未完了"],
+              ] as const).map(([value, label]) => (
+                <Pressable
+                  key={value}
+                  testID={`tasks-filter-${value}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: taskFilter === value }}
+                  aria-pressed={taskFilter === value}
+                  onPress={() => setTaskFilter(value)}
+                  style={({ pressed }) => [
+                    styles.taskFilter,
+                    taskFilter === value && styles.taskFilterSelected,
+                    pressed && styles.taskFilterPressed,
+                  ]}
+                >
+                  <AppText style={[styles.taskFilterText, taskFilter === value && styles.taskFilterTextSelected]}>{label}</AppText>
+                </Pressable>
+              ))}
+            </View>
             {visibleTasks.length ? (
-              <>
-                <AppText variant="label">今日の項目</AppText>
                 <View style={[styles.taskList, isDesktop && styles.desktopTaskList]}>
                 {visibleTasks.map((task) => {
                   const completed = task.eligible && task.completed;
@@ -155,7 +178,6 @@ export default function TasksScreen() {
                   );
                 })}
                 </View>
-              </>
             ) : null}
             {pendingTasks.length === 0 ? (
               <AppText style={styles.allCompleted}>今日の対象項目はすべて完了しました。</AppText>
@@ -196,6 +218,12 @@ const styles = StyleSheet.create({
   progressValue: { color: "#ffc5db", fontSize: 20, lineHeight: 28, fontWeight: "800" },
   progressTrack: { height: 6, backgroundColor: "#36232d", borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: "#dd7ca2" },
+  taskFilters: { flexDirection: "row", gap: 8 },
+  taskFilter: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#79616c", borderRadius: 6, backgroundColor: "#261d25" },
+  taskFilterSelected: { borderColor: "#dd7ca2", backgroundColor: "#f7dfe1" },
+  taskFilterPressed: { opacity: 0.8 },
+  taskFilterText: { color: "#e8dce4", fontWeight: "700", textAlign: "center" },
+  taskFilterTextSelected: { color: "#702e36" },
   taskRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 11, minHeight: 58, borderRadius: 6 },
   taskList: { gap: 12 },
   desktopTaskList: { flexDirection: "row", flexWrap: "wrap" },

@@ -4,10 +4,11 @@ import {
   AppState,
   FlatList,
   Modal,
+  Platform,
   StyleSheet,
   View,
 } from "react-native";
-import { router, useFocusEffect, useNavigation } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -51,7 +52,9 @@ import {
 import { useActiveTimer } from "@/features/endurance/useActiveTimer";
 import { createEnduranceSession, type EnduranceSession } from "@/features/endurance/storage";
 import { resolveEnduranceMedia } from "@/features/endurance/mediaResolver";
+import { attachEnduranceBeforeUnload } from "@/features/endurance/beforeUnload";
 import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
+import { matchesGameResumeRequest } from "@/features/games/progress";
 import { orderEnduranceMedia } from "@/features/endurance/mediaOrder";
 import { EnduranceFilePicker } from "@/features/endurance/EnduranceFilePicker";
 import {
@@ -70,6 +73,12 @@ import {
 
 export default function EnduranceScreen() {
   const navigation = useNavigation();
+  const { resumeId } = useLocalSearchParams<{ resumeId?: string | string[] }>();
+  const resumeRequest = useRef(resumeId);
+  resumeRequest.current = resumeId;
+  const resumeRequestId = typeof resumeId === "string" ? resumeId : null;
+  const handledResumeRequest = useRef<string | null>(null);
+  const [resumeUnavailable, setResumeUnavailable] = useState(false);
   const { setRoomAudioScene } = useAppAudio();
   const { showError, showNotice } = useAppModal();
   const [focused, setFocused] = useState(false);
@@ -164,6 +173,8 @@ export default function EnduranceScreen() {
     useCallback(() => {
       setFocused(true);
       setLoadFailed(false);
+      setResumeUnavailable(false);
+      handledResumeRequest.current = null;
       try {
         const saved = loadEndurance();
         setHistory(saved.history);
@@ -212,17 +223,10 @@ export default function EnduranceScreen() {
     pauseTimersRef.current();
     if (!checkpointRef.current(true)) event.preventDefault();
   }), [navigation]);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      pauseTimersRef.current();
-      if (checkpointRef.current(true)) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, []);
+  useEffect(() => attachEnduranceBeforeUnload(Platform.OS, () => {
+    pauseTimersRef.current();
+    return checkpointRef.current(true);
+  }), []);
   useEffect(() => {
     if (!roomAudioActive) return;
     setRoomAudioScene("endurance");
@@ -288,13 +292,16 @@ export default function EnduranceScreen() {
   function toggleFile(file: StoredFile) {
     setFileSelection((previous) => toggleEnduranceFileSelection(previous, storedFileKey(file)));
   }
-  function applySession(session: EnduranceSession, ordered: EnduranceMediaItem[]) {
+  const restoreSlideTimer = slideTimer.restore;
+  const restoreExtraTimer = extraTimer.restore;
+  const applySession = useCallback((session: EnduranceSession, ordered: EnduranceMediaItem[]) => {
     sessionRef.current = session;
     pendingTransition.current = null;
     finishedRef.current = false;
     autosaveFailedRef.current = false;
     historyFailedRef.current = false;
     setAutosaveFailed(false);
+    setResumeUnavailable(false);
     setSavedCurrent(session);
     setPreset(session.game.preset);
     setMedia(ordered);
@@ -306,9 +313,9 @@ export default function EnduranceScreen() {
     setVideoProgress(session.videoProgress);
     setInitialVideo(session.game.preset === "game-6" ? { progress: session.videoProgress, complete: session.videoComplete } : null);
     setGalleryIndex(0);
-    slideTimer.restore(session.slideTimer);
-    extraTimer.restore(session.extraTimer);
-  }
+    restoreSlideTimer(session.slideTimer);
+    restoreExtraTimer(session.extraTimer);
+  }, [restoreSlideTimer, restoreExtraTimer]);
   function writeCurrent(session: EnduranceSession) {
     const serialized = JSON.stringify(session);
     if (serialized !== lastCheckpoint.current) {
@@ -374,7 +381,7 @@ export default function EnduranceScreen() {
     if (savedCurrent) setConfirmNew(true);
     else startNew();
   }
-  async function resume() {
+  const resume = useCallback(async () => {
     const session = savedCurrent;
     if (!session || loading || loadFailed || autosaveFailed ||
       ((session.game.preset === "game-5" || session.game.preset === "game-6") && !unlocked)) return;
@@ -385,7 +392,26 @@ export default function EnduranceScreen() {
     if (!ordered) return;
     lastCheckpoint.current = JSON.stringify(session);
     applySession(session, ordered);
-  }
+    if (matchesGameResumeRequest(resumeRequest.current, session.game.id)) {
+      // Only a completed resume consumes the link; missing media keeps it retryable.
+      router.setParams({ resumeId: undefined });
+    }
+  }, [savedCurrent, loading, loadFailed, autosaveFailed, unlocked, refreshFiles, files, applySession]);
+  useEffect(() => {
+    if (!focused || loading || loadFailed || autosaveFailed || activeGame || result
+      || !resumeRequestId || handledResumeRequest.current === resumeRequestId) return;
+    if (!savedCurrent || savedCurrent.game.id !== resumeRequestId) {
+      handledResumeRequest.current = resumeRequestId;
+      setResumeUnavailable(true);
+      return;
+    }
+    if (!resumeMedia || (savedCurrent.game.preset === "custom" && fileLoadFailed)
+      || ((savedCurrent.game.preset === "game-5" || savedCurrent.game.preset === "game-6") && !unlocked)) return;
+    handledResumeRequest.current = resumeRequestId;
+    setResumeUnavailable(false);
+    void resume();
+  }, [focused, loading, loadFailed, autosaveFailed, activeGame, result, resumeRequestId, savedCurrent,
+    resumeMedia, fileLoadFailed, unlocked, resume]);
   function persist(finished: EnduranceResult) {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -494,6 +520,9 @@ export default function EnduranceScreen() {
       {loading ? <ActivityIndicator color="#fff" /> : null}
       {loadFailed ? (
         <AppText style={styles.failed}>勃起我慢を読み込めませんでした</AppText>
+      ) : null}
+      {resumeUnavailable ? (
+        <AppText style={styles.failed}>保存中のゲームが見つかりません。ゲーム部屋で進行状況を確認してください。</AppText>
       ) : null}
       {autosaveFailed ? (
         <Card>

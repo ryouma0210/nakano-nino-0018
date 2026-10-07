@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
@@ -36,6 +36,7 @@ import {
 } from "@/features/othello/storage";
 import { loadRewardedOthello as loadOthello, saveRewardedOthelloResult as saveOthelloResult } from "@/services/gameCompletionService";
 import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
+import { matchesGameResumeRequest } from "@/features/games/progress";
 import {
   CPU_ADVANTAGE_DIALOGUE_MS,
   DISC_FLIP_DURATION_MS,
@@ -77,7 +78,14 @@ type ActionTarget = { game: GameState; move: number } | null;
 type FlipAnimation = { game: GameState; from: Board; duration: number };
 
 export default function OthelloScreen() {
+  const { resumeId } = useLocalSearchParams<{ resumeId?: string | string[] }>();
+  const resumeRequest = useRef(resumeId);
+  resumeRequest.current = resumeId;
   const { playEffect, setRoomAudioScene } = useAppAudio();
+  const [resumeUnavailable, setResumeUnavailable] = useState(false);
+  const handledResume = useRef<string | string[] | undefined>(undefined);
+  const historyLoaded = useRef(false);
+  const loadedResumeId = useRef<string | string[] | undefined>(undefined);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
   const [game, setGame] = useState<GameState | null>(null);
   const [pressureAcknowledged, setPressureAcknowledged] =
@@ -144,11 +152,17 @@ export default function OthelloScreen() {
 
   const refreshHistory = useCallback(async () => {
     const version = ++historyVersion.current;
+    const requestedId = resumeRequest.current;
+    historyLoaded.current = false;
+    handledResume.current = undefined;
+    setResumeUnavailable(false);
     setHistoryLoading(true);
     setHistoryError(false);
     try {
       const next = await loadOthello();
       if (version === historyVersion.current) {
+        historyLoaded.current = true;
+        loadedResumeId.current = requestedId;
         setHistory(next.history);
         setResumable(next.current);
       }
@@ -521,32 +535,7 @@ export default function OthelloScreen() {
     }, [audioScene, setRoomAudioScene]),
   );
 
-  function start() {
-    if (
-      currentGame.current !== null ||
-      historyLoading ||
-      historyError ||
-      transitionRef.current
-    )
-      return;
-    if (resumable) {
-      openDialog("restart");
-      return;
-    }
-    jobVersion.current += 1;
-    const startedAt = new Date().toISOString();
-    setMatch({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`,
-      startedAt,
-    });
-    setFinishReason("completed");
-    setShowFinalPosition(false);
-    setSaveStatus("idle");
-    pendingResult.current = null;
-    commit(createGame());
-  }
-
-  function resume() {
+  const resume = useCallback(() => {
     if (
       !resumable ||
       currentGame.current !== null ||
@@ -572,6 +561,44 @@ export default function OthelloScreen() {
           : null,
     );
     setResumable(null);
+    setResumeUnavailable(false);
+    if (matchesGameResumeRequest(resumeRequest.current, resumable.id)) {
+      // Clearing a handled request must not refresh the board or restart autoplay.
+      router.setParams({ resumeId: undefined });
+    }
+  }, [commit, historyError, historyLoading, resumable, updateAssistance]);
+
+  useEffect(() => {
+    if (resumeId === undefined || handledResume.current === resumeId || !activeRef.current
+      || !historyLoaded.current || loadedResumeId.current !== resumeId || historyLoading || historyError || transitioning) return;
+    handledResume.current = resumeId;
+    if (matchesGameResumeRequest(resumeId, resumable?.id) && currentGame.current === null) resume();
+    else if (!matchesGameResumeRequest(resumeId, match?.id)) setResumeUnavailable(true);
+  }, [active, historyError, historyLoading, match?.id, resumable?.id, resume, resumeId, transitioning]);
+
+  function start() {
+    if (
+      currentGame.current !== null ||
+      historyLoading ||
+      historyError ||
+      transitionRef.current
+    )
+      return;
+    if (resumable) {
+      openDialog("restart");
+      return;
+    }
+    jobVersion.current += 1;
+    const startedAt = new Date().toISOString();
+    setMatch({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`,
+      startedAt,
+    });
+    setFinishReason("completed");
+    setShowFinalPosition(false);
+    setSaveStatus("idle");
+    pendingResult.current = null;
+    commit(createGame());
   }
 
   function humanMove(index: number) {
@@ -718,6 +745,9 @@ export default function OthelloScreen() {
         <AppText variant="title" accessibilityRole="header">
           オセロ
         </AppText>
+        {resumeUnavailable ? (
+          <Card><AppText>保存中のゲームが見つかりません。ゲーム部屋で進行状況を確認してください。</AppText></Card>
+        ) : null}
         {historyError ? (
           <Card>
             <AppText>オセロのセーブデータを読み込めませんでした。</AppText>
