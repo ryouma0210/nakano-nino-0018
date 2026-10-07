@@ -111,5 +111,17 @@ jobs:
         env:
           WINDOWS_INSTALLER_PATH: ${{ steps.installer.outputs.path }}
         run: |
-          rclone copyto "$env:WINDOWS_INSTALLER_PATH" "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe" --drive-root-folder-id "$env:DRIVE_FOLDER_ID" --progress
+          rclone version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $uploadFile = Get-Item -LiteralPath $env:WINDOWS_INSTALLER_PATH
+          Write-Host ("Upload file: {0} ({1} bytes)" -f $env:WINDOWS_INSTALLER_PATH, $uploadFile.Length)
+          # Retry reasons are logged at DEBUG; keep transfer stats readable in CI.
+          $rcloneUploadArgs = @(
+            "copyto", $env:WINDOWS_INSTALLER_PATH, "gdrive:nino-$env:DEPLOY_ENV-windows-setup.exe",
+            "--drive-root-folder-id", $env:DRIVE_FOLDER_ID,
+            "--log-level", "DEBUG",
+            "--stats", "30s",
+            "--stats-one-line"
+          )
+          rclone @rcloneUploadArgs
         working-directory: .

@@ -142,7 +142,12 @@ jobs:
         shell: bash
         run: |
           APK="habit-diary-timer-mobile/android/app/build/outputs/apk/release/app-release.apk"
+          rclone version
+          stat --printf='Upload file: %n (%s bytes)\n' "$APK"
+          # Retry reasons are logged at DEBUG; keep transfer stats readable in CI.
           rclone copyto "$APK" "gdrive:nino-${DEPLOY_ENV}.apk" \
             --drive-root-folder-id "$DRIVE_FOLDER_ID" \
-            --progress
+            --log-level DEBUG \
+            --stats 30s \
+            --stats-one-line
         working-directory: .
