@@ -50,6 +50,7 @@ import {
   unlockEndurance,
 } from "@/features/endurance/service";
 import { useActiveTimer } from "@/features/endurance/useActiveTimer";
+import { getEnduranceAudioScene, getEnduranceTimerMode } from "@/features/endurance/audio";
 import { createEnduranceSession, type EnduranceSession } from "@/features/endurance/storage";
 import { resolveEnduranceMedia } from "@/features/endurance/mediaResolver";
 import { attachEnduranceBeforeUnload } from "@/features/endurance/beforeUnload";
@@ -133,9 +134,10 @@ export default function EnduranceScreen() {
   const activeGame = game !== null && result === null;
   const active =
     focused && foreground && activeGame && !showHistory && !confirmRetire && !autosaveFailed;
+  const timerMode = getEnduranceTimerMode(game);
   const slideTimer = useActiveTimer(
     SLIDE_DURATION_MS,
-    active && game?.preset !== "game-6" && !game?.recovering,
+    active && timerMode === "slide",
     () => {
       showNotice(
         "時間になりました",
@@ -143,12 +145,11 @@ export default function EnduranceScreen() {
       );
     },
   );
-  const extraTimer = useActiveTimer(RECOVERY_DURATION_MS, active && game?.preset !== "game-6", () => {
+  const extraTimer = useActiveTimer(RECOVERY_DURATION_MS, active && timerMode === "recovery", () => {
     showNotice("時間になりました", "3分が経過しました。");
   });
-  const roomAudioActive = active && game?.preset !== "game-6" && (
-    (!game?.recovering && slideTimer.state.status === "running") || extraTimer.state.status === "running"
-  );
+  const roomAudioScene = getEnduranceAudioScene(game, active, slideTimer.state.status, extraTimer.state.status);
+  const roomAudioActive = roomAudioScene !== null;
   const refreshFiles = useCallback(async () => {
     const request = ++fileLoadRequest.current;
     setLoading(true);
@@ -228,10 +229,10 @@ export default function EnduranceScreen() {
     return checkpointRef.current(true);
   }), []);
   useEffect(() => {
-    if (!roomAudioActive) return;
-    setRoomAudioScene("endurance");
+    if (!roomAudioScene) return;
+    setRoomAudioScene(roomAudioScene);
     return () => setRoomAudioScene(null);
-  }, [roomAudioActive, setRoomAudioScene]);
+  }, [roomAudioScene, setRoomAudioScene]);
   useEffect(() => {
     actionLock.current = false;
   }, [game, result]);
@@ -661,7 +662,7 @@ export default function EnduranceScreen() {
                   </AppText>
                 </View>
               ) : null}
-              {game.preset !== "game-6" && !game.recovering ? (
+              {timerMode === "slide" ? (
                 <Card>
                   <AppText variant="subtitle">1分タイマー</AppText>
                   <AppText localize={false} style={styles.clock}>
@@ -694,7 +695,7 @@ export default function EnduranceScreen() {
                   我慢失敗。【チンピク】50回できたら、「3分タイマー開始」を押して、【ノンストップオナニー】を始めてください。終了後に次へ進めます。
                 </AppText>
               ) : null}
-              {game.preset !== "game-6" ? (
+              {timerMode === "recovery" ? (
               <Card>
                 <AppText variant="subtitle">3分タイマー</AppText>
                 <AppText localize={false} style={styles.clock}>

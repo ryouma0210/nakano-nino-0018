@@ -1,6 +1,6 @@
 import type { AppSettings } from "@/types/models";
 
-export type RoomAudioScene = "preparation" | "sugoroku" | "sugoroku-zone" | "sugoroku-penalty" | "othello-temptation" | "endurance";
+export type RoomAudioScene = "preparation" | "sugoroku" | "sugoroku-zone" | "sugoroku-penalty" | "othello-temptation" | "endurance" | "endurance-recovery";
 export type RoomAudioTrackName = "preparation" | "bokkisiro" | "earLick" | "ikunaSine" | "sineW" | "penaltyBgm";
 export type RoomAudioTrack = { name: RoomAudioTrackName; volume: number };
 type AudioSettings = Pick<AppSettings, "soundEnabled" | "soundVolume" | "backgroundMusicEnabled" | "musicVolume">;
@@ -17,7 +17,7 @@ export function getRoomAudioTracks(
       ? ["preparation", "bokkisiro"]
       : scene === "endurance"
         ? ["earLick", "bokkisiro"]
-        : scene === "sugoroku-zone"
+        : scene === "sugoroku-zone" || scene === "endurance-recovery"
           ? ["earLick", "ikunaSine"]
           : scene === "sugoroku-penalty"
             ? ["earLick", "sineW"]
