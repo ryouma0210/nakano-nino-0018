@@ -2,6 +2,7 @@ import { execute, queryOne, transaction } from "@/database/client";
 import { managementFinalDayMessages } from "@/constants/messages";
 import { journalRepository } from "@/repositories/journalRepository";
 import { pointRepository } from "@/repositories/rewardRepository";
+import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
 import type { ManagementCycle, ManagementDailyTask } from "@/repositories/roomRepository";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import { customCommandService } from "./customCommandService";
@@ -186,6 +187,7 @@ export const managementRouletteService = {
 
   finishDay(cycleId: number, now = new Date()): ManagementRouletteState {
     let result!: ManagementRouletteState;
+    let awarded = false;
     transaction(() => {
       const cycle = findCycle(cycleId);
       assertActive(cycle, now);
@@ -205,9 +207,10 @@ export const managementRouletteService = {
         recordDate: day.date, title: "射精管理記録", body: `本日のルーレット\n${instruction}\n\n実施完了`, recordType: "diary",
         tags: custom ? "射精管理,本日の指示,完了,削除不可,自分で追加した命令" : "射精管理,本日の指示,完了,削除不可",
       }, `射精管理タスク${task.id}`);
-      pointRepository.award(`management-task:${task.id}`, 10, "射精管理の本日の命令を完了");
+      awarded = pointRepository.award(`management-task:${task.id}`, DAILY_ROOM_POINTS.management, "射精管理の本日の命令を完了", toDateTimeKey(now), { notify: false });
       result = snapshot(cycle, meta, day, now);
     });
+    if (awarded) pointRepository.notifyChanged();
     return result;
   },
 

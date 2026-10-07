@@ -269,7 +269,7 @@ export default function RewardsScreen() {
           <AppText style={styles.stg}>STGテストポイント：99,999pt</AppText>
         ) : null}
         <AppText variant="muted">
-          本日の命令完了＝1pt／本日初回の調教完了＝5pt／射精管理の本日の命令完了＝10pt
+          敗北部屋・洗脳部屋・準備部屋・本日の命令：各5pt／調教部屋：25pt／射精管理部屋：25pt／お仕置き部屋：1pt（1日初回）
         </AppText>
       </Card>
 

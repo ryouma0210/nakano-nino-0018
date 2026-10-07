@@ -14,6 +14,11 @@ export function useActiveTimer(durationMs: number, active: boolean, onComplete: 
     setState(next);
   }, []);
   const pause = useCallback(() => commit(pauseCountdown(current.current, Date.now())), [commit]);
+  // Read the ref, not the last render: navigation can follow a timer action in the same event.
+  const getSnapshot = useCallback(() => pauseCountdown(current.current, Date.now()), []);
+  const restore = useCallback((saved: CountdownState) => {
+    commit(pauseCountdown({ ...saved }, Date.now()));
+  }, [commit]);
   const reset = useCallback(() => commit(createCountdown(durationMs)), [commit, durationMs]);
   const start = useCallback(() => {
     if (!active) return;
@@ -29,5 +34,5 @@ export function useActiveTimer(durationMs: number, active: boolean, onComplete: 
     }, 100);
     return () => { clearInterval(interval); pause(); };
   }, [active, commit, pause]);
-  return { state, start, pause, reset };
+  return { state, start, pause, reset, getSnapshot, restore };
 }

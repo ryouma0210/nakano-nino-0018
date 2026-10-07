@@ -21,7 +21,9 @@ import {
   getDiceMovementRule, getDisplayedDiceResult, getRemainingSpaces, retireGame, rollDice,
   getTileRuleDescription, ROUTE_TILES, type SugorokuGame,
 } from "@/features/sugoroku/game";
-import { loadSugoroku, saveSugoroku, type SugorokuSave } from "@/features/sugoroku/storage";
+import type { SugorokuSave } from "@/features/sugoroku/storage";
+import { loadRewardedSugoroku as loadSugoroku, saveRewardedSugoroku as saveSugoroku } from "@/services/gameCompletionService";
+import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
 
 type DiceRollStage = "rolling" | "result" | "rule" | "adjusting" | "committing";
 type DiceRollPreview = {
@@ -34,7 +36,10 @@ type ActiveDiceRoll = DiceRollPreview & { next: SugorokuGame; generation: number
 
 function GameResult({ game }: { game: SugorokuGame }) {
   if (game.outcome === "goal-1" || game.outcome === "goal-2") {
-    return <AppText style={[styles.resultLabel, styles.resultSuccess]}>{game.outcome === "goal-1" ? "ゴール①をクリア" : "ゴール②をクリア"}</AppText>;
+    return <>
+      <AppText style={[styles.resultLabel, styles.resultSuccess]}>{game.outcome === "goal-1" ? "ゴール①をクリア" : "ゴール②をクリア"}</AppText>
+      <DailyGameRewardNotice game="sugoroku" resultId={game.id} />
+    </>;
   }
   const defeatTile = getDefeatTile(game);
   return (

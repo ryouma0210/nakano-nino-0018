@@ -1,5 +1,6 @@
 import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateTimeKey } from "@/utils/date";
+import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
 import {
   rewardBrutalOrderMessages,
   rewardInsultMessages,
@@ -90,14 +91,19 @@ function reconcileLegacyLossMemoryPurchases() {
 }
 
 export const pointRepository = {
-  award(sourceKey: string, points: number, description: string) {
+  award(sourceKey: string, points: number, description: string, createdAt = toDateTimeKey(), options: { notify?: boolean } = {}) {
     const result = execute(
       "INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at) VALUES(?, ?, ?, ?)",
-      [sourceKey, points, description, toDateTimeKey()],
+      [sourceKey, points, description, createdAt],
     );
     const awarded = result.changes > 0;
-    if (awarded) pointChangeListeners.forEach((listener) => listener());
+    if (awarded && options.notify !== false) this.notifyChanged();
     return awarded;
+  },
+
+  /** Call after an enclosing transaction commits when award notifications were deferred. */
+  notifyChanged() {
+    pointChangeListeners.forEach((listener) => listener());
   },
 
   subscribe(listener: () => void) {
@@ -119,31 +125,31 @@ export const pointRepository = {
     transaction(() => {
       execute(
         `INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at)
-         SELECT 'daily-order:' || record_date, 1, '本日の命令を完了',
+         SELECT 'daily-order:' || record_date, ?, '本日の命令を完了',
                 COALESCE(created_at, ?)
            FROM journals
           WHERE title = '本日の命令記録'
             AND created_at > ?`,
-        [now, resetAt],
+        [DAILY_ROOM_POINTS.dailyOrder, now, resetAt],
       );
       execute(
         `INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at)
-         SELECT 'training:' || record_date, 5, '本日初回の調教を完了',
+         SELECT 'training:' || record_date, ?, '本日初回の調教を完了',
                 MIN(COALESCE(created_at, ?))
            FROM journals
           WHERE title = '調教完了記録'
             AND created_at > ?
           GROUP BY record_date`,
-        [now, resetAt],
+        [DAILY_ROOM_POINTS.training, now, resetAt],
       );
       execute(
         `INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at)
-         SELECT 'management-task:' || id, 10, '射精管理の本日の命令を完了',
+         SELECT 'management-task:' || id, ?, '射精管理の本日の命令を完了',
                 COALESCE(completed_at, ?)
            FROM management_daily_tasks
           WHERE completed_at IS NOT NULL
             AND completed_at > ?`,
-        [now, resetAt],
+        [DAILY_ROOM_POINTS.management, now, resetAt],
       );
     });
   },

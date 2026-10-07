@@ -10,6 +10,7 @@ import { LocalizedPressable } from "@/components/LocalizedPressable";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { pointRepository, rewardRepository } from "@/repositories/rewardRepository";
+import { dailyGameRewardService } from "@/services/dailyGameRewardService";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import {
   ATTACK_MP_COST, charmDefenseCount, clamp, clampEnemyLevel, clampPlayerLevel, createSlimes, entryPosition, ESCAPE_MP_COST,
@@ -406,6 +407,7 @@ export default function OutsideScreen() {
   const [mapArea, setMapArea] = useState<MapArea>("center");
   const [isMovingArea, setIsMovingArea] = useState(false);
   const moveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingVictoryReward = useRef<{ id: string; completedAt: string } | null>(null);
   const [mapStep, setMapStep] = useState<MapStep>(0);
   const [mapPosition, setMapPosition] = useState<MapPosition>(startPositions.center);
   const [playerFacing, setPlayerFacing] = useState<Direction>("down");
@@ -677,6 +679,7 @@ export default function OutsideScreen() {
   }
 
   function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
+    pendingVictoryReward.current = null;
     setEncounterStage(succubus.stage);
     setPhase("battle");
     setBattleMenu("root");
@@ -1349,6 +1352,18 @@ export default function OutsideScreen() {
     const attackMp = clamp(battle.mp - ATTACK_MP_COST);
     setPendingDamageQueue((items) => [...items, { target: "enemy", amount: Math.round(attackDamage) }]);
     if (nextEnemyHp <= 0) {
+      const victory = pendingVictoryReward.current ?? {
+        id: `succubus-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+        completedAt: new Date().toISOString(),
+      };
+      pendingVictoryReward.current = victory;
+      let victoryPoints: number;
+      try {
+        victoryPoints = dailyGameRewardService.award("succubus", victory.id, victory.completedAt).points;
+      } catch {
+        setMessage("クリア報酬を保存できませんでした。もう一度攻撃して再試行してください。");
+        return;
+      }
       const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
       const victoryLevel = clampPlayerLevel(level + 20);
       setBattle(nextBattle);
@@ -1356,7 +1371,7 @@ export default function OutsideScreen() {
       savePlayerStats(victoryLevel, nextBattle.hp, nextBattle.mp);
       setPhase("result");
       recordOutsideAchievement("victory", succubus.stage);
-      setResultSummary(`勝利経験値を獲得しました。\nLv.${level} → Lv.${victoryLevel}（+${victoryLevel - level}）\nサキュバス戦でのPt獲得はありません。`);
+      setResultSummary(`勝利経験値を獲得しました。\nLv.${level} → Lv.${victoryLevel}（+${victoryLevel - level}）\n${victoryPoints > 0 ? "本日初回クリア報酬：＋100Pt" : "本日の討伐報酬は受取済みです。"}`);
       setMessage(battleLines[succubus.stage].win);
       return;
     }
@@ -2262,7 +2277,7 @@ export default function OutsideScreen() {
               <AppText style={styles.victoryGuideTitle}>勝利した場合</AppText>
               <AppText style={styles.warningBody}>
                 ・スライム勝利：1体につきレベルが1上がり、10Ptを獲得します（一日最大100Pt）。{"\n"}
-                ・サキュバス勝利：経験値としてレベルが20上がります。Ptは付与されません。
+                ・サキュバス勝利：経験値としてレベルが20上がります。本日初回の勝利で100Ptを獲得できます。
               </AppText>
             </View>
 

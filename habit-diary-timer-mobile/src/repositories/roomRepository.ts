@@ -4,6 +4,8 @@ import { journalRepository } from "@/repositories/journalRepository";
 import { customCommandService } from "@/services/customCommandService";
 import { createMissingManagementTasks } from "../services/managementTaskService";
 import { hasManagementRoulette, isCompletedManagementRouletteDay, managementRouletteService, removeManagementRouletteCycle } from "../services/managementRouletteService";
+import { pointRepository } from "@/repositories/rewardRepository";
+import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
 
 export type PreparationRecord = {
   record_date: string;
@@ -76,6 +78,7 @@ export const preparationRepository = {
 
   save(checks: string[], date = toDateKey()) {
     const now = toDateTimeKey();
+    let awarded = false;
     const body = `準備部屋でのチェック項目\n${checks.map((item) => `✅ ${item}`).join("\n")}\n\n本日も調教よろしくお願いいたします。`;
     transaction(() => {
       execute(
@@ -93,19 +96,23 @@ export const preparationRepository = {
            VALUES(?, ?, '準備部屋チェック', ?, 'diary', 0, '準備部屋,チェック', ?, ?)`,
           [date, toTimeKey(), body, now, now],
         );
+        if (date === toDateKey()) {
+          awarded = pointRepository.award(`preparation:${date}`, DAILY_ROOM_POINTS.preparation, "本日初回の準備を完了", now, { notify: false });
+        }
+      }
+      const savedRecord = queryOne<PreparationRecord>(
+        "SELECT * FROM preparation_records WHERE record_date = ?",
+        [date],
+      );
+      const savedJournal = queryOne<{ id: number }>(
+        "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%準備部屋%' LIMIT 1",
+        [date],
+      );
+      if (!savedRecord || !savedJournal) {
+        throw new Error("準備部屋の保存結果を取得できませんでした。");
       }
     });
-    const savedRecord = queryOne<PreparationRecord>(
-      "SELECT * FROM preparation_records WHERE record_date = ?",
-      [date],
-    );
-    const savedJournal = queryOne<{ id: number }>(
-      "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%準備部屋%' LIMIT 1",
-      [date],
-    );
-    if (!savedRecord || !savedJournal) {
-      throw new Error("準備部屋の保存結果を取得できませんでした。");
-    }
+    if (awarded) pointRepository.notifyChanged();
   },
 };
 
@@ -124,6 +131,7 @@ export const defeatRepository = {
 
   save(checks: string[], date = toDateKey()) {
     const now = toDateTimeKey();
+    let awarded = false;
     const body = `敗北部屋での強制チェック項目\n${checks.map((item) => `✅ ${item}`).join("\n")}\n\n本日の完全敗北を認めました♡`;
     transaction(() => {
       const existing = queryOne<{ id: number }>(
@@ -138,15 +146,19 @@ export const defeatRepository = {
            VALUES(?, ?, '敗北部屋記録', ?, 'diary', 0, '敗北部屋,チェック,調教記録', ?, ?)`,
           [date, toTimeKey(), body, now, now],
         );
+        if (date === toDateKey()) {
+          awarded = pointRepository.award(`defeat:${date}`, DAILY_ROOM_POINTS.defeat, "本日初回の敗北部屋を完了", now, { notify: false });
+        }
+      }
+      const savedJournal = queryOne<{ id: number }>(
+        "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%敗北部屋%' LIMIT 1",
+        [date],
+      );
+      if (!savedJournal) {
+        throw new Error("敗北部屋の保存結果を取得できませんでした。");
       }
     });
-    const savedJournal = queryOne<{ id: number }>(
-      "SELECT id FROM journals WHERE record_date = ? AND tags LIKE '%敗北部屋%' LIMIT 1",
-      [date],
-    );
-    if (!savedJournal) {
-      throw new Error("敗北部屋の保存結果を取得できませんでした。");
-    }
+    if (awarded) pointRepository.notifyChanged();
   },
 };
 

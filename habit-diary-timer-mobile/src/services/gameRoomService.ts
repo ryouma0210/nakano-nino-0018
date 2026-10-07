@@ -6,6 +6,7 @@ import { customCommandService } from "./customCommandService";
 import { journalRepository } from "@/repositories/journalRepository";
 import { contractSettingsSchema, dailyOrderSchema } from "@/schemas/storage";
 import { parseStoredJson } from "@/utils/storageValidation";
+import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
 
 const CONTRACT_KEY = "nino-room:contract";
 const ORDER_PREFIX = "nino-room:daily-order:";
@@ -105,7 +106,7 @@ async function loadOrder(date: string): Promise<DailyOrder | null> {
       "SELECT setting_value FROM app_settings WHERE setting_key='points_reset_at'",
     )?.setting_value ?? "";
     if (journal && journal.created_at > resetAt) {
-      pointRepository.award(`daily-order:${date}`, 1, "本日の命令を完了");
+      pointRepository.award(`daily-order:${date}`, DAILY_ROOM_POINTS.dailyOrder, "本日の命令を完了");
     }
   }
   return order;
@@ -139,7 +140,7 @@ export const dailyOrderService = {
       if (!existing.completed) {
         await AsyncStorage.setItem(`${ORDER_PREFIX}${date}`, JSON.stringify(next));
       }
-      pointRepository.award(`daily-order:${date}`, 1, "本日の命令を完了");
+      pointRepository.award(`daily-order:${date}`, DAILY_ROOM_POINTS.dailyOrder, "本日の命令を完了");
       saveOrderJournal(next);
       return next;
     });

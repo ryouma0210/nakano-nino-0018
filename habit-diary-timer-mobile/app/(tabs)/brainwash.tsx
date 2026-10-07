@@ -12,8 +12,7 @@ import { Screen } from "@/components/Screen";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
 import { roomMessages } from "@/constants/messages";
-import { journalRepository } from "@/repositories/journalRepository";
-import { toDateKey } from "@/utils/date";
+import { brainwashRepository } from "@/repositories/brainwashRepository";
 
 export default function BrainwashScreen() {
   const insets = useSafeAreaInsets();
@@ -24,7 +23,7 @@ export default function BrainwashScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setCompleted(hasCompletedToday());
+      setCompleted(brainwashRepository.hasCompleted());
       const audioEnabled = Boolean(settings?.soundEnabled);
       setSessionAudioActive(audioEnabled);
       if (audioEnabled) playEffect("trainingStart");
@@ -38,19 +37,7 @@ export default function BrainwashScreen() {
   function complete() {
     if (completed) return;
     try {
-      journalRepository.upsertSystemRecord(
-        {
-          recordDate: toDateKey(),
-          title: "洗脳部屋記録",
-          body: "洗脳完了しました。",
-          recordType: "diary",
-          tags: "洗脳部屋,調教記録",
-        },
-        `洗脳部屋${toDateKey()}`,
-      );
-      if (!hasCompletedToday()) {
-        throw new Error("洗脳部屋の保存結果を取得できませんでした。");
-      }
+      brainwashRepository.complete();
       setCompleted(true);
       showNotice("洗脳完了", "洗脳完了しました。");
     } catch (error) {
@@ -126,18 +113,6 @@ export default function BrainwashScreen() {
         </View>
       </Modal>
     </Screen>
-  );
-}
-
-function hasCompletedToday() {
-  return Boolean(
-    journalRepository
-      .list("洗脳部屋")
-      .some(
-        (journal) =>
-          journal.record_date === toDateKey() &&
-          journal.tags?.includes(`洗脳部屋${toDateKey()}`),
-      ),
   );
 }
 
