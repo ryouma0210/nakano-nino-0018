@@ -6,13 +6,16 @@ import { trainingNeedsPunishment } from "../features/training/trainingOutcome";
 import type { ManagementCycle, ManagementDailyTask, ManagementMode } from "../repositories/roomRepository";
 import type { DailyOrder } from "./gameRoomService";
 import { MANAGEMENT_MINIMUM_DAILY_SPINS, MANAGEMENT_ROULETTE_KEY, parseManagementRoulette, type ManagementRouletteSave } from "./managementRouletteStorage";
+import { DAILY_GAME_POINTS, dailyGameRewardService, type DailyRewardGame } from "./dailyGameRewardService";
+import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
+import { loginBonusRepository } from "../repositories/loginBonusRepository";
 
 export type HomeTask = {
   id: string;
   title: string;
   detail?: string;
   dayProgress?: { currentDay: number; totalDays: number };
-  pointProgress?: { earned: number; limit: number };
+  pointProgress: { earned: number; limit: number };
   management?: { mode: ManagementMode | null; deadlineAt: string | null; rouletteSpins: number; rouletteRequired: number };
   eligible: boolean;
   completed: boolean;
@@ -43,6 +46,10 @@ type HomeSnapshot = {
   cycles: ManagementCycle[];
   managementTasks: ManagementDailyTask[];
   managementRoulette?: ManagementRouletteSave;
+  dailyGameRewards?: { date: string; completedGames: DailyRewardGame[] };
+  outsideDailyQuests?: { date: string; claimedQuestIds: string[] };
+  pointTransactions?: readonly { source_key: string; points: number }[];
+  loginBonus?: { date: string; claimPoints: number };
 };
 
 type HomeJournal = {
@@ -69,11 +76,28 @@ const taskDisplayOrder: Record<string, number> = {
   training: 5,
   management: 6,
   punishment: 7,
-  outside: 8,
+  "outside-daily": 8,
+  outside: 9,
+  succubus: 10,
+  sugoroku: 11,
+  othello: 12,
+  endurance: 13,
 };
 const outsideDailyPointLimit = 100;
+// Match the three 10-point daily rewards and dated claim flags in outside/quests.ts.
+const outsideDailyQuestIds = ["slime", "purify", "escape"];
+const outsideDailyQuestReward = 10;
 
 export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
+  const pointProgress = (sourceKey: string, limit: number) => {
+    const points = snapshot.pointTransactions?.find((row) => row.source_key === sourceKey)?.points ?? 0;
+    return { earned: Number.isFinite(points) ? Math.max(0, Math.min(limit, points)) : 0, limit };
+  };
+  const receivedLoginPoints = snapshot.pointTransactions?.find((row) => row.source_key === `login-bonus:${snapshot.date}`)?.points;
+  const loginPointLimit = receivedLoginPoints !== undefined && [1, 10, 50].includes(receivedLoginPoints)
+    ? receivedLoginPoints
+    : snapshot.loginBonus?.date === snapshot.date && [1, 10, 50].includes(snapshot.loginBonus.claimPoints)
+      ? snapshot.loginBonus.claimPoints : 1;
   const order = snapshot.order?.date === snapshot.date ? snapshot.order : null;
   const todayJournals = snapshot.journals.filter((journal) => journal.record_date === snapshot.date);
   const journalHasTags = (journal: HomeJournal, ...tags: string[]) => {
@@ -96,10 +120,16 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
   const outsideEarnedPoints = Number.isFinite(snapshot.outsideEarnedPoints)
     ? Math.max(0, Math.min(outsideDailyPointLimit, snapshot.outsideEarnedPoints)) : 0;
   const outsideCompleted = outsideEarnedPoints >= outsideDailyPointLimit;
+  const claimedDailyQuests = new Set(snapshot.outsideDailyQuests?.date === snapshot.date
+    ? snapshot.outsideDailyQuests.claimedQuestIds : []);
+  const outsideDailyQuestPoints = outsideDailyQuestIds.filter((id) => claimedDailyQuests.has(id)).length * outsideDailyQuestReward;
+  const outsideDailyQuestLimit = outsideDailyQuestIds.length * outsideDailyQuestReward;
+  const outsideDailyQuestsCompleted = outsideDailyQuestPoints === outsideDailyQuestLimit;
   const tasks: HomeTask[] = [
     {
       id: "login-bonus",
       title: "ログインボーナス",
+      pointProgress: pointProgress(`login-bonus:${snapshot.date}`, loginPointLimit),
       eligible: true,
       completed: snapshot.loginClaimed,
       status: snapshot.loginClaimed ? "受取済み" : "未受取",
@@ -108,6 +138,7 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
     {
       id: "daily-order",
       title: "本日の命令",
+      pointProgress: pointProgress(`daily-order:${snapshot.date}`, DAILY_ROOM_POINTS.dailyOrder),
       eligible: true,
       completed: order?.completed ?? false,
       status: order?.completed ? "完了済み" : order ? "未完了" : "未抽選",
@@ -118,20 +149,42 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
   const rooms = [
     {
       id: "preparation", title: "準備部屋", href: "/(tabs)/preparation",
+      pointProgress: pointProgress(`preparation:${snapshot.date}`, DAILY_ROOM_POINTS.preparation),
       completed: snapshot.preparations.some((record) => record.record_date === snapshot.date && Boolean(record.completed_at))
         && hasJournalTags("準備部屋"),
     },
     {
       id: "brainwash", title: "洗脳部屋", href: "/(tabs)/brainwash",
+      pointProgress: pointProgress(`brainwash:${snapshot.date}`, DAILY_ROOM_POINTS.brainwash),
       completed: hasJournalTags(`洗脳部屋${snapshot.date}`),
     },
     {
-      id: "training", title: "調教部屋", href: "/(tabs)/habits",
+      id: "training", title: "調教部屋（初回のみ）", href: "/(tabs)/habits",
+      pointProgress: pointProgress(`training:${snapshot.date}`, DAILY_ROOM_POINTS.training),
       completed: hasJournalTags("調教", "完了", "射精記録"),
     },
   ];
   tasks.push(...rooms.map((room) => ({ ...room, eligible: true, status: room.completed ? "完了済み" : "未完了" })));
+  const completedGames = new Set(snapshot.dailyGameRewards?.date === snapshot.date ? snapshot.dailyGameRewards.completedGames : []);
+  const gameTasks: { id: DailyRewardGame; title: string; detail: string; href: string }[] = [
+    { id: "succubus", title: "館の外", detail: "サキュバス討伐", href: "/(tabs)/outside" },
+    { id: "sugoroku", title: "すごろく", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/sugoroku" },
+    { id: "endurance", title: "勃起我慢", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/endurance" },
+    { id: "othello", title: "オセロ", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/othello" },
+  ];
+  tasks.push(...gameTasks.map((game) => {
+    const completed = completedGames.has(game.id);
+    const limit = DAILY_GAME_POINTS[game.id];
+    return { ...game, eligible: true, completed, status: completed ? "完了済み" : "未完了", pointProgress: { earned: completed ? limit : 0, limit } };
+  }));
   tasks.push(
+    {
+      id: "outside-daily", title: "館の外", detail: "デイリー", href: "/(tabs)/outside",
+      pointProgress: { earned: outsideDailyQuestPoints, limit: outsideDailyQuestLimit },
+      eligible: true,
+      completed: outsideDailyQuestsCompleted,
+      status: outsideDailyQuestsCompleted ? "完了済み" : "未完了",
+    },
     {
       id: "outside", title: "館の外", detail: "スライム倒し", href: "/(tabs)/outside",
       pointProgress: { earned: outsideEarnedPoints, limit: outsideDailyPointLimit },
@@ -140,13 +193,15 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
       status: outsideCompleted ? "完了済み" : "未完了",
     },
     {
-      id: "punishment", title: "お仕置き部屋", href: "/(tabs)/timer",
+      id: "punishment", title: "お仕置き部屋（初回のみ）", href: "/(tabs)/timer",
+      pointProgress: pointProgress(`punishment:${snapshot.date}`, DAILY_ROOM_POINTS.punishment),
       eligible: punishmentRequired,
       completed: punishmentCompleted,
       status: !punishmentRequired ? "対象外" : punishmentCompleted ? "完了済み" : "未完了",
     },
     {
       id: "defeat", title: "敗北部屋",
+      pointProgress: pointProgress(`defeat:${snapshot.date}`, DAILY_ROOM_POINTS.defeat),
       href: snapshot.contractSigned ? "/(tabs)/defeat" : "/(tabs)/contract",
       eligible: snapshot.contractSigned,
       completed: defeatCompleted,
@@ -182,6 +237,8 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
     tasks.push({
       id: `management:${cycle.id}`,
       title: "射精管理部屋",
+      pointProgress: task ? pointProgress(`management-task:${task.id}`, DAILY_ROOM_POINTS.management)
+        : { earned: 0, limit: DAILY_ROOM_POINTS.management },
       detail: cycle.mode === "release" ? "貞操帯なし" : "貞操帯あり",
       dayProgress: { currentDay, totalDays },
       management: {
@@ -201,6 +258,7 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
     tasks.push({
       id: "management", title: "射精管理部屋", href: "/(tabs)/management",
       eligible: false, completed: false, status: "管理期間外",
+      pointProgress: { earned: 0, limit: DAILY_ROOM_POINTS.management },
       management: { mode: null, deadlineAt: null, rouletteSpins: 0, rouletteRequired: MANAGEMENT_MINIMUM_DAILY_SPINS },
     });
   }
@@ -259,10 +317,7 @@ export const homeSummaryService = {
     const runtimeAppEnv = process.env.EXPO_PUBLIC_APP_ENV
       ?? (globalThis as typeof globalThis & { __NINO_APP_ENV__?: string }).__NINO_APP_ENV__;
     const stgBonus = runtimeAppEnv === "stg" ? 99999 : 0;
-    const lastClaimedDate = queryOne<{ setting_value: string }>(
-      "SELECT setting_value FROM app_settings WHERE setting_key=? LIMIT 1",
-      ["login_bonus_last_claimed_date"],
-    )?.setting_value;
+    const loginBonus = loginBonusRepository.status(date);
     const outsidePointDate = queryOne<{ setting_value: string }>(
       "SELECT setting_value FROM app_settings WHERE setting_key=? LIMIT 1",
       ["outside_game_point_date"],
@@ -271,13 +326,34 @@ export const homeSummaryService = {
       "SELECT setting_value FROM app_settings WHERE setting_key=? LIMIT 1",
       ["outside_game_point_today"],
     )?.setting_value) : 0;
+    const managementTasks = query<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE record_date=?", [date]);
+    const pointSourceKeys = [
+      ...["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "punishment"].map((id) => `${id}:${date}`),
+      ...managementTasks.filter((task) => task.record_date === date).map((task) => `management-task:${task.id}`),
+    ];
+    const pointTransactions = pointSourceKeys.map((source_key) => ({
+      source_key,
+      // The source key owns the completion day, even if its reward was saved later.
+      points: queryOne<{ points: number }>("SELECT points FROM point_transactions WHERE source_key=?", [source_key])?.points ?? 0,
+    }));
 
     return buildHomeSummary({
       date,
       availablePoints: Number(activityPoints) + stgBonus - Number(spent),
       todayEarnedPoints: Number(todayEarnedPoints),
       outsideEarnedPoints,
-      loginClaimed: lastClaimedDate === date,
+      pointTransactions,
+      loginBonus: { date, claimPoints: loginBonus.claimPoints },
+      outsideDailyQuests: {
+        date,
+        // dailyQuestViews() initializes its baseline; the home summary only reads claims.
+        claimedQuestIds: outsideDailyQuestIds.filter((id) => queryOne<{ setting_value: string }>(
+          "SELECT setting_value FROM app_settings WHERE setting_key=? LIMIT 1",
+          [`outside_daily_quest_claimed_${date}_${id}`],
+        )?.setting_value === "1"),
+      },
+      dailyGameRewards: { date, completedGames: dailyGameRewardService.completedGames(date) },
+      loginClaimed: loginBonus.alreadyClaimed,
       order,
       contractSigned,
       journals: query<HomeJournal>("SELECT id, record_date, tags, created_at, duration_seconds FROM journals WHERE record_date=?", [date]),
@@ -287,7 +363,7 @@ export const homeSummaryService = {
         ["お仕置き", date],
       ),
       cycles: query<ManagementCycle>("SELECT * FROM management_cycles"),
-      managementTasks: query<ManagementDailyTask>("SELECT * FROM management_daily_tasks WHERE record_date=?", [date]),
+      managementTasks,
       managementRoulette: parseManagementRoulette(queryOne<{ setting_value: string }>(
         "SELECT setting_value FROM app_settings WHERE setting_key=? LIMIT 1", [MANAGEMENT_ROULETTE_KEY],
       )?.setting_value ?? null),

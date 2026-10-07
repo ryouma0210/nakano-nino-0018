@@ -2,6 +2,7 @@ import { FlatList, Modal, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
 import type { OthelloHistoryEntry } from "./storage";
 
 type Props = {
@@ -51,6 +52,7 @@ export function OthelloHistoryModal({ visible, history, loading, failed, onRetry
                     <View style={styles.row}><AppText>あなた（白）</AppText><AppText localize={false}>{item.humanCount}</AppText></View>
                     <View style={styles.row}><AppText>二乃様（紫）</AppText><AppText localize={false}>{item.cpuCount}</AppText></View>
                     <AppText variant="muted">{item.reason === "surrender" ? "降参" : "対局終了"}</AppText>
+                    <DailyGameRewardNotice game="othello" resultId={item.id} />
                   </View>
                 );
               }}

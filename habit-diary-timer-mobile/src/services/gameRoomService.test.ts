@@ -98,6 +98,21 @@ describe("completed daily order history", () => {
 });
 
 describe("daily order mutations", () => {
+  it("keeps a previously awarded 1pt and grants the new 5pt once on a later day", async () => {
+    seed(order({ completed: true }));
+    awarded.set(`daily-order:${today}`, 1);
+    await dailyOrderService.load();
+    await dailyOrderService.complete(order());
+    const next = order({ date: "2026-09-17" });
+    seed(next);
+    await dailyOrderService.complete(next);
+    await dailyOrderService.complete(next);
+    expect([...awarded.entries()]).toEqual([
+      [`daily-order:${today}`, 1],
+      ["daily-order:2026-09-17", 5],
+    ]);
+  });
+
   it("keeps concurrent and repeated draws on the same saved result", async () => {
     vi.mocked(Math.random).mockReturnValueOnce(0).mockReturnValue(0.99);
     const draws = await Promise.all([dailyOrderService.draw(), dailyOrderService.draw(), dailyOrderService.draw()]);
@@ -113,8 +128,8 @@ describe("daily order mutations", () => {
     expect(await Promise.all([dailyOrderService.complete(order()), dailyOrderService.complete(order())]))
       .toEqual([completed, completed]);
     expect(storage.setItem).toHaveBeenCalledOnce();
-    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 1]]);
-    expect(points.award.mock.calls.every(([key, value]) => key === `daily-order:${today}` && value === 1)).toBe(true);
+    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 5]]);
+    expect(points.award.mock.calls.every(([key, value]) => key === `daily-order:${today}` && value === 5)).toBe(true);
     expect(journals.size).toBe(1);
     expect(journal.upsertSystemRecord).toHaveBeenLastCalledWith({
       recordDate: today, title: "本日の命令記録", body: "本日の命令\nOrder A\n\n実施完了",
@@ -154,7 +169,7 @@ describe("daily order mutations", () => {
     expect(points.award).not.toHaveBeenCalled();
     expect(journal.upsertSystemRecord).not.toHaveBeenCalled();
     expect(await dailyOrderService.complete(order())).toEqual(order({ completed: true }));
-    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 1]]);
+    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 5]]);
   });
 
   it.each(["award", "journal"])("repairs a %s failure by retrying the saved completion without duplicating points", async (step) => {
@@ -166,7 +181,7 @@ describe("daily order mutations", () => {
     expect(JSON.parse(saved.get(`${prefix}${today}`)!)).toEqual(order({ completed: true }));
     expect(await dailyOrderService.complete(order())).toEqual(order({ completed: true }));
     expect(storage.setItem).toHaveBeenCalledOnce();
-    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 1]]);
+    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 5]]);
     expect(journals.size).toBe(1);
   });
 
@@ -178,11 +193,11 @@ describe("daily order mutations", () => {
     await expect(dailyOrderService.complete(order())).rejects.toBe(failure);
 
     expect(await dailyOrderService.load()).toEqual(order({ completed: true }));
-    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 1]]);
+    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 5]]);
     expect(journals.size).toBe(1);
     expect(storage.setItem).toHaveBeenCalledOnce();
     expect(await dailyOrderService.load()).toEqual(order({ completed: true }));
-    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 1]]);
+    expect([...awarded.entries()]).toEqual([[`daily-order:${today}`, 5]]);
   });
 
   it("propagates diary failures from load and draw without replacing a saved completed order", async () => {
@@ -237,7 +252,7 @@ describe("daily order mutations", () => {
     await dailyOrderService.load();
     await dailyOrderService.load();
     expect(webClient.query("SELECT * FROM point_transactions")).toEqual([
-      expect.objectContaining({ source_key: `daily-order:${today}`, points: 1 }),
+      expect.objectContaining({ source_key: `daily-order:${today}`, points: 5 }),
     ]);
     webClient.execute("DELETE FROM point_transactions");
     webClient.execute("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["points_reset_at", `${today} 12:01:00`]);

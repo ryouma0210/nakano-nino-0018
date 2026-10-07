@@ -88,8 +88,7 @@ function monthDays(monthKey: string) {
 }
 
 export const loginBonusRepository = {
-  status(): LoginBonusStatus {
-    const today = toDateKey();
+  status(today = toDateKey()): LoginBonusStatus {
     const lastClaimedDate = readSetting(lastClaimedKey);
     const currentStreak = readNumberSetting(streakKey);
     const alreadyClaimed = lastClaimedDate === today;

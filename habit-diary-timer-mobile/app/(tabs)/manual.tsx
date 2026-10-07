@@ -71,7 +71,7 @@ export default function ManualScreen() {
                   <AppText variant="subtitle" style={styles.entryTitle}>{entry.title}</AppText>
                   <AppText localize={false} style={styles.indicator}>{expanded ? "−" : "+"}</AppText>
                 </View>
-                <AppText variant="muted">{entry.summary}</AppText>
+                {entry.summary ? <AppText variant="muted">{entry.summary}</AppText> : null}
               </Pressable>
               {expanded ? (
                 <View style={styles.details} testID={`manual-details-${entry.id}`}>

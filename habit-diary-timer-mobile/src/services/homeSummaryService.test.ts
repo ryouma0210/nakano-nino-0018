@@ -2,11 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildHomeSummary, homeSummaryService } from "./homeSummaryService";
 import * as webClient from "../database/client.web";
 import { MANAGEMENT_ROULETTE_KEY, type ManagementRouletteCycle, type ManagementRouletteDay, type ManagementRouletteSave } from "./managementRouletteStorage";
+import type { DailyRewardGame } from "./dailyGameRewardService";
+import { gameRewardSourceKey } from "./dailyGameRewardStorage";
 
 const storage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn() }));
-const database = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const database = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn(), transaction: vi.fn() }));
+const points = vi.hoisted(() => ({ award: vi.fn() }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: storage }));
 vi.mock("../database/client", () => database);
+vi.mock("@/database/client", () => database);
+vi.mock("@/repositories/rewardRepository", () => ({ pointRepository: points }));
+vi.mock("@/utils/date", () => ({ toDateKey: () => "2026-09-16" }));
 vi.mock("../utils/date", () => ({ toDateKey: () => "2026-09-16" }));
 
 const today = "2026-09-16";
@@ -16,7 +22,9 @@ const cycle = (id: number, overrides = {}) => ({
 const task = (id: number, cycleId: number, overrides = {}) => ({
   id, cycle_id: cycleId, record_date: today, instruction: "本日の指示", completed_at: null, ...overrides,
 });
-const dailyTaskIds = ["login-bonus", "brainwash", "preparation", "daily-order", "training", "outside"];
+const gameTaskIds: DailyRewardGame[] = ["succubus", "sugoroku", "othello", "endurance"];
+const dailyQuestIds = ["slime", "purify", "escape"];
+const dailyTaskIds = ["login-bonus", "brainwash", "preparation", "daily-order", "training", "outside-daily", "outside", ...gameTaskIds];
 const defaultTaskIds = [...dailyTaskIds, "defeat", "management", "punishment"];
 const baseSnapshot = () => ({
   date: today, availablePoints: 120, todayEarnedPoints: 20, outsideEarnedPoints: 0, loginClaimed: false, order: null,
@@ -54,19 +62,21 @@ describe("home daily progress", () => {
     });
     expect(summary.tasks.map((item) => item.id)).toEqual(defaultTaskIds);
     expect(summary.tasks.filter((item) => item.eligible).map((item) => item.id)).toEqual(dailyTaskIds);
-    expect(summary.eligibleCount).toBe(6);
+    expect(summary.eligibleCount).toBe(11);
     expect(summary.completedCount).toBe(0);
     expect(summary.tasks.find((item) => item.id === "daily-order")?.status).toBe("未抽選");
     expect(summary.tasks.slice(-3)).toEqual([
-      { id: "defeat", title: "敗北部屋", href: "/(tabs)/contract", eligible: false, completed: false, status: "未契約" },
-      { id: "management", title: "射精管理部屋", href: "/(tabs)/management", eligible: false, completed: false, status: "管理期間外", management: { mode: null, deadlineAt: null, rouletteSpins: 0, rouletteRequired: 2 } },
-      { id: "punishment", title: "お仕置き部屋", href: "/(tabs)/timer", eligible: false, completed: false, status: "対象外" },
+      { id: "defeat", title: "敗北部屋", href: "/(tabs)/contract", eligible: false, completed: false, status: "未契約", pointProgress: { earned: 0, limit: 5 } },
+      { id: "management", title: "射精管理部屋", href: "/(tabs)/management", eligible: false, completed: false, status: "管理期間外", pointProgress: { earned: 0, limit: 25 }, management: { mode: null, deadlineAt: null, rouletteSpins: 0, rouletteRequired: 2 } },
+      { id: "punishment", title: "お仕置き部屋（初回のみ）", href: "/(tabs)/timer", eligible: false, completed: false, status: "対象外", pointProgress: { earned: 0, limit: 1 } },
     ]);
   });
 
-  it("can finish all six eligible tasks while keeping the three unavailable destinations", () => {
+  it("can finish all eleven eligible tasks while keeping the three unavailable destinations", () => {
     const summary = buildHomeSummary({
       ...baseSnapshot(), loginClaimed: true, outsideEarnedPoints: 100,
+      outsideDailyQuests: { date: today, claimedQuestIds: dailyQuestIds },
+      dailyGameRewards: { date: today, completedGames: gameTaskIds },
       order: { date: today, text: "今日の命令", completed: true },
       preparations: [{ record_date: today, completed_at: `${today} 12:00:00` }],
       journals: [
@@ -78,9 +88,41 @@ describe("home daily progress", () => {
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
     expect(summary.tasks.map((item) => item.id)).toEqual(defaultTaskIds);
-    expect(summary.completedCount).toBe(6);
-    expect(summary.eligibleCount).toBe(6);
+    expect(summary.completedCount).toBe(11);
+    expect(summary.eligibleCount).toBe(11);
     expect(summary.tasks.filter((item) => !item.eligible).every((item) => !item.completed)).toBe(true);
+  });
+
+  it.each([
+    { claimedQuestIds: [], earned: 0 },
+    { claimedQuestIds: ["slime"], earned: 10 },
+    { claimedQuestIds: ["slime", "purify"], earned: 20 },
+    { claimedQuestIds: dailyQuestIds, earned: 30 },
+    { claimedQuestIds: ["slime", "slime", "stage-1", "unknown"], earned: 10 },
+  ])("counts received daily quest rewards separately from slime hunting and succubus rewards: $earned", ({ claimedQuestIds, earned }) => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), outsideDailyQuests: { date: today, claimedQuestIds },
+    });
+    const completed = earned === 30;
+    expect(summary.tasks.find((item) => item.id === "outside-daily")).toEqual({
+      id: "outside-daily", title: "館の外", detail: "デイリー", href: "/(tabs)/outside",
+      eligible: true, completed, status: completed ? "完了済み" : "未完了", pointProgress: { earned, limit: 30 },
+    });
+    expect(summary.tasks.find((item) => item.id === "outside"))
+      .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 100 } });
+    expect(summary.tasks.find((item) => item.id === "succubus"))
+      .toMatchObject({ title: "館の外", detail: "サキュバス討伐", completed: false, pointProgress: { earned: 0, limit: 100 } });
+    expect(summary.eligibleCount).toBe(11);
+    expect(summary.completedCount).toBe(completed ? 1 : 0);
+  });
+
+  it.each(["2026-09-15", "2026-09-17"])("ignores daily quest rewards received on another day: %s", (date) => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), outsideDailyQuests: { date, claimedQuestIds: dailyQuestIds },
+    });
+    expect(summary.tasks.find((item) => item.id === "outside-daily"))
+      .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 30 } });
+    expect(summary.completedCount).toBe(0);
   });
 
   it.each([
@@ -97,9 +139,9 @@ describe("home daily progress", () => {
       eligible: true, completed, status: completed ? "完了済み" : "未完了",
       pointProgress: { earned, limit: 100 },
     });
-    expect(summary.eligibleCount).toBe(6);
+    expect(summary.eligibleCount).toBe(11);
     expect(summary.completedCount).toBe(completed ? 1 : 0);
-    expect(summary.completedCount / summary.eligibleCount).toBe(completed ? 1 / 6 : 0);
+    expect(summary.completedCount / summary.eligibleCount).toBe(completed ? 1 / 11 : 0);
   });
 
   it.each([
@@ -112,6 +154,39 @@ describe("home daily progress", () => {
       .toMatchObject({ completed: earned === 100, pointProgress: { earned, limit: 100 } });
   });
 
+  it.each([
+    { game: "sugoroku", title: "すごろく", href: "/(tabs)/sugoroku", limit: 50 },
+    { game: "endurance", title: "勃起我慢", href: "/(tabs)/endurance", limit: 50 },
+    { game: "othello", title: "オセロ", href: "/(tabs)/othello", limit: 50 },
+    { game: "succubus", title: "館の外", href: "/(tabs)/outside", limit: 100 },
+  ] as const)("counts only $game's first daily reward as its own task", ({ game, title, href, limit }) => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), dailyGameRewards: { date: today, completedGames: [game, game] },
+    });
+    expect(summary.tasks.find((item) => item.id === game)).toMatchObject({
+      title, href, eligible: true, completed: true, status: "完了済み", pointProgress: { earned: limit, limit },
+    });
+    expect(summary.tasks.filter((item) => item.completed).map((item) => item.id)).toEqual([game]);
+    expect(summary.tasks.find((item) => item.id === "outside"))
+      .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 100 } });
+    expect(summary.tasks.find((item) => item.id === "outside-daily"))
+      .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 30 } });
+    expect(summary.completedCount).toBe(1);
+    expect(summary.eligibleCount).toBe(11);
+  });
+
+  it.each(["2026-09-15", "2026-09-17"])("ignores first-clear rewards for a different day: %s", (date) => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), outsideEarnedPoints: 100, dailyGameRewards: { date, completedGames: gameTaskIds },
+    });
+    expect(summary.tasks.filter((item) => gameTaskIds.includes(item.id as DailyRewardGame)))
+      .toEqual(expect.arrayContaining(gameTaskIds.map((id) => expect.objectContaining({
+        id, eligible: true, completed: false, status: "未完了", pointProgress: { earned: 0, limit: id === "succubus" ? 100 : 50 },
+      }))));
+    expect(summary.tasks.filter((item) => item.completed).map((item) => item.id)).toEqual(["outside"]);
+    expect(summary.completedCount).toBe(1);
+  });
+
   it("uses the requested order when every room is eligible and keeps it after completion", () => {
     const snapshot = {
       ...baseSnapshot(), contractSigned: true,
@@ -120,6 +195,8 @@ describe("home daily progress", () => {
     const pending = buildHomeSummary(snapshot);
     const completed = buildHomeSummary({
       ...snapshot, loginClaimed: true, outsideEarnedPoints: 100,
+      outsideDailyQuests: { date: today, claimedQuestIds: dailyQuestIds },
+      dailyGameRewards: { date: today, completedGames: gameTaskIds },
       order: { date: today, text: "今日の命令", completed: true },
       journals: [
         trainingJournal(), journal("敗北部屋,チェック,調教記録"),
@@ -129,15 +206,16 @@ describe("home daily progress", () => {
       punishmentHistories: [punishment()],
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
-    const expectedOrder = ["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "management:1", "punishment", "outside"];
+    const expectedOrder = ["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "management:1", "punishment",
+      "outside-daily", "outside", "succubus", "sugoroku", "othello", "endurance"];
     expect(pending.tasks.map((item) => item.id)).toEqual(expectedOrder);
     expect(completed.tasks.map((item) => item.id)).toEqual(expectedOrder);
     expect(completed.tasks.map(({ id, href }) => ({ id, href })))
       .toEqual(pending.tasks.map(({ id, href }) => ({ id, href })));
-    expect(pending.eligibleCount).toBe(9);
-    expect(completed.eligibleCount).toBe(9);
+    expect(pending.eligibleCount).toBe(14);
+    expect(completed.eligibleCount).toBe(14);
     expect(pending.completedCount).toBe(1);
-    expect(completed.completedCount).toBe(9);
+    expect(completed.completedCount).toBe(14);
   });
 
   it("moves a locked high-priority room behind every eligible task without losing its link", () => {
@@ -145,11 +223,11 @@ describe("home daily progress", () => {
       ...baseSnapshot(), journals: [trainingJournal()], cycles: [cycle(1)],
     });
     expect(summary.tasks.map((item) => item.id))
-      .toEqual(["login-bonus", "brainwash", "preparation", "daily-order", "training", "management:1", "punishment", "outside", "defeat"]);
+      .toEqual(["login-bonus", "brainwash", "preparation", "daily-order", "training", "management:1", "punishment", "outside-daily", "outside", ...gameTaskIds, "defeat"]);
     expect(summary.tasks.at(-1))
       .toMatchObject({ eligible: false, completed: false, status: "未契約", href: "/(tabs)/contract" });
     expect(summary.tasks.slice(0, -1).every((item) => item.eligible)).toBe(true);
-    expect(summary.eligibleCount).toBe(8);
+    expect(summary.eligibleCount).toBe(13);
     expect(summary.completedCount).toBe(1);
   });
 
@@ -160,10 +238,10 @@ describe("home daily progress", () => {
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
     expect(summary.tasks.map((item) => item.id.startsWith("management:") ? "management" : item.id))
-      .toEqual(["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "management", "management", "punishment", "outside"]);
+      .toEqual(["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "management", "management", "punishment", "outside-daily", "outside", ...gameTaskIds]);
     expect(summary.tasks.filter((item) => item.id.startsWith("management:")).map((item) => item.id).sort())
       .toEqual(["management:1", "management:2"]);
-    expect(summary.eligibleCount).toBe(10);
+    expect(summary.eligibleCount).toBe(15);
     expect(summary.completedCount).toBe(2);
   });
 
@@ -187,8 +265,8 @@ describe("home daily progress", () => {
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
     expect(summary.completedCount).toBe(3);
-    expect(summary.eligibleCount).toBe(7);
-    expect(summary.tasks).toHaveLength(9);
+    expect(summary.eligibleCount).toBe(12);
+    expect(summary.tasks).toHaveLength(14);
     expect(summary.tasks.find((item) => item.id === "management:1"))
       .toMatchObject({ eligible: true, dayProgress: { currentDay: 1, totalDays: 1 } });
   });
@@ -223,8 +301,8 @@ describe("home daily progress", () => {
   it("uses only the latest active cycle per mode and keeps ungenerated instructions pending", () => {
     const summary = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(1), cycle(2)] });
     expect(summary.tasks.map((item) => item.id))
-      .toEqual(["login-bonus", "brainwash", "preparation", "daily-order", "training", "management:2", "outside", "defeat", "punishment"]);
-    expect(summary.eligibleCount).toBe(7);
+      .toEqual(["login-bonus", "brainwash", "preparation", "daily-order", "training", "management:2", "outside-daily", "outside", ...gameTaskIds, "defeat", "punishment"]);
+    expect(summary.eligibleCount).toBe(12);
     expect(summary.tasks.find((item) => item.id === "management:2"))
       .toMatchObject({ title: "射精管理部屋", eligible: true, completed: false, href: "/(tabs)/management" });
   });
@@ -265,7 +343,7 @@ describe("home daily progress", () => {
     expect(summary.tasks.map((item) => item.id)).toEqual(defaultTaskIds);
     expect(summary.tasks.find((item) => item.id === "management"))
       .toMatchObject({ eligible: false, status: "管理期間外" });
-    expect(summary.eligibleCount).toBe(6);
+    expect(summary.eligibleCount).toBe(11);
   });
 
   it("counts each completed room once using its actual saved records", () => {
@@ -281,8 +359,8 @@ describe("home daily progress", () => {
       punishmentHistories: [punishment(), punishment()],
     });
     expect(summary.completedCount).toBe(5);
-    expect(summary.eligibleCount).toBe(8);
-    expect(summary.tasks).toHaveLength(9);
+    expect(summary.eligibleCount).toBe(13);
+    expect(summary.tasks).toHaveLength(14);
     expect(summary.tasks.filter((item) => item.completed).map((item) => item.id))
       .toEqual(["defeat", "brainwash", "preparation", "training", "punishment"]);
   });
@@ -330,8 +408,8 @@ describe("home daily progress", () => {
       expect(summary.tasks.find((item) => item.id === "defeat")).toMatchObject({
         eligible: contractSigned, completed, href, status,
       });
-      expect(summary.tasks).toHaveLength(9);
-      expect(summary.eligibleCount).toBe(contractSigned ? 7 : 6);
+      expect(summary.tasks).toHaveLength(14);
+      expect(summary.eligibleCount).toBe(contractSigned ? 12 : 11);
       expect(summary.completedCount).toBe(completed ? 1 : 0);
     }
   });
@@ -429,10 +507,110 @@ describe("home daily progress", () => {
     const afterSuccess = summary([firstFailure, secondFailure, success], [firstCompletion, secondCompletion]);
     expect(afterSuccess.tasks.find((item) => item.id === "punishment"))
       .toMatchObject({ eligible: false, completed: false, status: "対象外", href: "/(tabs)/timer" });
-    expect(afterSuccess.tasks).toHaveLength(9);
-    expect(afterSuccess.eligibleCount).toBe(6);
+    expect(afterSuccess.tasks).toHaveLength(14);
+    expect(afterSuccess.eligibleCount).toBe(11);
     expect(afterSuccess.completedCount).toBe(1);
   });
+});
+
+describe("saved point progress on every daily task", () => {
+  it("shows zero and each current reward limit on all fourteen tasks, including unavailable rooms", () => {
+    const summary = buildHomeSummary(baseSnapshot());
+    expect(Object.fromEntries(summary.tasks.map(({ id, pointProgress }) => [id, pointProgress]))).toEqual({
+      "login-bonus": { earned: 0, limit: 1 }, defeat: { earned: 0, limit: 5 }, brainwash: { earned: 0, limit: 5 },
+      preparation: { earned: 0, limit: 5 }, "daily-order": { earned: 0, limit: 5 }, training: { earned: 0, limit: 25 },
+      management: { earned: 0, limit: 25 }, punishment: { earned: 0, limit: 1 }, "outside-daily": { earned: 0, limit: 30 },
+      outside: { earned: 0, limit: 100 }, succubus: { earned: 0, limit: 100 }, sugoroku: { earned: 0, limit: 50 },
+      othello: { earned: 0, limit: 50 }, endurance: { earned: 0, limit: 50 },
+    });
+    expect(summary.tasks.find(({ id }) => id === "training")?.title).toBe("調教部屋（初回のみ）");
+    expect(summary.tasks.find(({ id }) => id === "punishment")?.title).toBe("お仕置き部屋（初回のみ）");
+  });
+
+  it("uses actual received amounts independently of completion and preserves historical reward rates", () => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), loginBonus: { date: today, claimPoints: 50 }, cycles: [cycle(3)], managementTasks: [task(42, 3)],
+      pointTransactions: [
+        { source_key: `login-bonus:${today}`, points: 50 }, { source_key: `defeat:${today}`, points: 5 },
+        { source_key: `brainwash:${today}`, points: 5 }, { source_key: `preparation:${today}`, points: 5 },
+        { source_key: `daily-order:${today}`, points: 1 }, { source_key: `training:${today}`, points: 5 },
+        { source_key: "management-task:42", points: 10 }, { source_key: `punishment:${today}`, points: 1 },
+      ],
+    });
+    for (const [id, earned, limit] of [
+      ["login-bonus", 50, 50], ["defeat", 5, 5], ["brainwash", 5, 5], ["preparation", 5, 5],
+      ["daily-order", 1, 5], ["training", 5, 25], ["management:3", 10, 25], ["punishment", 1, 1],
+    ] as const) {
+      expect(summary.tasks.find((item) => item.id === id)).toMatchObject({ completed: false, pointProgress: { earned, limit } });
+    }
+    expect(summary.completedCount).toBe(0);
+  });
+
+  it("does not infer received points from completed legacy records or a points reset", () => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), loginClaimed: true, contractSigned: true,
+      loginBonus: { date: today, claimPoints: 10 }, order: { date: today, text: "Saved order", completed: true },
+      journals: [trainingJournal(), journal("敗北部屋"), journal(`洗脳部屋${today}`), journal("準備部屋")],
+      preparations: [{ record_date: today, completed_at: `${today} 12:00:00` }], punishmentHistories: [punishment()],
+      cycles: [cycle(3)], managementTasks: [task(42, 3, { completed_at: `${today} 12:00:00` })], pointTransactions: [],
+    });
+    const completedRooms = summary.tasks.filter((item) => item.completed);
+    expect(completedRooms).toHaveLength(8);
+    expect(completedRooms.every((item) => item.pointProgress.earned === 0)).toBe(true);
+    expect(summary.tasks.find((item) => item.id === "login-bonus")?.pointProgress).toEqual({ earned: 0, limit: 10 });
+  });
+
+  it("retains the first punishment reward when a later training requires another session", () => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), journals: [trainingJournal({ created_at: `${today} 13:00:00` })], punishmentHistories: [punishment()],
+      pointTransactions: [{ source_key: `training:${today}`, points: 25 }, { source_key: `punishment:${today}`, points: 1 }],
+    });
+    expect(summary.tasks.find((item) => item.id === "punishment"))
+      .toMatchObject({ eligible: true, completed: false, pointProgress: { earned: 1, limit: 1 } });
+    expect(summary.tasks.find((item) => item.id === "training")?.pointProgress).toEqual({ earned: 25, limit: 25 });
+  });
+
+  it("matches each management reward to today's task ID rather than its cycle or another day", () => {
+    const summary = buildHomeSummary({
+      ...baseSnapshot(), cycles: [cycle(3), cycle(4, { mode: "chastity" })],
+      managementTasks: [task(42, 3), task(43, 4), task(44, 3, { record_date: "2026-09-15" })],
+      pointTransactions: [
+        { source_key: "management-task:42", points: 25 }, { source_key: "management-task:3", points: 25 },
+        { source_key: "management-task:4", points: 25 }, { source_key: "management-task:44", points: 25 },
+        { source_key: `management:${today}`, points: 25 },
+      ],
+    });
+    expect(summary.tasks.find((item) => item.id === "management:3")?.pointProgress).toEqual({ earned: 25, limit: 25 });
+    expect(summary.tasks.find((item) => item.id === "management:4")?.pointProgress).toEqual({ earned: 0, limit: 25 });
+    const ungenerated = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(3)],
+      pointTransactions: [{ source_key: "management-task:3", points: 25 }] });
+    expect(ungenerated.tasks.find((item) => item.id === "management:3")?.pointProgress).toEqual({ earned: 0, limit: 25 });
+  });
+
+  it("ignores other dates and similar or unrelated ledger source keys", () => {
+    const summary = buildHomeSummary({ ...baseSnapshot(), pointTransactions: [
+      { source_key: "training:2026-09-15", points: 25 }, { source_key: "training:2026-09-17", points: 25 },
+      { source_key: `training:${today}:extra`, points: 25 }, { source_key: `training-other:${today}`, points: 25 },
+      { source_key: `punishment:${today}:extra`, points: 1 }, { source_key: `login-bonus:2026-09-15`, points: 50 },
+      { source_key: `outside-quest:story:${today}`, points: 50 },
+    ] });
+    expect(summary.tasks.every((item) => item.pointProgress.earned === 0)).toBe(true);
+  });
+
+  it.each([
+    { points: -5, earned: 0 }, { points: NaN, earned: 0 }, { points: Infinity, earned: 0 },
+    { points: -Infinity, earned: 0 }, { points: 100, earned: 25 },
+  ])("bounds corrupt or excessive ledger amounts without modifying them: $points", ({ points, earned }) => {
+    const summary = buildHomeSummary({ ...baseSnapshot(), pointTransactions: [{ source_key: `training:${today}`, points }] });
+    expect(summary.tasks.find((item) => item.id === "training")?.pointProgress).toEqual({ earned, limit: 25 });
+  });
+
+  it.each([{ date: "2026-09-15", claimPoints: 50 }, { date: today, claimPoints: NaN }, { date: today, claimPoints: -1 }])(
+    "ignores stale or corrupt login limits: %j", (loginBonus) => {
+      const summary = buildHomeSummary({ ...baseSnapshot(), loginBonus });
+      expect(summary.tasks.find((item) => item.id === "login-bonus")?.pointProgress).toEqual({ earned: 0, limit: 1 });
+    },
+  );
 });
 
 describe("management details on today's tasks", () => {
@@ -444,7 +622,7 @@ describe("management details on today's tasks", () => {
     });
     expect(summary.tasks.find((item) => item.id === "management:1")?.management).toEqual({ mode: "release", deadlineAt: release.deadlineAt, rouletteSpins: 3, rouletteRequired: 2 });
     expect(summary.tasks.find((item) => item.id === "management:2")?.management).toEqual({ mode: "chastity", deadlineAt: chastity.deadlineAt, rouletteSpins: 1, rouletteRequired: 2 });
-    expect(summary.eligibleCount).toBe(8); expect(summary.completedCount).toBe(0);
+    expect(summary.eligibleCount).toBe(13); expect(summary.completedCount).toBe(0);
   });
 
   it("keeps an unspun new day at zero without carrying over yesterday's count", () => {
@@ -512,13 +690,56 @@ describe("loading a home summary without changing saved data", () => {
     expect(summary.availablePoints).toBe(165);
     expect(summary.todayEarnedPoints).toBe(45);
     expect(summary.completedCount).toBe(2);
-    expect(summary.eligibleCount).toBe(7);
-    expect(summary.tasks).toHaveLength(9);
+    expect(summary.eligibleCount).toBe(12);
+    expect(summary.tasks).toHaveLength(14);
     expect(storage.getItem).toHaveBeenCalledWith(`nino-room:daily-order:${today}`);
     expect(database.execute).not.toHaveBeenCalled();
+    expect(database.transaction).not.toHaveBeenCalled();
+    expect(points.award).not.toHaveBeenCalled();
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(database.query.mock.calls.every(([sql]) => String(sql).startsWith("SELECT "))).toBe(true);
     expect(database.queryOne.mock.calls.every(([sql]) => String(sql).startsWith("SELECT "))).toBe(true);
+  });
+
+  it.each([
+    { lastDate: null, streak: "0", claimStreak: 1, limit: 1, tomorrowLimit: 10 },
+    { lastDate: "2026-09-15", streak: "1", claimStreak: 2, limit: 10, tomorrowLimit: 10 },
+    { lastDate: "2026-09-15", streak: "5", claimStreak: 6, limit: 10, tomorrowLimit: 50 },
+    { lastDate: "2026-09-15", streak: "6", claimStreak: 7, limit: 50, tomorrowLimit: 50 },
+    { lastDate: "2026-09-14", streak: "7", claimStreak: 1, limit: 1, tomorrowLimit: 10 },
+  ])("shows the saved login streak reward before and after claiming, rollover, and a gap: $streak / $lastDate", async ({ lastDate, streak, claimStreak, limit, tomorrowLimit }) => {
+    const settings = new Map<string, string>([["login_bonus_streak", streak]]);
+    if (lastDate) settings.set("login_bonus_last_claimed_date", lastDate);
+    const credits = new Map<string, number>();
+    const original = database.queryOne.getMockImplementation()!;
+    database.queryOne.mockImplementation((sql: string, params: string[] = []) => {
+      if (params[0]?.startsWith("login_bonus_")) return settings.has(params[0]) ? { setting_value: settings.get(params[0]) } : null;
+      if (sql === "SELECT points FROM point_transactions WHERE source_key=?") return credits.has(params[0]) ? { points: credits.get(params[0]) } : null;
+      return original(sql, params);
+    });
+    const loginTask = async (date = today) => (await homeSummaryService.load(date)).tasks.find((item) => item.id === "login-bonus");
+    expect(await loginTask()).toMatchObject({ completed: false, pointProgress: { earned: 0, limit } });
+    settings.set("login_bonus_last_claimed_date", today);
+    settings.set("login_bonus_streak", String(claimStreak));
+    credits.set(`login-bonus:${today}`, limit);
+    expect(await loginTask()).toMatchObject({ completed: true, pointProgress: { earned: limit, limit } });
+    expect(await loginTask("2026-09-17")).toMatchObject({ completed: false, pointProgress: { earned: 0, limit: tomorrowLimit } });
+    expect(await loginTask("2026-09-18")).toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 1 } });
+    credits.clear();
+    expect(await loginTask()).toMatchObject({ completed: true, pointProgress: { earned: 0, limit } });
+    // A later login must not shrink an earlier day's actually received 10- or 50-point reward.
+    settings.set("login_bonus_last_claimed_date", "2026-09-18");
+    settings.set("login_bonus_streak", "1");
+    credits.set(`login-bonus:${today}`, limit);
+    expect((await loginTask())?.pointProgress).toEqual({ earned: limit, limit });
+    const before = [...settings.entries()];
+    const first = await loginTask();
+    expect(await loginTask()).toEqual(first);
+    expect([...settings.entries()]).toEqual(before);
+    expect(database.execute).not.toHaveBeenCalled();
+    expect(database.transaction).not.toHaveBeenCalled();
+    expect(points.award).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
   });
 
   it("repeatedly reads saved roulette details without initializing or changing them", async () => {
@@ -587,6 +808,54 @@ describe("loading a home summary without changing saved data", () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { flags: [null, null, null], earned: 0 },
+    { flags: ["1", null, null], earned: 10 },
+    { flags: [null, "1", "1"], earned: 20 },
+    { flags: ["1", "1", "1"], earned: 30 },
+    { flags: ["true", "10", "0"], earned: 0 },
+  ])("reads only received daily quest rewards and resets the display on rollover without writing: $earned", async ({ flags, earned }) => {
+    const saved = new Map<string, string>([
+      ["outside_daily_quest_date", "2026-09-15"],
+      ["outside_daily_quest_baseline", JSON.stringify({ slimeDefeat: 0, purify: 0, escape: 0 })],
+      ["outside_daily_quest_claimed_2026-09-15_slime", "1"],
+      ["outside_daily_quest_claimed_2026-09-15_purify", "1"],
+      ["outside_daily_quest_claimed_2026-09-15_escape", "1"],
+      ["outside_daily_quest_claimed_2026-09-18_slime", "1"],
+      [`outside_daily_quest_claimed_${today}_unknown`, "1"],
+      ["outside_story_quest_claimed_stage-1", "1"],
+      ["outside_game_point_date", today],
+      ["outside_game_point_today", "100"],
+      ...dailyQuestIds.flatMap((id, index): [string, string][] => flags[index] === null
+        ? [] : [[`outside_daily_quest_claimed_${today}_${id}`, flags[index]!]]),
+    ]);
+    const original = database.queryOne.getMockImplementation()!;
+    database.queryOne.mockImplementation((sql: string, params: string[] = []) => {
+      if (sql.includes("app_settings") && saved.has(params[0])) return { setting_value: saved.get(params[0]) };
+      if (params[0] === gameRewardSourceKey("succubus", today)) return { points: 100 };
+      return original(sql, params);
+    });
+    const savedBefore = [...saved.entries()];
+    const summary = await homeSummaryService.load(today);
+    expect(summary.tasks.find((item) => item.id === "outside-daily"))
+      .toMatchObject({ completed: earned === 30, pointProgress: { earned, limit: 30 } });
+    for (const id of ["outside", "succubus"]) {
+      expect(summary.tasks.find((item) => item.id === id))
+        .toMatchObject({ completed: true, pointProgress: { earned: 100, limit: 100 } });
+    }
+    expect(summary.completedCount).toBe(earned === 30 ? 5 : 4);
+    expect(await homeSummaryService.load(today)).toEqual(summary);
+    const tomorrow = await homeSummaryService.load("2026-09-17");
+    expect(tomorrow.tasks.find((item) => item.id === "outside-daily"))
+      .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 30 } });
+    expect([...saved.entries()]).toEqual(savedBefore);
+    expect(database.execute).not.toHaveBeenCalled();
+    expect(database.transaction).not.toHaveBeenCalled();
+    expect(points.award).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(database.queryOne.mock.calls.every(([sql]) => String(sql).startsWith("SELECT "))).toBe(true);
+  });
+
   it("matches SQLite on room completions and positive daily earnings, without writing the Web database", async () => {
     const { DatabaseSync } = await import("node:sqlite");
     const sqlite = new DatabaseSync(":memory:");
@@ -595,7 +864,7 @@ describe("loading a home summary without changing saved data", () => {
       CREATE TABLE reward_redemptions (points_spent REAL);
       CREATE TABLE app_settings (setting_key TEXT, setting_value TEXT);
       CREATE TABLE management_cycles (id INTEGER, mode TEXT, start_date TEXT, end_date TEXT, is_active INTEGER);
-      CREATE TABLE management_daily_tasks (cycle_id INTEGER, record_date TEXT, completed_at TEXT);
+      CREATE TABLE management_daily_tasks (id INTEGER, cycle_id INTEGER, record_date TEXT, completed_at TEXT);
       CREATE TABLE journals (id INTEGER, record_date TEXT, tags TEXT, created_at TEXT, duration_seconds INTEGER);
       CREATE TABLE preparation_records (record_date TEXT, completed_at TEXT);
       CREATE TABLE timer_histories (timer_name TEXT, ended_at TEXT, completion_status TEXT, actual_duration_seconds INTEGER);
@@ -616,9 +885,32 @@ describe("loading a home summary without changing saved data", () => {
       ] as const) {
         seed("INSERT INTO point_transactions(source_key, points, created_at) VALUES(?, ?, ?)", [key, points, `${date} 12:00:00`]);
       }
+      for (const game of gameTaskIds) {
+        seed("INSERT INTO point_transactions(source_key, points, created_at) VALUES(?, ?, ?)",
+          [gameRewardSourceKey(game, today), game === "succubus" ? 100 : 50, `${today} 13:00:00`]);
+      }
+      for (const [game, date] of [["othello", "2026-09-15"], ["sugoroku", "2026-09-17"]] as const) {
+        seed("INSERT INTO point_transactions(source_key, points, created_at) VALUES(?, ?, ?)",
+          [gameRewardSourceKey(game, date), 50, `${date} 13:00:00`]);
+      }
+      for (const [date, ids] of [[today, dailyQuestIds], ["2026-09-17", ["purify"]]] as const) {
+        for (const id of ids) {
+          seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", [`outside_daily_quest_claimed_${date}_${id}`, "1"]);
+          seed("INSERT INTO point_transactions(source_key, points, created_at) VALUES(?, ?, ?)",
+            [`outside-quest:daily:${date}:${id}`, 10, `${date} 13:00:00`]);
+        }
+      }
+      for (const [key, points, date] of [
+        [`login-bonus:${today}`, 10, today], [`defeat:${today}`, 5, today], [`brainwash:${today}`, 5, today],
+        [`preparation:${today}`, 5, today], [`daily-order:${today}`, 5, "2026-09-17"],
+        [`training:${today}`, 5, today], ["management-task:1", 10, today], [`punishment:${today}`, 1, today],
+        ["training:2026-09-15", 25, today], ["training:2026-09-17", 25, "2026-09-17"],
+        [`training:${today}:extra`, 25, today], ["management-task:99", 25, today],
+      ] as const) seed("INSERT INTO point_transactions(source_key, points, created_at) VALUES(?, ?, ?)", [key, points, `${date} 14:00:00`]);
       seed("INSERT INTO reward_redemptions(points_spent) VALUES(?)", [40]);
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["unrelated", "ignored"]);
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["login_bonus_last_claimed_date", today]);
+      seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["login_bonus_streak", "6"]);
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["outside_game_point_date", today]);
       seed("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["outside_game_point_today", "100"]);
       const roulette: ManagementRouletteSave = { version: 1, cycles: [rouletteCycle(1, [rouletteDay(today, 3), rouletteDay("2026-09-17", 1)])] };
@@ -629,8 +921,8 @@ describe("loading a home summary without changing saved data", () => {
           [row.id, row.mode, row.start_date, row.end_date, row.is_active],
         );
       }
-      seed("INSERT INTO management_daily_tasks(cycle_id, record_date, completed_at) VALUES(?, ?, ?)", [1, "2026-09-15", null]);
-      seed("INSERT INTO management_daily_tasks(cycle_id, record_date, completed_at) VALUES(?, ?, ?)", [1, today, `${today} 12:00:00`]);
+      seed("INSERT INTO management_daily_tasks(id, cycle_id, record_date, completed_at) VALUES(?, ?, ?, ?)", [99, 1, "2026-09-15", null]);
+      seed("INSERT INTO management_daily_tasks(id, cycle_id, record_date, completed_at) VALUES(?, ?, ?, ?)", [1, 1, today, `${today} 12:00:00`]);
       seed("INSERT INTO preparation_records(record_date, completed_at) VALUES(?, ?)", [today, `${today} 12:00:00`]);
       for (const row of [
         journal("準備部屋,チェック"), journal(`洗脳部屋,調教記録,洗脳部屋${today}`, today, { id: 2 }),
@@ -660,28 +952,48 @@ describe("loading a home summary without changing saved data", () => {
       const savedBefore = [...saved.entries()];
 
       const summary = await homeSummaryService.load(today);
-      expect(summary.availablePoints).toBe(445);
-      expect(summary.todayEarnedPoints).toBe(60);
-      expect(summary.completedCount).toBe(9);
-      expect(summary.eligibleCount).toBe(9);
-      expect(summary.tasks).toHaveLength(9);
+      expect(summary.availablePoints).toBe(981);
+      expect(summary.todayEarnedPoints).toBe(456);
+      expect(summary.completedCount).toBe(14);
+      expect(summary.eligibleCount).toBe(14);
+      expect(summary.tasks).toHaveLength(14);
+      expect(summary.tasks.find((item) => item.id === "outside-daily"))
+        .toMatchObject({ completed: true, pointProgress: { earned: 30, limit: 30 } });
       expect(summary.tasks.find((item) => item.id === "outside"))
         .toMatchObject({ completed: true, pointProgress: { earned: 100, limit: 100 } });
+      expect(summary.tasks.filter((item) => gameTaskIds.includes(item.id as DailyRewardGame)))
+        .toEqual(gameTaskIds.map((id) => expect.objectContaining({ id, completed: true,
+          pointProgress: { earned: id === "succubus" ? 100 : 50, limit: id === "succubus" ? 100 : 50 } })));
       expect(summary.tasks.find((item) => item.id === "punishment")).toMatchObject({ completed: true });
       expect(summary.tasks.find((item) => item.id === "management:1"))
-        .toMatchObject({ dayProgress: { currentDay: 3, totalDays: 5 }, management: { mode: "release", deadlineAt: roulette.cycles[0].deadlineAt, rouletteSpins: 3, rouletteRequired: 2 } });
+        .toMatchObject({ dayProgress: { currentDay: 3, totalDays: 5 }, pointProgress: { earned: 10, limit: 25 }, management: { mode: "release", deadlineAt: roulette.cycles[0].deadlineAt, rouletteSpins: 3, rouletteRequired: 2 } });
+      for (const [id, earned, limit] of [["login-bonus", 10, 10], ["defeat", 5, 5], ["brainwash", 5, 5],
+        ["preparation", 5, 5], ["daily-order", 5, 5], ["training", 5, 25], ["punishment", 1, 1]] as const) {
+        expect(summary.tasks.find((item) => item.id === id)?.pointProgress).toEqual({ earned, limit });
+      }
       expect(setItem).not.toHaveBeenCalled();
       expect(removeItem).not.toHaveBeenCalled();
       expect([...saved.entries()]).toEqual(savedBefore);
+      expect(database.execute).not.toHaveBeenCalled();
+      expect(database.transaction).not.toHaveBeenCalled();
+      expect(points.award).not.toHaveBeenCalled();
 
       database.query.mockImplementation((sql: string, params: (string | number | null)[] = []) => sqlite.prepare(sql).all(...params));
       database.queryOne.mockImplementation((sql: string, params: (string | number | null)[] = []) => sqlite.prepare(sql).get(...params));
       expect(await homeSummaryService.load(today)).toEqual(summary);
 
       const tomorrowSummary = await homeSummaryService.load("2026-09-17");
+      expect(tomorrowSummary.tasks.filter((item) => gameTaskIds.includes(item.id as DailyRewardGame) && item.completed).map((item) => item.id))
+        .toEqual(["sugoroku"]);
       expect(tomorrowSummary.tasks.find((item) => item.id === "management:1")?.management).toMatchObject({ rouletteSpins: 1 });
+      expect(tomorrowSummary.tasks.find((item) => item.id === "management:1")?.pointProgress).toEqual({ earned: 0, limit: 25 });
+      expect(tomorrowSummary.tasks.find((item) => item.id === "training")?.pointProgress).toEqual({ earned: 25, limit: 25 });
+      expect(tomorrowSummary.tasks.find((item) => item.id === "daily-order")?.pointProgress).toEqual({ earned: 0, limit: 5 });
+      expect(tomorrowSummary.tasks.find((item) => item.id === "login-bonus")?.pointProgress).toEqual({ earned: 0, limit: 50 });
       expect(tomorrowSummary.tasks.find((item) => item.id === "outside"))
         .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 100 } });
+      expect(tomorrowSummary.tasks.find((item) => item.id === "outside-daily"))
+        .toMatchObject({ completed: false, pointProgress: { earned: 10, limit: 30 } });
       database.query.mockImplementation(webClient.query);
       database.queryOne.mockImplementation(webClient.queryOne);
       expect(await homeSummaryService.load("2026-09-17")).toEqual(tomorrowSummary);

@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { achievementRepository } from "./achievementRepository";
 import * as webClient from "../database/client.web";
 
-const database = vi.hoisted(() => ({ execute: vi.fn(), query: vi.fn(), queryOne: vi.fn() }));
+const database = vi.hoisted(() => ({ execute: vi.fn(), query: vi.fn(), queryOne: vi.fn(), transaction: vi.fn() }));
 const journal = vi.hoisted(() => ({ create: vi.fn() }));
+const points = vi.hoisted(() => ({ award: vi.fn(), notifyChanged: vi.fn() }));
 vi.mock("@/database/client", () => database);
 vi.mock("@/repositories/journalRepository", () => ({ journalRepository: journal }));
+vi.mock("@/repositories/rewardRepository", () => ({ pointRepository: points }));
 vi.mock("@/utils/date", () => ({
   toDateKey: () => "2026-09-16",
   toDateTimeKey: () => "2026-09-16 12:00:00",
@@ -24,6 +26,7 @@ beforeEach(() => {
   database.execute.mockImplementation(webClient.execute);
   database.query.mockImplementation(webClient.query);
   database.queryOne.mockImplementation(webClient.queryOne);
+  database.transaction.mockImplementation(webClient.transaction);
 });
 
 afterEach(() => { vi.unstubAllGlobals(); });

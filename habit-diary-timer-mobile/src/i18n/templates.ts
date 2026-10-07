@@ -3,6 +3,7 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["{0}の本日初回クリア", "First daily clear: {0}", "오늘 첫 클리어: {0}", "今日首次通关：{0}"],
   ["モード：{0}", "Mode: {0}", "모드: {0}", "模式：{0}"],
   ["射精許可日：{0}", "Release permitted at: {0}", "사정 허가 일시: {0}", "允许射精时间：{0}"],
   ["ルーレット：{0}/{1}回", "Roulette: {0}/{1} spins", "룰렛: {0}/{1}회", "轮盘：{0}/{1}次"],
@@ -143,7 +144,7 @@ export const translationTemplates: readonly TranslationTemplate[] = [
   ["設定でサキュバスLvを調整した。\n現在 {0} Lv.{1}", "Changed the succubus's level in settings.\nCurrent: {0} Lv.{1}", "설정에서 서큐버스 레벨을 변경했습니다.\n현재 {0} Lv.{1}", "已在设置中调整魅魔等级。\n当前{0} Lv.{1}"],
   ["スライムに接触して討伐した。\n+{0}pt / Lv.{1}\n本日の外RPG獲得：{2}/100pt", "Defeated a slime on contact.\n+{0}pt / Lv.{1}\nPoints earned outside today: {2}/100pt", "슬라임에 닿아 쓰러뜨렸습니다.\n+{0}pt / Lv.{1}\n오늘 야외 RPG 획득: {2}/100pt", "接触并击败了史莱姆。\n+{0}pt／Lv.{1}\n今日宅邸外RPG所得：{2}/100pt"],
   ["現在は「{0}」Lv.{1}です。", "Current form: {0}, Lv.{1}.", "현재 모습은 ‘{0}’ Lv.{1}입니다.", "当前形态为“{0}”，Lv.{1}。"],
-  ["勝利経験値を獲得しました。\nLv.{0} → Lv.{1}（+{2}）\nサキュバス戦でのPt獲得はありません。", "Gained experience for winning.\nLv.{0} → Lv.{1} (+{2})\nSuccubus battles do not award points.", "승리 경험치를 획득했습니다.\nLv.{0} → Lv.{1} (+{2})\n서큐버스 전투에서는 Pt를 얻을 수 없습니다.", "获得了胜利经验。\nLv.{0} → Lv.{1}（+{2}）\n魅魔战斗不奖励积分。"],
+  ["勝利経験値を獲得しました。\nLv.{0} → Lv.{1}（+{2}）\n{3}", "Gained experience for winning.\nLv.{0} → Lv.{1} (+{2})\n{3}", "승리 경험치를 획득했습니다.\nLv.{0} → Lv.{1} (+{2})\n{3}", "获得了胜利经验。\nLv.{0} → Lv.{1}（+{2}）\n{3}"],
   ["自ら降参したため、全レベルとなるLv.{0}と50Ptを吸収された。", "You surrendered, so all {0} of your levels and 50Pt were drained.", "스스로 항복하여 보유 레벨 {0} 전부와 50Pt를 흡수당했습니다.", "由于主动投降，全部{0}级和50Pt被吸收了。"],
   ["レベルドレインにより、Lv.{0}を吸収された。", "Level drain took {0} of your levels.", "레벨 드레인으로 {0}레벨을 흡수당했습니다.", "等级吸取夺走了你的{0}级。"],
   ["不足分{0}の代わりに、所持Ptから{1}Ptを吸収された。", "To make up for the {0} missing levels, {1}Pt were drained from your balance.", "부족한 {0}레벨 대신 보유 Pt에서 {1}Pt를 흡수당했습니다.", "等级不足的{0}级由积分抵扣，吸收了{1}Pt。"],

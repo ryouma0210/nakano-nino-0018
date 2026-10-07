@@ -16,6 +16,7 @@ import {
   type StoredFile,
 } from "@/services/fileStorageService";
 import { pointRepository } from "@/repositories/rewardRepository";
+import { DAILY_ROOM_POINTS } from "@/constants/roomPoints";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -91,7 +92,7 @@ export default function HabitsScreen() {
         tags: `調教,完了,射精記録,${result.difficulty},${trainingOutcomeTag(result.elapsedSeconds, result.targetSeconds)}`,
         durationSeconds: result.elapsedSeconds,
       });
-      pointRepository.award(`training:${recordDate}`, 5, "本日初回の調教を完了");
+      pointRepository.award(`training:${recordDate}`, DAILY_ROOM_POINTS.training, "本日初回の調教を完了");
       setTrainingResult({ ...result, judgement });
     } catch (error) {
       showError("調教記録の保存に失敗しました", error);

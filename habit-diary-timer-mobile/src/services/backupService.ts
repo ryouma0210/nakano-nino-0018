@@ -10,6 +10,7 @@ import { validateCustomCommandSettings } from "./customCommandStorage";
 import { isFilePurpose, isValidFileUsages } from "../features/files/usages";
 import { validateEnduranceSettings } from "../features/endurance/storage";
 import { validateManagementRouletteSettings } from "./managementRouletteStorage";
+import { validateDailyGameRewardSettings } from "./dailyGameRewardStorage";
 import { fileStorageService, mimeTypeForName, type BackupStoredFile, type RestoreStoredFile } from "@/services/fileStorageService";
 import { readBackupArchive, writeBackupArchive, type RandomAccessReader } from "./backupArchive";
 import { backupEntryBlob, copyBackupEntry, createBackupOutput, createBackupStaging, invalidBackupMessage, openBackupSource, openNativeBackupWriter, readSmallBackup, type BackupSource } from "./backupIO";
@@ -161,6 +162,7 @@ function validatePayload(value: unknown): BackupPayload {
   validateCustomCommandSettings(payload.database.app_settings);
   validateEnduranceSettings(payload.database.app_settings);
   validateManagementRouletteSettings(payload.database.app_settings);
+  validateDailyGameRewardSettings(payload.database.app_settings);
   if (payload.files?.some((file) => !file || typeof file.name !== "string" || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
     || typeof file.mimeType !== "string" || typeof file.data !== "string" || typeof file.size !== "number")) {
     throw new Error("格納ファイルのデータが不正です。");

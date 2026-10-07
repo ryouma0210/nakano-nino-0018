@@ -8,6 +8,8 @@ import { createGame, playMove } from "../features/othello/game";
 import { createGame as createSugorokuGame } from "../features/sugoroku/game";
 import { loadSugoroku, SUGOROKU_STORAGE_KEY } from "../features/sugoroku/storage";
 import { createEnduranceGame, failEnduranceSlide, finishEndurance } from "../features/endurance/game";
+import { createEnduranceSession, ENDURANCE_CURRENT_KEY } from "../features/endurance/storage";
+import { createCountdown } from "../features/sugoroku/countdown";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, storage: new Map<string, string>(), sources: new Map<string, Uint8Array>(),
@@ -169,7 +171,7 @@ describe("bounded backup export and import", () => {
     expect(mocks.multiSet).not.toHaveBeenCalled();
   });
 
-  it.each(["endurance_game_v1", "endurance_unlock_v1"])("rejects invalid %s before any restore mutations", async (key) => {
+  it.each(["endurance_game_v1", "endurance_unlock_v1", ENDURANCE_CURRENT_KEY])("rejects invalid %s before any restore mutations", async (key) => {
     const payload = await savePayload();
     payload.database.app_settings = [{ setting_key: key, setting_value: "broken", updated_at: "2026-10-06" }];
     await expect(backupService.restore(payload)).rejects.toThrow("勃起我慢");
@@ -179,6 +181,12 @@ describe("bounded backup export and import", () => {
   it("round-trips roulette progress, management deadlines and endurance unlocks as save data", async () => {
     const legacy = finishEndurance({ ...createEnduranceGame("game-1", 4, "2026-10-06T00:00:00.000Z"), index: 3 }, false, "2026-10-06T01:00:00.000Z");
     const video = finishEndurance(failEnduranceSlide(createEnduranceGame("game-6", 1, "2026-10-06T00:00:00.000Z")), false, "2026-10-06T01:00:00.000Z", { positionMs: 12_345, durationMs: 60_000 });
+    const current = createEnduranceSession({
+      game: { ...createEnduranceGame("custom", 2, "2026-10-06T00:00:00.000Z"), index: 1 },
+      mediaIds: ["training:second.jpg", "endurance:first.mp4"],
+      slideTimer: { ...createCountdown(60_000), status: "paused", remainingMs: 23_000 }, extraTimer: createCountdown(180_000),
+      videoProgress: { positionMs: 0, durationMs: null }, videoComplete: false,
+    });
     const rows = [
       { setting_key: "management_roulette_v1", setting_value: JSON.stringify({ version: 1, cycles: [{ cycleId: 1,
         deadlineAt: "2026-10-07T01:00:00.000Z", finalInstruction: "Finish", taskChoices: Array.from({ length: 5 }, (_, index) => ({ text: `Task ${index}` })),
@@ -189,6 +197,7 @@ describe("bounded backup export and import", () => {
       }] }), updated_at: "2026-10-06" },
       { setting_key: "endurance_game_v1", setting_value: JSON.stringify({ version: 1, history: [video, legacy] }), updated_at: "2026-10-06" },
       { setting_key: "endurance_unlock_v1", setting_value: "true", updated_at: "2026-10-06" },
+      { setting_key: ENDURANCE_CURRENT_KEY, setting_value: JSON.stringify(current), updated_at: "2026-10-06" },
     ];
     mocks.query.mockImplementation((sql: string) => sql === "SELECT * FROM app_settings" ? rows : []);
     const payload = await savePayload();
@@ -205,6 +214,21 @@ describe("bounded backup export and import", () => {
     const payload = await savePayload();
     const video = finishEndurance(createEnduranceGame("game-6", 1, "2026-10-06T00:00:00.000Z"), true, "2026-10-06T01:00:00.000Z", { positionMs: 61_000, durationMs: 60_000 });
     payload.database.app_settings = [{ setting_key: "endurance_game_v1", setting_value: JSON.stringify({ version: 1, history: [video] }) }];
+    await expect(backupService.restore(payload)).rejects.toThrow("勃起我慢");
+    expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.multiSet).not.toHaveBeenCalled();
+  });
+
+  it.each(["media", "timer", "game"])("rejects invalid active endurance %s before any restore mutations", async (field) => {
+    const payload = await savePayload();
+    const current = createEnduranceSession({
+      game: createEnduranceGame("custom", 1), mediaIds: ["endurance:one.jpg"],
+      slideTimer: createCountdown(60_000), extraTimer: createCountdown(180_000),
+      videoProgress: { positionMs: 0, durationMs: null }, videoComplete: false,
+    });
+    if (field === "media") current.mediaIds = ["blob:one"];
+    if (field === "timer") current.slideTimer = { ...current.slideTimer, status: "running", deadline: Date.now() + 60_000 };
+    if (field === "game") current.game.index = current.game.total;
+    payload.database.app_settings = [{ setting_key: ENDURANCE_CURRENT_KEY, setting_value: JSON.stringify(current) }];
     await expect(backupService.restore(payload)).rejects.toThrow("勃起我慢");
     expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.multiSet).not.toHaveBeenCalled();
   });
@@ -288,6 +312,40 @@ describe("bounded backup export and import", () => {
     await expect(backupService.restore(payload)).rejects.toThrow("追加命令");
     expect([...mocks.storage]).toEqual(before);
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(["daily-game-reward-result:othello:first", "daily-game-reward-owner:othello:2026-10-07"])("rejects malformed %s before any restore mutation", async (key) => {
+    const payload = await savePayload();
+    payload.database.app_settings = [{ setting_key: key, setting_value: "broken", updated_at: "2026-10-07" }];
+    const before = [...mocks.storage];
+    await expect(backupService.restore(payload)).rejects.toThrow("日次ポイント");
+    expect([...mocks.storage]).toEqual(before);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("round-trips first-clear receipts and ledger together without awarding legacy game history", async () => {
+    const receipt = JSON.stringify({ version: 1, game: "othello", resultId: "first", completedAt: "2026-10-07T03:00:00.000Z", date: "2026-10-07", awarded: true });
+    const settings = [
+      { setting_key: "daily-game-reward-result:othello:first", setting_value: receipt, updated_at: "2026-10-07 12:00:00" },
+      { setting_key: "daily-game-reward-owner:othello:2026-10-07", setting_value: receipt, updated_at: "2026-10-07 12:00:00" },
+    ];
+    const ledger = [{ source_key: "game-clear:othello:2026-10-07", points: 50, description: "First clear", created_at: "2026-10-07 12:00:00" }];
+    mocks.query.mockImplementation((sql: string) => sql === "SELECT * FROM app_settings" ? structuredClone(settings) : sql === "SELECT * FROM point_transactions" ? structuredClone(ledger) : []);
+    const payload = await savePayload();
+    expect(payload.database.app_settings).toEqual(settings);
+    expect(payload.database.point_transactions).toEqual(ledger);
+    mocks.query.mockReturnValue([]);
+    await backupService.restore(payload);
+    expect(mocks.execute).toHaveBeenCalledWith(
+      "INSERT INTO point_transactions (source_key, points, description, created_at) VALUES (?, ?, ?, ?)",
+      [ledger[0].source_key, 50, ledger[0].description, ledger[0].created_at],
+    );
+    for (const row of settings) expect(mocks.execute).toHaveBeenCalledWith(
+      "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+      [row.setting_key, row.setting_value, row.updated_at],
+    );
+    expect(mocks.execute.mock.calls.some(([sql]) => sql.includes("INSERT OR IGNORE INTO point_transactions"))).toBe(false);
   });
 
   it("round-trips a level 120 player without raising a level 100 enemy", async () => {

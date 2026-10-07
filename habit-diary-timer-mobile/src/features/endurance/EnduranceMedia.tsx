@@ -4,9 +4,7 @@ import { Image, Modal, PanResponder, Platform, StyleSheet, View } from "react-na
 import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { createGallerySwipe } from "../files/galleryNavigation";
 import type { EnduranceMediaItem } from "./assets";
 import type { EnduranceVideoProgress } from "./game";
@@ -18,6 +16,10 @@ type Props = {
   item: EnduranceMediaItem; active: boolean; onNext?: () => void; onPrevious?: () => void;
   onVideoEnd?: () => void; onVideoProgress?: (progress: EnduranceVideoProgress) => void;
   videoRef?: React.RefObject<EnduranceVideoHandle | null>; onError: () => void;
+  loopVideo?: boolean;
+  audioActive?: boolean;
+  initialVideoProgress?: EnduranceVideoProgress;
+  initialVideoComplete?: boolean;
 };
 
 export function EnduranceMedia(props: Props) {
@@ -92,14 +94,16 @@ function SwipeArea({ video, onNext, onPrevious, style, children }: React.PropsWi
 }
 
 function EnduranceVideo(props: Omit<Props, "item"> & { item: Extract<EnduranceMediaItem, { kind: "video" }> }) {
-  const { item, active, onVideoEnd, onVideoProgress, videoRef, onError } = props;
+  const { item, active, onVideoEnd, onVideoProgress, videoRef, onError, loopVideo = false, audioActive = active, initialVideoProgress, initialVideoComplete = false } = props;
   const source = item.source;
   const { settings } = useAppAudio();
   const player = useVideoPlayer(source);
   const callbacks = useRef({ onVideoEnd, onVideoProgress, onError });
   const activeRef = useRef(active);
-  const lastProgress = useRef<EnduranceVideoProgress>({ positionMs: 0, durationMs: null });
-  const restore = useRef<{ progress: EnduranceVideoProgress; playing: boolean; awaitingView: boolean } | null>(null);
+  const lastProgress = useRef<EnduranceVideoProgress>(initialVideoProgress ?? { positionMs: 0, durationMs: null });
+  const restore = useRef<{ progress: EnduranceVideoProgress; playing: boolean; awaitingView: boolean } | null>(
+    initialVideoProgress ? { progress: initialVideoProgress, playing: !initialVideoComplete, awaitingView: Platform.OS === "web" } : null,
+  );
   useLayoutEffect(() => {
     callbacks.current = { onVideoEnd, onVideoProgress, onError };
     activeRef.current = active;
@@ -120,8 +124,8 @@ function EnduranceVideo(props: Omit<Props, "item"> & { item: Extract<EnduranceMe
   const restoreView = useCallback(() => {
     const pending = restore.current;
     if (!pending || pending.awaitingView || !(player.duration > 0)) return;
-    player.currentTime = pending.progress.positionMs / 1000;
     restore.current = null;
+    player.currentTime = Math.min(pending.progress.positionMs / 1000, player.duration);
     if (activeRef.current && pending.playing) player.play(); else player.pause();
   }, [player]);
   const publishProgress = useCallback(() => {
@@ -131,16 +135,16 @@ function EnduranceVideo(props: Omit<Props, "item"> & { item: Extract<EnduranceMe
   }, [getProgress, restoreView]);
   const beforeResize = useCallback(() => {
     if (Platform.OS !== "web") return;
-    restore.current = { progress: getProgress(), playing: activeRef.current && player.playing, awaitingView: true };
+    // Web replace() can report playing=true before a paused VideoView has ever played.
+    restore.current = { progress: getProgress(), playing: activeRef.current && !initialVideoComplete && player.playing, awaitingView: true };
     player.pause();
-  }, [getProgress, player]);
+  }, [getProgress, initialVideoComplete, player]);
   const onSurfaceMount = useCallback(() => {
     if (restore.current) restore.current.awaitingView = false;
     publishProgress();
   }, [publishProgress]);
   useLayoutEffect(() => {
     if (Platform.OS === "web") player.replace(source);
-    player.loop = false;
     return () => {
       try {
         player.timeUpdateEventInterval = 0;
@@ -149,19 +153,20 @@ function EnduranceVideo(props: Omit<Props, "item"> & { item: Extract<EnduranceMe
       } catch { /* Already released on native. */ }
     };
   }, [player, source]);
+  useLayoutEffect(() => { player.loop = loopVideo; }, [loopVideo, player]);
   useEffect(() => {
-    player.muted = !settings?.soundEnabled;
+    player.muted = !audioActive || !settings?.soundEnabled;
     player.volume = settings?.soundVolume ?? 0;
-  }, [player, settings?.soundEnabled, settings?.soundVolume]);
+  }, [audioActive, player, settings?.soundEnabled, settings?.soundVolume]);
   useEffect(() => {
-    if (active) player.play(); else player.pause();
-  }, [active, player]);
+    if (active && !restore.current && !initialVideoComplete) player.play(); else player.pause();
+  }, [active, initialVideoComplete, player]);
   useEffect(() => {
     const time = player.addListener("timeUpdate", publishProgress);
     const loaded = player.addListener("sourceLoad", publishProgress);
     const end = player.addListener("playToEnd", () => {
       publishProgress();
-      if (activeRef.current) callbacks.current.onVideoEnd?.();
+      if (activeRef.current && !player.loop) callbacks.current.onVideoEnd?.();
     });
     const playing = player.addListener("playingChange", (event) => {
       if (event.isPlaying && !activeRef.current) player.pause();
@@ -188,17 +193,8 @@ function EnduranceVideoSurface({ player, onMount }: { player: VideoPlayer; onMou
   return <VideoView player={player} style={styles.fill} nativeControls contentFit="contain" playsInline />;
 }
 
-export function MediaChoice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} accessibilityLabel={label}
-    onPress={onPress} style={[styles.choice, selected && styles.selected]}>
-    <AppText localize={false} style={styles.choiceText}>{`${selected ? "☑" : "□"} ${label}`}</AppText>
-  </Pressable>;
-}
-
 const styles = StyleSheet.create({
   frame: { width: "100%", height: 380, backgroundColor: "#000", borderWidth: 1, borderColor: "#888", overflow: "hidden" },
   fill: { width: "100%", height: "100%" }, fullscreen: { flex: 1, backgroundColor: "#000", paddingHorizontal: 12, gap: 12 },
   expandedMedia: { flex: 1, minHeight: 0 }, controls: { flexDirection: "row", gap: 8 }, button: { flex: 1 },
-  choice: { padding: 12, minHeight: 44, borderWidth: 1, borderColor: "#888", borderRadius: 4 },
-  selected: { borderColor: "#ff69b4", backgroundColor: "#3d1529" }, choiceText: { color: "#fff" },
 });
