@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -106,7 +107,7 @@ export default function HabitsScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">調教部屋</AppText>
+      <PageTitle>調教部屋</PageTitle>
 
       <RoomConversation
         characterSource={require("../../assets/characters/training-nino-v3.png")}

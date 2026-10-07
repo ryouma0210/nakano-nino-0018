@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -199,9 +200,7 @@ export default function DisposalHistoryScreen() {
   return (
     <>
       <Screen>
-        <AppText variant="title">ゴミ汁廃棄履歴</AppText>
-        <PrimaryButton title="記録・交換メニューへ戻る" tone="secondary" disabled={busy}
-          onPress={() => router.replace("/(tabs)/menu?section=record")} />
+        <PageTitle>ゴミ汁廃棄履歴</PageTitle>
         <RoomConversation
           characterSource={require("../../assets/characters/diary-nino.png")}
           roomName="ゴミ汁廃棄履歴"
@@ -309,7 +308,11 @@ export default function DisposalHistoryScreen() {
             </Card>
           </View>
         )) : null}
+        <PrimaryButton title="記録・交換メニューへ戻る" tone="secondary" disabled={busy}
+          onPress={() => router.replace("/(tabs)/menu?section=record")} />
         <PrimaryButton title="タスクへ戻る" tone="order" onPress={() => router.replace("/(tabs)/tasks")} />
+        <PrimaryButton title="ホームへ戻る" tone="secondary" disabled={busy}
+          onPress={() => router.replace("/(tabs)")} />
       </Screen>
 
       <Modal visible={formVisible} animationType="slide" onRequestClose={closeForm}>

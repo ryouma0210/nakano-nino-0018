@@ -3,6 +3,7 @@ import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, View } from "react-
 import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
@@ -348,7 +349,7 @@ export default function MyPageScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">マイページ</AppText>
+      <PageTitle>マイページ</PageTitle>
       {profileLoading ? <AppText variant="muted">読み込み中...</AppText> : !profileReady ? (
         <PrimaryButton title="再読み込み" tone="secondary" onPress={() => { void reload(); }} />
       ) : null}

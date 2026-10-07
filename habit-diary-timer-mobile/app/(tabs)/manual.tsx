@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
@@ -17,10 +18,8 @@ export default function ManualScreen() {
   return (
     <Screen desktopLayout="single">
       <View style={styles.content}>
-        <View style={styles.header}>
-          <AppText variant="title">マニュアル</AppText>
-          <AppText variant="muted">確認したい項目を選ぶと、使い方を表示します。</AppText>
-        </View>
+        <PageTitle>マニュアル</PageTitle>
+        <AppText variant="muted">確認したい項目を選ぶと、使い方を表示します。</AppText>
 
         <View style={styles.categories}>
           {manualSections.map((item) => (
@@ -92,6 +91,11 @@ export default function ManualScreen() {
           tone="secondary"
           onPress={() => router.replace("/(tabs)/menu?section=management")}
         />
+        <PrimaryButton
+          title="ホームへ戻る"
+          tone="secondary"
+          onPress={() => router.replace("/(tabs)")}
+        />
       </View>
     </Screen>
   );
@@ -99,7 +103,6 @@ export default function ManualScreen() {
 
 const styles = StyleSheet.create({
   content: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 14 },
-  header: { gap: 8 },
   categories: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   category: {
     flexGrow: 1,

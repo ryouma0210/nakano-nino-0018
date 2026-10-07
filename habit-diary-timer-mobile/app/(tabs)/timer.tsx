@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Modal, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -262,9 +263,9 @@ export default function TimerScreen() {
 
   return (
     <Screen>
-      <AppText variant="title" style={styles.roomTitle}>
+      <PageTitle titleStyle={styles.roomTitle}>
         お仕置き部屋
-      </AppText>
+      </PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/punishment-nino.png")}
         roomName="お仕置き部屋"

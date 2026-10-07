@@ -11,6 +11,7 @@ import {
 } from "expo-video";
 import { Image as ExpoImage } from "expo-image";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -258,7 +259,7 @@ export default function FilesScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">ファイル格納部屋</AppText>
+      <PageTitle>ファイル格納部屋</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/files-nino.png")}
         roomName="ファイル格納部屋"
@@ -709,4 +710,3 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 });
-

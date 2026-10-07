@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -247,10 +248,9 @@ export default function RecordsScreen() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <AppText variant="title">調教日記部屋</AppText>
-        {!searching ? <PrimaryButton title="登録" onPress={openCreate} /> : null}
-      </View>
+      <PageTitle action={!searching ? <PrimaryButton title="登録" onPress={openCreate} /> : undefined}>
+        調教日記部屋
+      </PageTitle>
 
       <RoomConversation
         characterSource={require("../../assets/characters/diary-nino.png")}
@@ -599,11 +599,6 @@ export default function RecordsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   monthHeader: {
     flexDirection: "row",
     alignItems: "center",
