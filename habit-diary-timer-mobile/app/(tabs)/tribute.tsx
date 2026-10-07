@@ -20,6 +20,10 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { translateWeekday, type AppLanguage } from "@/i18n";
 import { formatDateJa, toDateKey } from "@/utils/date";
 import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
+import { RecordFilterFields } from "@/features/records/RecordFilterFields";
+import { tributeFilterTypes, tributeFilterTypeValues } from "@/features/records/filters";
+import { selectTributeRecords } from "@/features/records/search";
+import { usePersistentRecordFilters } from "@/features/records/usePersistentRecordFilters";
 
 function formatYen(value: number) {
   return `${Math.max(0, Math.floor(value)).toLocaleString("ja-JP")}円`;
@@ -75,6 +79,13 @@ export default function TributeScreen() {
   const [incomeComment, setIncomeComment] = useState("");
   const [records, setRecords] = useState<TributeRecord[]>([]);
   const [incomeRecords, setIncomeRecords] = useState<TributeIncomeRecord[]>([]);
+  const [allRecords, setAllRecords] = useState<TributeRecord[]>([]);
+  const [allIncomeRecords, setAllIncomeRecords] = useState<TributeIncomeRecord[]>([]);
+  const recordFilters = usePersistentRecordFilters("tribute", tributeFilterTypeValues);
+  const displayedRecords = useMemo(() => selectTributeRecords(allRecords, selectedMonth, recordFilters.filters, "expense"),
+    [allRecords, selectedMonth, recordFilters.filters]);
+  const displayedIncomeRecords = useMemo(() => selectTributeRecords(allIncomeRecords, selectedMonth, recordFilters.filters, "income"),
+    [allIncomeRecords, selectedMonth, recordFilters.filters]);
   const [deleteTarget, setDeleteTarget] = useState<TributeRecord | null>(null);
   const [deleteIncomeTarget, setDeleteIncomeTarget] =
     useState<TributeIncomeRecord | null>(null);
@@ -104,6 +115,8 @@ export default function TributeScreen() {
     setIncomeInput(income ? String(income) : "");
     setRecords(tributeRepository.list(selectedMonth));
     setIncomeRecords(tributeRepository.incomeList(selectedMonth));
+    setAllRecords(tributeRepository.list(""));
+    setAllIncomeRecords(tributeRepository.incomeList(""));
   }, [selectedMonth]);
 
   useFocusEffect(load);
@@ -370,11 +383,26 @@ export default function TributeScreen() {
       </Card>
 
       <Card>
-        <AppText variant="subtitle">{monthLabel(selectedMonth, language)}のお貢ぎ履歴</AppText>
-        {records.length === 0 ? (
-          <AppText variant="muted">今月のお貢ぎ履歴はまだありません。</AppText>
+        <AppText variant="subtitle">履歴を検索</AppText>
+        <AppText variant="muted">検索条件は下の履歴一覧に適用します。上の月別集計と基本収入は変更しません。</AppText>
+        <TextField label="検索" accessibilityLabel="履歴を検索" testID="tribute-search"
+          value={recordFilters.filters.keyword} editable={recordFilters.ready}
+          onChangeText={(keyword) => recordFilters.update({ keyword })} placeholder="コメント・日付・金額" />
+      </Card>
+      <RecordFilterFields filters={recordFilters.filters} onChange={recordFilters.update} types={tributeFilterTypes}
+        ready={recordFilters.ready} error={recordFilters.error} storageError={recordFilters.storageError} />
+      {recordFilters.active ? <Card>
+        {recordFilters.ready && !recordFilters.error ? <AppText testID="tribute-search-count">
+          {`検索結果：${displayedRecords.length + displayedIncomeRecords.length}件`}
+        </AppText> : null}
+        <PrimaryButton title="検索をクリア" tone="secondary" onPress={recordFilters.clear} />
+      </Card> : null}
+      {recordFilters.ready && !recordFilters.error && recordFilters.filters.recordType !== "income" ? <Card>
+        <AppText variant="subtitle">{recordFilters.active ? "支出の検索結果" : `${monthLabel(selectedMonth, language)}のお貢ぎ履歴`}</AppText>
+        {displayedRecords.length === 0 ? (
+          <AppText variant="muted">{recordFilters.active ? "条件に一致する記録はありません。" : "今月のお貢ぎ履歴はまだありません。"}</AppText>
         ) : (
-          records.map((record) => (
+          displayedRecords.map((record) => (
             <View key={record.id} style={styles.recordRow}>
               <View style={styles.recordContent}>
                 <AppText style={styles.recordDate}>
@@ -396,14 +424,14 @@ export default function TributeScreen() {
             </View>
           ))
         )}
-      </Card>
+      </Card> : null}
 
-      <Card>
-        <AppText variant="subtitle">{monthLabel(selectedMonth, language)}の追加収入履歴</AppText>
-        {incomeRecords.length === 0 ? (
-          <AppText variant="muted">今月の追加収入はまだありません。</AppText>
+      {recordFilters.ready && !recordFilters.error && recordFilters.filters.recordType !== "expense" ? <Card>
+        <AppText variant="subtitle">{recordFilters.active ? "追加収入の検索結果" : `${monthLabel(selectedMonth, language)}の追加収入履歴`}</AppText>
+        {displayedIncomeRecords.length === 0 ? (
+          <AppText variant="muted">{recordFilters.active ? "条件に一致する記録はありません。" : "今月の追加収入はまだありません。"}</AppText>
         ) : (
-          incomeRecords.map((record) => (
+          displayedIncomeRecords.map((record) => (
             <View key={record.id} style={styles.recordRow}>
               <View style={styles.recordContent}>
                 <AppText style={styles.recordDate}>
@@ -425,7 +453,7 @@ export default function TributeScreen() {
             </View>
           ))
         )}
-      </Card>
+      </Card> : null}
 
       <PrimaryButton
         title="記録・交換メニューへ戻る"

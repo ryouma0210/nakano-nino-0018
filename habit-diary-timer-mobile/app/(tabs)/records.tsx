@@ -19,6 +19,9 @@ import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
 import { journalRepository } from "@/repositories/journalRepository";
 import { selectJournalRecords } from "@/features/records/search";
+import { RecordFilterFields } from "@/features/records/RecordFilterFields";
+import { journalFilterTypes, journalFilterTypeValues } from "@/features/records/filters";
+import { usePersistentRecordFilters } from "@/features/records/usePersistentRecordFilters";
 import { journalFormSchema, type JournalFormValues } from "@/schemas/forms";
 import type { Journal } from "@/types/models";
 import { formatDateJa, parseTags, toDateKey } from "@/utils/date";
@@ -37,14 +40,16 @@ export default function RecordsScreen() {
   const { settings } = useAppAudio();
   const { showError } = useAppModal();
   const [journals, setJournals] = useState<Journal[]>([]);
-  const [keyword, setKeyword] = useState("");
+  const recordFilters = usePersistentRecordFilters("journals", journalFilterTypeValues, true);
+  const { filters } = recordFilters;
+  const keyword = filters.keyword;
   const [loadedKeyword, setLoadedKeyword] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const loadVersion = useRef(0);
   const searchQuery = keyword.trim();
-  const searching = searchQuery.length > 0;
-  const waitingForResults = loading || loadedKeyword !== searchQuery;
+  const searching = recordFilters.active;
+  const waitingForResults = !recordFilters.ready || loading || loadedKeyword !== searchQuery;
   const [selectedDate, setSelectedDate] = useState(toDateKey());
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
@@ -97,8 +102,8 @@ export default function RecordsScreen() {
     [journals],
   );
   const displayedJournals = useMemo(
-    () => selectJournalRecords(journals, selectedDate, searchQuery),
-    [journals, selectedDate, searchQuery],
+    () => selectJournalRecords(journals, selectedDate, searchQuery, filters),
+    [journals, selectedDate, searchQuery, filters],
   );
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
@@ -177,14 +182,14 @@ export default function RecordsScreen() {
 
   function changeKeyword(value: string) {
     setPendingDateDelete(false);
-    setKeyword(value);
+    recordFilters.update({ keyword: value });
   }
 
   function showDate(date: string) {
     const [year, month] = date.split("-").map(Number);
     setSelectedDate(date);
     setVisibleMonth(new Date(year, month - 1, 1));
-    changeKeyword("");
+    recordFilters.clear();
   }
 
   function isProtectedChecklist(journal: Journal | null) {
@@ -248,7 +253,7 @@ export default function RecordsScreen() {
 
   return (
     <Screen>
-      <PageTitle action={!searching ? <PrimaryButton title="登録" onPress={openCreate} /> : undefined}>
+      <PageTitle>
         調教日記部屋
       </PageTitle>
 
@@ -264,14 +269,17 @@ export default function RecordsScreen() {
         label="検索"
         accessibilityLabel={translateText("検索", settings?.language ?? "ja")}
         value={keyword}
+        editable={recordFilters.ready}
         onChangeText={changeKeyword}
         placeholder="タイトル・本文・タグ"
       />
+      <RecordFilterFields filters={filters} onChange={(patch) => { setPendingDateDelete(false); recordFilters.update(patch); }}
+        types={journalFilterTypes} supportsTags ready={recordFilters.ready} error={recordFilters.error} storageError={recordFilters.storageError} />
 
       {searching ? <Card>
-        <AppText variant="subtitle">検索結果（全期間）</AppText>
-        {!waitingForResults && !loadFailed ? <AppText testID="journal-search-count">{`検索結果：${displayedJournals.length}件`}</AppText> : null}
-        <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => changeKeyword("")} />
+        <AppText variant="subtitle">検索結果</AppText>
+        {!waitingForResults && !loadFailed && !recordFilters.error ? <AppText testID="journal-search-count">{`検索結果：${displayedJournals.length}件`}</AppText> : null}
+        <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => { setPendingDateDelete(false); recordFilters.clear(); }} />
       </Card> : <Card style={styles.calendarCard}>
         <AppText variant="subtitle" style={styles.calendarTitle}>記録カレンダー</AppText>
         <View style={styles.monthHeader}>
@@ -355,25 +363,33 @@ export default function RecordsScreen() {
         </AppText>
       </Card>}
 
+      {!searching ? <View testID="journal-calendar-actions" style={styles.calendarActions}>
+        <View testID="journal-create" style={styles.calendarAction}>
+          <PrimaryButton title="登録" onPress={openCreate} />
+        </View>
+        <View testID="journal-delete-day" style={styles.calendarAction}>
+          <PrimaryButton
+            title="この日を削除"
+            tone="danger"
+            disabled={waitingForResults || loadFailed || Boolean(recordFilters.error)}
+            onPress={() => setPendingDateDelete(true)}
+          />
+        </View>
+      </View> : null}
+
       {!searching ? <View style={styles.dateHeadingRow}>
         <AppText style={styles.dateHeading}>{formatDateJa(selectedDate)}</AppText>
-        <PrimaryButton
-          title="この日を削除"
-          tone="danger"
-          disabled={waitingForResults || loadFailed}
-          onPress={() => setPendingDateDelete(true)}
-        />
       </View> : null}
 
       {waitingForResults ? <AppText variant="muted">{searching ? "検索結果を読み込み中…" : "読み込み中…"}</AppText> : loadFailed ? (
         <Card><AppText>記録を読み込めませんでした。</AppText><PrimaryButton title="再読み込み" tone="secondary" onPress={() => { void load(); }} /></Card>
-      ) : displayedJournals.length === 0 ? (
+      ) : !recordFilters.error && displayedJournals.length === 0 ? (
         <Card>
           <AppText variant="muted">{searching ? "条件に一致する記録はありません。" : "選択した日の記録はありません。"}</AppText>
         </Card>
       ) : null}
 
-      {!waitingForResults && !loadFailed ? displayedJournals.map((journal) => (
+      {!waitingForResults && !loadFailed && !recordFilters.error ? displayedJournals.map((journal) => (
         <View key={journal.id} testID={`journal-record-${journal.id}`} style={styles.dateGroup}>
           <Card style={journalCardStyle(journal)}>
             <View style={styles.journalHeader}>
@@ -599,6 +615,8 @@ export default function RecordsScreen() {
 }
 
 const styles = StyleSheet.create({
+  calendarActions: { flexDirection: "row", gap: 8 },
+  calendarAction: { flex: 1 },
   monthHeader: {
     flexDirection: "row",
     alignItems: "center",

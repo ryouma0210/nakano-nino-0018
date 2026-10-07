@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Animated, AppState, BackHandler, Image as NativeImage, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect, useNavigation } from "expo-router";
 import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { contractService } from "@/services/gameRoomService";
 import { AppText } from "@/components/AppText";
@@ -31,6 +32,7 @@ import { claimQuest, dailyQuestViews, storyQuestViews, type QuestView } from "@/
 import { CenterArea, LeftArea, RightArea, TopArea } from "@/components/outside/areas";
 import { useOutsideKeyboardControls } from "@/features/outside/useOutsideKeyboardControls";
 import { createModalExitController } from "@/features/outside/modalExit";
+import { QuestList } from "@/features/outside/QuestList";
 
 type Phase = "explore" | "battle" | "result" | "loss";
 type LossEventKind = "tail" | "chest" | "back" | "foot";
@@ -415,6 +417,8 @@ export default function OutsideScreen() {
   const [playerFacing, setPlayerFacing] = useState<Direction>("down");
   const [crystalOpen, setCrystalOpen] = useState(false);
   const [questCrystalOpen, setQuestCrystalOpen] = useState(false);
+  const [questTab, setQuestTab] = useState<"daily" | "story" | "help">("daily");
+  const questFromMap = useRef(false);
   const [questExitPending, setQuestExitPending] = useState(false);
   const outsideFocused = useRef(false);
   const questExit = useMemo(() => createModalExitController({
@@ -691,6 +695,8 @@ export default function OutsideScreen() {
 
   function openQuestCrystal() {
     if (questExit.isPending()) return;
+    questFromMap.current = false;
+    setQuestTab("daily");
     setMessage("");
     refreshQuests();
     setQuestCrystalOpen(true);
@@ -700,9 +706,18 @@ export default function OutsideScreen() {
     questExit.cancel();
     setQuestExitPending(false);
     setQuestCrystalOpen(false);
+    if (questFromMap.current) return;
     setMapPosition(questCrystalExitPosition);
     setPlayerFacing("down");
     setMessage("青いクリスタルでクエストを確認した。");
+  }
+
+  function openMapQuests() {
+    if (mapModalOpen || isMovingArea || phase !== "explore") return;
+    questFromMap.current = true;
+    setQuestTab("daily");
+    refreshQuests();
+    setQuestCrystalOpen(true);
   }
 
   function leaveQuestCrystal() {
@@ -710,8 +725,10 @@ export default function OutsideScreen() {
     setQuestExitPending(true);
     setQuestCrystalOpen(false);
     // A cancelled exit leaves the player outside the crystal's interaction radius.
-    setMapPosition(questCrystalExitPosition);
-    setPlayerFacing("down");
+    if (!questFromMap.current) {
+      setMapPosition(questCrystalExitPosition);
+      setPlayerFacing("down");
+    }
   }
 
   function receiveQuestReward(kind: "daily" | "story", questId: string) {
@@ -1837,6 +1854,12 @@ export default function OutsideScreen() {
         },
       ]}>
         <View key={`outside-area-${mapArea}`} style={[styles.fullMap, Platform.OS === "web" && styles.webFullMap]}>
+          <LocalizedPressable testID="outside-quest-launcher" accessibilityRole="button" accessibilityLabel="クエストを開く"
+            accessibilityState={{ expanded: questCrystalOpen, disabled: mapModalOpen || isMovingArea }}
+            disabled={mapModalOpen || isMovingArea} onPress={openMapQuests} style={styles.questLauncher}>
+            <Ionicons name="list-outline" size={25} color="#b7edff" />
+            <AppText style={styles.questLauncherText}>クエスト</AppText>
+          </LocalizedPressable>
           {mapArea === "center" ? (
             <CenterArea
               crystalSource={pixelSprites.crystal}
@@ -2015,10 +2038,19 @@ export default function OutsideScreen() {
         <View style={[styles.crystalModalBackdrop, { paddingTop: Math.max(20, insets.top), paddingBottom: Math.max(20, insets.bottom) }]}>
           <View style={[styles.crystalModal, styles.questModal]}>
             <ScrollView contentContainerStyle={styles.crystalModalContent} showsVerticalScrollIndicator={false}>
-              <AppText style={styles.questModalTitle}>青のクエストクリスタル</AppText>
+              <AppText style={styles.questModalTitle}>クエスト</AppText>
               <AppText style={styles.questModalHelp}>条件を達成して報酬を受け取ってください。</AppText>
+              <View style={styles.questTabs} accessibilityRole="tablist">
+                {(["daily", "story", "help"] as const).map((tab) => (
+                  <LocalizedPressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: questTab === tab }}
+                    accessibilityLabel={tab === "daily" ? "デイリー" : tab === "story" ? "ストーリー" : "遊び方"}
+                    onPress={() => setQuestTab(tab)} style={[styles.questTab, questTab === tab && styles.questTabSelected]}>
+                    <AppText>{tab === "daily" ? "デイリー" : tab === "story" ? "ストーリー" : "遊び方"}</AppText>
+                  </LocalizedPressable>
+                ))}
+              </View>
 
-              <View style={styles.crystalTutorialSection}>
+              {questTab === "help" ? <View style={styles.crystalTutorialSection}>
                 <AppText style={styles.crystalTutorialTitle}>チュートリアル</AppText>
                 {[
                   { title: "移動", action: "画面の矢印に触れるか、タップしてエリアを移動します。", image: pixelSprites.mapCenter },
@@ -2036,49 +2068,14 @@ export default function OutsideScreen() {
                     </View>
                   </View>
                 ))}
-              </View>
+              </View> : null}
 
-              <View style={styles.questSection}>
-                <AppText style={styles.questSectionTitle}>デイリークエスト</AppText>
-                <AppText style={styles.questSectionHelp}>毎日更新／各10Pt</AppText>
-                {dailyQuests.map((quest) => (
-                  <View key={quest.id} style={styles.questCard}>
-                    <AppText style={styles.questTitle}>{quest.title}</AppText>
-                    <AppText style={styles.questCondition}>{quest.condition}</AppText>
-                    <AppText style={styles.questProgress}>{quest.current} / {quest.target}</AppText>
-                    <Pressable
-                      disabled={!quest.completed || quest.claimed}
-                      style={[styles.questClaimButton, (!quest.completed || quest.claimed) && styles.questClaimButtonDisabled]}
-                      onPress={() => receiveQuestReward("daily", quest.id)}
-                    >
-                      <AppText style={styles.questClaimButtonText}>
-                        {quest.claimed ? "受取済み" : quest.completed ? "10Ptを受け取る" : "挑戦中"}
-                      </AppText>
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-
-              <View style={[styles.questSection, styles.storyQuestSection]}>
-                <AppText style={styles.questSectionTitle}>クエスト</AppText>
-                <AppText style={styles.questSectionHelp}>全5段階・順番に解放／各50Pt</AppText>
-                {storyQuests.map((quest) => (
-                  <View key={quest.id} style={[styles.questCard, quest.locked && styles.questCardLocked]}>
-                    <AppText style={styles.questTitle}>{quest.title}</AppText>
-                    <AppText style={styles.questCondition}>{quest.locked ? "前の段階を達成して報酬を受け取ると解放" : quest.condition}</AppText>
-                    <AppText style={styles.questProgress}>{quest.locked ? "未解放" : `${quest.current} / ${quest.target}`}</AppText>
-                    <Pressable
-                      disabled={quest.locked || !quest.completed || quest.claimed}
-                      style={[styles.questClaimButton, (quest.locked || !quest.completed || quest.claimed) && styles.questClaimButtonDisabled]}
-                      onPress={() => receiveQuestReward("story", quest.id)}
-                    >
-                      <AppText style={styles.questClaimButtonText}>
-                        {quest.claimed ? "受取済み" : quest.locked ? "未解放" : quest.completed ? "50Ptを受け取る" : "挑戦中"}
-                      </AppText>
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
+              {questTab !== "help" ? <View style={[styles.questSection, questTab === "story" && styles.storyQuestSection]}>
+                <AppText style={styles.questSectionTitle}>{questTab === "daily" ? "デイリークエスト" : "クエスト"}</AppText>
+                <AppText style={styles.questSectionHelp}>{questTab === "daily" ? "毎日更新／各10Pt" : "全5段階・順番に解放／各50Pt"}</AppText>
+                <QuestList quests={questTab === "daily" ? dailyQuests : storyQuests}
+                  onClaim={(id) => receiveQuestReward(questTab === "daily" ? "daily" : "story", id)} />
+              </View> : null}
 
               <AppText style={styles.questBalance}>所持Pt {availablePoints}Pt</AppText>
               <Pressable style={styles.crystalSettingsCloseButton} onPress={closeQuestCrystal}>
@@ -2852,20 +2849,17 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   questModal: { borderColor: "#28b9ff", backgroundColor: "#06131d" },
+  questLauncher: { position: "absolute", right: 8, top: 8, zIndex: 30, minWidth: 60, minHeight: 52, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: "#35c7ff", backgroundColor: "#06131df0", padding: 5 },
+  questLauncherText: { color: "#b7edff", fontSize: 10, lineHeight: 14 },
+  questTabs: { flexDirection: "row", gap: 6 },
+  questTab: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 44, paddingHorizontal: 4, borderWidth: 1, borderColor: "#45667a", borderRadius: 6 },
+  questTabSelected: { backgroundColor: "#16527a", borderColor: "#35c7ff" },
   questModalTitle: { color: "#35c7ff", fontSize: 24, fontWeight: "900" },
   questModalHelp: { color: "#d8f4ff", fontSize: 14, lineHeight: 21 },
   questSection: { borderWidth: 2, borderColor: "#35c7ff", backgroundColor: "#071b29", padding: 12, gap: 10 },
   storyQuestSection: { borderColor: "#ffd45c", backgroundColor: "#211b08" },
   questSectionTitle: { color: "#ffffff", fontSize: 20, fontWeight: "900" },
   questSectionHelp: { color: "#b8cbd5", fontSize: 13, fontWeight: "700" },
-  questCard: { borderWidth: 1, borderColor: "#5ad2ff", backgroundColor: "#101010", padding: 12, gap: 6 },
-  questCardLocked: { opacity: 0.55 },
-  questTitle: { color: "#ffffff", fontSize: 16, fontWeight: "900" },
-  questCondition: { color: "#e7e7e7", fontSize: 14, lineHeight: 20 },
-  questProgress: { color: "#35c7ff", fontSize: 15, fontWeight: "900" },
-  questClaimButton: { minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#ffffff", backgroundColor: "#1678ba", paddingHorizontal: 10 },
-  questClaimButtonDisabled: { backgroundColor: "#333333", borderColor: "#666666" },
-  questClaimButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
   questBalance: { color: "#ffffff", textAlign: "right", fontSize: 17, fontWeight: "900" },
   crystalTutorialSection: {
     gap: 8,

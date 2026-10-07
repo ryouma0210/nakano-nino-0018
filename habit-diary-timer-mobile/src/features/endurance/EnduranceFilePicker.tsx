@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Image, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { createVideoPlayer, type VideoThumbnail } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { displayedFileName, storedFileKey } from "@/features/files/fileList";
+import { TextField } from "@/components/TextField";
+import { displayedFileName, filterFilesByName, storedFileKey } from "@/features/files/fileList";
 import { mimeTypeForName, type StoredFile } from "@/services/fileStorageService";
 import { MAX_CUSTOM_MEDIA } from "./game";
 
@@ -30,11 +31,24 @@ export function EnduranceFilePicker(props: Props) {
 
 function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, onRetry, onClose }: Props) {
   const insets = useSafeAreaInsets();
+  const [search, setSearch] = useState("");
+  const visibleFiles = useMemo(() => filterFilesByName(files, search), [files, search]);
   const thumbnails = useVideoThumbnails(files, !loading && !loadFailed);
   return (
     <View style={[styles.dialog, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) }]}>
       <AppText variant="title">ファイル選択</AppText>
       <AppText variant="muted">最大100件まで選択できます。</AppText>
+      <TextField
+        label="ファイル名で検索"
+        placeholder="名前の一部を入力"
+        value={search}
+        onChangeText={setSearch}
+        autoCapitalize="none"
+        autoCorrect={false}
+        editable={!loading && !loadFailed}
+      />
+      <AppText>{`選択中：${selectedKeys.length}件`}</AppText>
+      {!loading && !loadFailed ? <AppText variant="muted">{`表示中：${visibleFiles.length}件`}</AppText> : null}
       {loading ? <ActivityIndicator color="#fff" /> : null}
       {loadFailed ? (
         <>
@@ -44,13 +58,14 @@ function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, on
       ) : null}
       <FlatList
         style={styles.list}
-        data={loading || loadFailed ? [] : files}
+        data={loading || loadFailed ? [] : visibleFiles}
         extraData={{ selectedKeys, thumbnails }}
         keyExtractor={storedFileKey}
         contentContainerStyle={styles.listContents}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={5}
+        keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => {
           const selected = selectedKeys.includes(storedFileKey(item));
           const disabled = !selected && selectedKeys.length >= MAX_CUSTOM_MEDIA;
@@ -80,7 +95,7 @@ function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, on
           );
         }}
         ListEmptyComponent={!loading && !loadFailed ? (
-          <AppText variant="muted">勃起我慢ゲーム用の画像・動画がありません。ファイル格納で用途を追加してください。</AppText>
+          <AppText variant="muted">{files.length > 0 ? "該当するファイルはありません。" : "勃起我慢ゲーム用の画像・動画がありません。ファイル格納で用途を追加してください。"}</AppText>
         ) : null}
       />
       <PrimaryButton title="選択完了" tone="preparation" onPress={onClose} />

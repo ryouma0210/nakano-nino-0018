@@ -3,7 +3,8 @@ import type { Journal } from "../../types/models";
 import type { DisposalRecord } from "../../services/disposalHistoryService";
 import { journalRepository } from "../../repositories/journalRepository";
 import * as webDatabase from "../../database/client.web";
-import { selectDisposalRecords, selectJournalRecords } from "./search";
+import { selectDisposalRecords, selectJournalRecords, selectTributeRecords } from "./search";
+import { emptyRecordFilters } from "./filters";
 
 vi.mock("@/database/client", async () => import("../../database/client.web"));
 vi.mock("@/utils/date", () => ({ toDateKey: () => "2026-10-06", toDateTimeKey: () => "2026-10-06 12:00:00", toTimeKey: () => "12:00:00" }));
@@ -41,6 +42,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("journal search across dates", () => {
+  it("combines repository keyword results with inclusive dates, exact tags and type across months", () => {
+    for (const entry of [
+      journal(1, { record_date: "2026-03-01", title: "needle", tags: "仕事,体調" }),
+      journal(2, { record_date: "2026-03-31", title: "needle", tags: "仕事,体調", record_type: "health" }),
+      journal(3, { record_date: "2026-04-01", title: "needle", tags: "仕事,体調" }),
+      journal(4, { record_date: "2026-03-31", title: "needle", tags: "仕事,体調" }),
+      journal(5, { record_date: "2026-03-15", title: "needle", tags: "仕事" }),
+      journal(6, { record_date: "2026-03-15", title: "different", tags: "仕事,体調" }),
+    ]) seedJournal(entry);
+    expect(selectJournalRecords(journalRepository.list("needle"), "2026-10-06", "needle", {
+      fromDate: "2026-03-01", toDate: "2026-03-31", recordType: "diary", tags: "仕事,体調",
+    }).map((entry) => entry.id)).toEqual([4, 1]);
+    expect(selectJournalRecords(journalRepository.list(), "2026-10-06", "", { recordType: "health" }).map((entry) => entry.id)).toEqual([2]);
+    expect(selectJournalRecords(journalRepository.list(), "2026-10-06", "", { fromDate: "2026-02-30" })).toEqual([]);
+  });
   it("uses real repository title, body, and tag matches from different months instead of restricting the selected day", () => {
     seedJournal(journal(1, { record_date: "2025-12-25", title: "Search token" }));
     seedJournal(journal(2, { record_date: "2026-09-10", body: "A token in the body" }));
@@ -92,6 +108,14 @@ describe("disposal record search", () => {
     Object.freeze(disposal("today", { note: "Other" })),
   ]);
 
+  it("applies date-only and combined date/keyword filters beyond the selected day", () => {
+    expect(selectDisposalRecords(records, "2026-10-06", "", { fromDate: "2026-03-02", toDate: "2026-03-02" }).map((entry) => entry.id))
+      .toEqual(["poster", "notebook"]);
+    expect(selectDisposalRecords(records, "2026-10-06", "blue", { toDate: "2026-03-01" })).toEqual([]);
+    expect(selectDisposalRecords(records, "2026-10-06", "37", { toDate: "2025-12-25" }).map((entry) => entry.id)).toEqual(["blank"]);
+    expect(selectDisposalRecords(records, "2026-10-06", "blue", { fromDate: "2026-04-01", toDate: "2026-03-01" })).toEqual([]);
+  });
+
   it.each(["BLUE", "　ｂｌｕｅ　", "2026-03-02", "2026/03/02", "2026/3/2", "2026年3月2日", "2026/3/2 blue"])("finds matches across dates and handles normalized text and date formats: %s", (keyword) => {
     expect(selectDisposalRecords(records, "2026-10-06", keyword).map((entry) => entry.id)).toEqual(["poster", "notebook"]);
   });
@@ -119,5 +143,22 @@ describe("disposal record search", () => {
       expect(day.reduce((sum, entry) => sum + entry.count, 0)).toBe(9);
     }
     expect(selectDisposalRecords(records, "2025-12-25", "")[0].note).toBe("");
+  });
+});
+
+describe("income and expense history filters", () => {
+  const records = [
+    { id: 1, record_date: "2026-03-02", amount: 1200, comment: "Gift", created_at: "", updated_at: "" },
+    { id: 2, record_date: "2026-10-06", amount: 3000, comment: null, created_at: "", updated_at: "" },
+  ];
+  it("preserves the current month's default list and searches all months when a condition is set", () => {
+    expect(selectTributeRecords(records, "2026-10", emptyRecordFilters, "expense").map((entry) => entry.id)).toEqual([2]);
+    expect(selectTributeRecords(records, "2026-10", { ...emptyRecordFilters, keyword: "ＧＩＦＴ 2026/3/2 1,200" }, "expense").map((entry) => entry.id)).toEqual([1]);
+    expect(selectTributeRecords(records, "2026-10", { ...emptyRecordFilters, recordType: "income", fromDate: "2026-03-02", toDate: "2026-03-02" }, "income").map((entry) => entry.id)).toEqual([1]);
+  });
+  it("excludes the other transaction type and rejects invalid or reversed bounds", () => {
+    expect(selectTributeRecords(records, "2026-10", { ...emptyRecordFilters, recordType: "income" }, "expense")).toEqual([]);
+    expect(selectTributeRecords(records, "2026-10", { ...emptyRecordFilters, fromDate: "2026-02-30" }, "income")).toEqual([]);
+    expect(selectTributeRecords(records, "2026-10", { ...emptyRecordFilters, fromDate: "2026-10-06", toDate: "2026-03-01" }, "expense")).toEqual([]);
   });
 });

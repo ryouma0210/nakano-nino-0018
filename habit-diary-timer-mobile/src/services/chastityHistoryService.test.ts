@@ -247,6 +247,62 @@ describe("independent daily details", () => {
     expect(parseChastityHistory(raw).dailyDetails).toEqual(saved.dailyDetails);
   });
 
+  it("persists the help state separately from legacy maximum and intermediate levels without changing the format version", async () => {
+    const legacyDetails = {
+      [otherDate]: { limitLevel: 45, feelings: "Existing note" },
+      "2026-10-03": { limitLevel: 100, feelings: "" },
+    };
+    raw = JSON.stringify({ version: 1, records: [], photos: {}, calendarDisplay: "icons", dailyDetails: legacyDetails });
+    expect((await chastityHistoryService.load()).dailyDetails).toEqual(legacyDetails);
+    const helped = { limitLevel: 100, limitState: "help", feelings: "Saved note\nSecond line" } as const;
+    const saved = await chastityHistoryService.saveDailyDetails(firstDate, { ...helped, feelings: ` ${helped.feelings} ` });
+    expect(saved.dailyDetails).toEqual({ ...legacyDetails, [firstDate]: helped });
+    expect(await chastityHistoryService.load()).toEqual(saved);
+    expect(parseChastityHistory(raw)).toMatchObject({ version: 1, dailyDetails: saved.dailyDetails });
+  });
+
+  it.each([
+    { limitLevel: 100, feelings: "Ordinary maximum" },
+    { limitLevel: 100, limitState: undefined, feelings: "Ordinary maximum" },
+    { limitLevel: 45, feelings: "Updated note" },
+    { limitLevel: null, feelings: "Note only" },
+    { limitLevel: null, feelings: "" },
+  ])("removes a previous help state when returning to an ordinary selection: %j", async (next) => {
+    await chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: 100, limitState: "help", feelings: "Before" });
+    const saved = await chastityHistoryService.saveDailyDetails(firstDate, next);
+    const expected = next.limitLevel === null && !next.feelings ? {} : {
+      [firstDate]: { limitLevel: next.limitLevel, feelings: next.feelings },
+    };
+    expect(saved.dailyDetails).toEqual(expected);
+    expect(await chastityHistoryService.load()).toEqual(saved);
+    expect(raw).not.toContain("limitState");
+  });
+
+  it("snapshots the help state before queued writes and permits an overlapping reset to ordinary maximum", async () => {
+    const changing: ChastityDailyDetails = { limitLevel: 100, limitState: "help", feelings: "Before" };
+    const first = chastityHistoryService.saveDailyDetails(firstDate, changing);
+    delete changing.limitState;
+    changing.feelings = "After";
+    const second = chastityHistoryService.saveDailyDetails(firstDate, changing);
+    const [savedFirst, savedSecond] = await Promise.all([first, second]);
+    expect(savedFirst.dailyDetails[firstDate]).toEqual({ limitLevel: 100, limitState: "help", feelings: "Before" });
+    expect(savedSecond.dailyDetails[firstDate]).toEqual({ limitLevel: 100, feelings: "After" });
+    expect(await chastityHistoryService.load()).toEqual(savedSecond);
+  });
+
+  it.each([
+    { limitLevel: 100, limitState: null }, { limitLevel: 100, limitState: "unknown" },
+    { limitLevel: 100, limitState: true }, { limitLevel: 99, limitState: "help" },
+    { limitLevel: null, limitState: "help" },
+  ])("rejects invalid limit states before writing: %j", async (invalid) => {
+    const before = await chastityHistoryService.saveDailyDetails(firstDate, details);
+    mocks.set.mockClear();
+    await expect(chastityHistoryService.saveDailyDetails(firstDate, { ...invalid, feelings: "" } as ChastityDailyDetails))
+      .rejects.toThrow("状態を選択してください。");
+    expect(mocks.set).not.toHaveBeenCalled();
+    expect(await chastityHistoryService.load()).toEqual(before);
+  });
+
   it("clears just that date's details when both fields are blank", async () => {
     await chastityHistoryService.add(input);
     await chastityHistoryService.pickPhoto(firstDate);
@@ -259,7 +315,7 @@ describe("independent daily details", () => {
   });
 
   it("preserves both dates' details across record, photo and calendar mutations", async () => {
-    await chastityHistoryService.saveDailyDetails(firstDate, details);
+    await chastityHistoryService.saveDailyDetails(firstDate, { limitLevel: 100, limitState: "help", feelings: "A daily note" });
     const expected = (await chastityHistoryService.saveDailyDetails(otherDate, { limitLevel: 1, feelings: "" })).dailyDetails;
     const added = await chastityHistoryService.add(input);
     expect(added.dailyDetails).toEqual(expected);
@@ -326,6 +382,8 @@ describe("independent daily details", () => {
       null, [], {}, { limitLevel: null }, { feelings: "" },
       ...[0, 101, 1.5, "50"].map((limitLevel) => ({ limitLevel, feelings: "" })),
       { limitLevel: 50, feelings: null }, { limitLevel: 50, feelings: "x".repeat(4001) },
+      ...[null, "unknown", true, 100].map((limitState) => ({ limitLevel: 100, limitState, feelings: "" })),
+      { limitLevel: 99, limitState: "help", feelings: "" }, { limitLevel: null, limitState: "help", feelings: "" },
     ];
     for (const dailyDetails of [null, [], "details", { "2026-02-30": details },
       ...invalidEntries.map((value) => ({ [firstDate]: value }))]) {
