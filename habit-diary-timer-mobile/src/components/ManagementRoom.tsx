@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -186,7 +187,7 @@ export function ManagementRoom({ mode, title, characterSource, onChangeMode }: {
 
   return (
     <Screen>
-      <AppText variant="title">{title}</AppText>
+      <PageTitle>{title}</PageTitle>
       {state && remaining ? <Card>
         <AppText variant="label">射精許可日</AppText>
         <AppText style={styles.deadline} localize={false}>{managementDeadlineLabel(state.deadlineAt)}</AppText>

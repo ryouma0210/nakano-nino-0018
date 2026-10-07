@@ -200,6 +200,11 @@ export default function TasksScreen() {
         tone="tribute"
         onPress={() => router.push("/(tabs)/disposal-history")}
       />
+      <PrimaryButton
+        title="ホームへ戻る"
+        tone="secondary"
+        onPress={() => router.replace("/(tabs)")}
+      />
     </Screen>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -52,7 +53,7 @@ export default function LoopAudioScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">ループ音声</AppText>
+      <PageTitle>ループ音声</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/settings-nino.png")}
         roomName="ループ音声"

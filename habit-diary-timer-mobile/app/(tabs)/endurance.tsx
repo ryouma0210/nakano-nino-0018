@@ -16,6 +16,7 @@ import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { PageTitle } from "@/components/PageTitle";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import {
@@ -132,8 +133,10 @@ export default function EnduranceScreen() {
   const pauseTimersRef = useRef<() => void>(() => {});
   const departRef = useRef<() => boolean>(() => true);
   const activeGame = game !== null && result === null;
-  const active =
+  const interactionActive =
     focused && foreground && activeGame && !showHistory && !confirmRetire && !autosaveFailed;
+  const viewingCurrentSlide = game !== null && galleryIndex === game.index;
+  const active = interactionActive && viewingCurrentSlide;
   const timerMode = getEnduranceTimerMode(game);
   const slideTimer = useActiveTimer(
     SLIDE_DURATION_MS,
@@ -254,7 +257,7 @@ export default function EnduranceScreen() {
     savedCurrent.game.preset === "custom" ? files.map(mediaForFile) : enduranceAssets[savedCurrent.game.preset]) : null;
   const configured = hasCompleteEnduranceAssets(preset, selectedMedia);
   const locked = (preset === "game-5" || preset === "game-6") && !unlocked;
-  const currentIndex = result ? galleryIndex : (game?.index ?? 0);
+  const currentIndex = result ? galleryIndex : Math.min(galleryIndex, game?.index ?? 0);
   const currentMedia = media[currentIndex];
   const ready =
     game !== null &&
@@ -266,6 +269,7 @@ export default function EnduranceScreen() {
         : slideTimer.state.status === "complete",
       extraTimer.state.status === "complete",
     );
+  const completionAvailable = game !== null && result === null && game.index === game.total - 1 && ready;
 
   function choosePreset(next: EndurancePreset) {
     if ((next === "game-5" || next === "game-6") && !unlocked) {
@@ -313,7 +317,7 @@ export default function EnduranceScreen() {
     setVideoComplete(session.videoComplete);
     setVideoProgress(session.videoProgress);
     setInitialVideo(session.game.preset === "game-6" ? { progress: session.videoProgress, complete: session.videoComplete } : null);
-    setGalleryIndex(0);
+    setGalleryIndex(session.game.index);
     restoreSlideTimer(session.slideTimer);
     restoreExtraTimer(session.extraTimer);
   }, [restoreSlideTimer, restoreExtraTimer]);
@@ -485,6 +489,29 @@ export default function EnduranceScreen() {
   function leave() {
     if (checkpoint(true)) router.replace("/(tabs)/games");
   }
+  function viewSlide(index: number) {
+    if (!game || index < 0 || index > (result ? media.length - 1 : game.index)) return;
+    if (!result) {
+      slideTimer.pause();
+      extraTimer.pause();
+      if (!checkpoint(true)) return;
+    }
+    setMediaFailed(false);
+    setGalleryIndex(index);
+  }
+  function complete() {
+    if (!completionAvailable || !interactionActive || actionLock.current) return;
+    actionLock.current = true;
+    finish(false);
+  }
+  function returnToRoom() {
+    if (savingRef.current || !departRef.current()) return;
+    setResult(null);
+    finishedRef.current = false;
+    setShowRules(false);
+    setResumeUnavailable(false);
+    if (resumeRequest.current !== undefined) router.setParams({ resumeId: undefined });
+  }
   const onMediaError = useCallback(() => setMediaFailed(true), []);
   const onVideoEnd = useCallback(() => {
     if (sessionRef.current?.game.preset !== "game-6" || finishedRef.current) return;
@@ -515,9 +542,14 @@ export default function EnduranceScreen() {
     };
   });
 
+  const viewNext = game && currentIndex < (result ? media.length - 1 : game.index)
+    ? () => viewSlide(currentIndex + 1)
+    : game && !result && ready && active && game.index < game.total - 1 ? next : undefined;
+  const viewPrevious = currentIndex > 0 ? () => viewSlide(currentIndex - 1) : undefined;
+
   return (
     <Screen desktopLayout="single">
-      <AppText variant="title">勃起我慢</AppText>
+      <PageTitle>勃起我慢</PageTitle>
       {loading ? <ActivityIndicator color="#fff" /> : null}
       {loadFailed ? (
         <AppText style={styles.failed}>勃起我慢を読み込めませんでした</AppText>
@@ -625,20 +657,8 @@ export default function EnduranceScreen() {
             active={active}
             loopVideo={game.preset === "custom"}
             audioActive={game.preset === "game-6" ? active : roomAudioActive}
-            onNext={
-              result
-                ? galleryIndex < media.length - 1
-                  ? () => setGalleryIndex(galleryIndex + 1)
-                  : undefined
-                : ready
-                  ? next
-                  : undefined
-            }
-            onPrevious={
-              result && galleryIndex > 0
-                ? () => setGalleryIndex(galleryIndex - 1)
-                : undefined
-            }
+            onNext={viewNext}
+            onPrevious={viewPrevious}
             onVideoEnd={onVideoEnd}
             onVideoProgress={game.preset === "game-6" ? onVideoProgress : undefined}
             videoRef={game.preset === "game-6" ? videoRef : undefined}
@@ -651,9 +671,26 @@ export default function EnduranceScreen() {
               素材を表示できませんでした。ファイルを確認してください。
             </AppText>
           ) : null}
+          {game.preset !== "game-6" && media.length > 1 ? (
+            <View style={styles.row}>
+              <View style={styles.button}>
+                <PrimaryButton title="前へ" tone="secondary" disabled={!viewPrevious} onPress={() => viewPrevious?.()} />
+              </View>
+              <View style={styles.button}>
+                <PrimaryButton title="次へ" tone="secondary" disabled={!viewNext} onPress={() => viewNext?.()} />
+              </View>
+            </View>
+          ) : null}
           {activeGame ? (
             <>
               <AppText variant="muted">進行状況は自動保存されます。タイマーは再開時に一時停止しています。</AppText>
+              {!viewingCurrentSlide ? (
+                <>
+                  <AppText style={styles.cleared}>クリア済みの画像</AppText>
+                  <PrimaryButton title="現在の画像へ戻る" tone="secondary" onPress={() => viewSlide(game.index)} />
+                </>
+              ) : (
+              <>
               {game.preset === "game-6" ? (
                 <View>
                   <AppText variant="subtitle">動画の再生時間</AppText>
@@ -662,7 +699,7 @@ export default function EnduranceScreen() {
                   </AppText>
                 </View>
               ) : null}
-              {timerMode === "slide" ? (
+              {timerMode === "slide" && !completionAvailable ? (
                 <Card>
                   <AppText variant="subtitle">1分タイマー</AppText>
                   <AppText localize={false} style={styles.clock}>
@@ -733,7 +770,9 @@ export default function EnduranceScreen() {
               ) : null}
               {ready ? (
                 <AppText style={styles.cleared}>
-                  {game.preset === "game-6" ? "動画を最後まで再生できました。" : "時間になりました。次へ進めます。"}
+                  {game.preset === "game-6" ? "動画を最後まで再生できました。"
+                    : game.index === game.total - 1 ? "おめでとう♡勃起我慢クリアよ。\n最後に好きな画像に【画面越し射精】しなさい。\n終わったら「完了」を押してゲーム終了よ。"
+                      : "時間になりました。次へ進めます。"}
                 </AppText>
               ) : game.preset === "game-6" && !game.recovering ? (
                 <AppText variant="muted">
@@ -744,18 +783,7 @@ export default function EnduranceScreen() {
                   タイマーが終わると次のスライドへ進めます。
                 </AppText>
               )}
-              <PrimaryButton
-                title={
-                  game.index === game.total - 1
-                    ? game.failures > 0
-                      ? "ゲーム終了"
-                      : "最後まで我慢できた"
-                    : "次へ"
-                }
-                tone="defeat"
-                disabled={!ready || !active}
-                onPress={next}
-              />
+              {!completionAvailable ? (
               <View style={styles.row}>
                 <View style={styles.button} testID="endurance-fail-button">
                   <PrimaryButton
@@ -776,6 +804,12 @@ export default function EnduranceScreen() {
                   />
                 </View>
               </View>
+              ) : null}
+              </>
+              )}
+              {completionAvailable ? (
+                <PrimaryButton title="完了" disabled={!interactionActive} onPress={complete} />
+              ) : null}
             </>
           ) : null}
         </Card>
@@ -844,6 +878,14 @@ export default function EnduranceScreen() {
         tone="preparation"
         onPress={() => { if (checkpoint(true)) router.push("/(tabs)/files"); }}
       />
+      {game || result ? (
+        <PrimaryButton
+          title="開始前画面へ戻る"
+          tone="secondary"
+          disabled={saving || saveFailed}
+          onPress={returnToRoom}
+        />
+      ) : null}
       <PrimaryButton
         title="ゲーム部屋へ戻る"
         tone="secondary"

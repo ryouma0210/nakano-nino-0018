@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -52,7 +53,7 @@ export default function ReportScreen() {
   const monthLabel = `${new Date().getFullYear()}年${new Date().getMonth() + 1}月`;
   return (
     <Screen>
-      <AppText variant="title">週間報告部屋</AppText>
+      <PageTitle>週間報告部屋</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/diary-nino.png")}
         roomName="週間報告部屋"

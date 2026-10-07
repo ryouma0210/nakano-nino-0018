@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { DailyOrderWheel } from "@/components/DailyOrderWheel";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -166,7 +167,7 @@ export default function OrdersScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">本日の命令部屋</AppText>
+      <PageTitle>本日の命令部屋</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/orders-nino.png")}
         roomName="本日の命令部屋"

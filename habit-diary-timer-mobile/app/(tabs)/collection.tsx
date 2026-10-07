@@ -9,6 +9,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useAudioPlayer } from "expo-audio";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -148,7 +149,7 @@ export default function CollectionScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">コレクション部屋</AppText>
+      <PageTitle>コレクション部屋</PageTitle>
       <RoomConversation
         characterSource={require("../../assets/characters/diary-nino.png")}
         roomName="コレクション部屋"

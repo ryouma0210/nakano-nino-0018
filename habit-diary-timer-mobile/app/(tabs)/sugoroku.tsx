@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -332,10 +333,9 @@ export default function SugorokuScreen() {
     <View style={styles.root}>
       <Screen desktopLayout="single">
         <View style={styles.content}>
-          <View style={styles.heading}>
-            <AppText variant="title">すごろく</AppText>
-            <AppText variant="muted">{saving ? "保存中…" : "自動保存"}</AppText>
-          </View>
+          <PageTitle action={<AppText variant="muted">{saving ? "保存中…" : "自動保存"}</AppText>}>
+            すごろく
+          </PageTitle>
           {loading ? <ActivityIndicator color="#c7ddf7" /> : loadFailed ? (
             <Card>
               <AppText>保存データを読み込めません。再読み込みしてください。</AppText>
@@ -465,7 +465,6 @@ export default function SugorokuScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   content: { width: "100%", maxWidth: 760, alignSelf: "center", gap: 14 },
-  heading: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   tileSummary: { flexDirection: "row", alignItems: "center", gap: 8 },
   tileSummaryCompact: { gap: 5 },
   tileName: { flexShrink: 1, minWidth: 0 },

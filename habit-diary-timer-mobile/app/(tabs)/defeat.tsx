@@ -5,6 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
+import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -60,7 +61,7 @@ export default function DefeatScreen() {
 
   return (
     <Screen>
-      <AppText variant="title">敗北部屋</AppText>
+      <PageTitle>敗北部屋</PageTitle>
       {access.status === "loading" ? (
         <AppText>読み込み中...</AppText>
       ) : access.status === "locked" ? (
@@ -177,9 +178,9 @@ function DefeatContent({ savedChecks }: { savedChecks: string[] | undefined }) {
           },
         ]}
       >
-        <AppText variant="title" style={styles.whiteText}>
+        <PageTitle titleStyle={styles.whiteText}>
           敗北部屋
-        </AppText>
+        </PageTitle>
         <RoomConversation
           characterSource={require("../../assets/characters/defeat-nino.png")}
           roomName="敗北部屋"
