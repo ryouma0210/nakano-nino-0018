@@ -55,40 +55,42 @@ export default function GamesScreen() {
         contractLines={roomMessages.games.contractLines}
       />
 
-      <Card style={styles.gameCard}>
+      <View style={styles.gameList}>
         {RESUMABLE_GAMES.map((game) => {
           const entry = gameEntries[game];
           const state = progress[game];
           const summary = state.status === "ready" ? state.summary : null;
           return (
-            <View key={game} style={styles.gameEntry} testID={`games-${game}`}>
-              <PrimaryButton title={entry.title} tone="defeat" onPress={() => router.push(entry.route)} />
-              {state.status === "loading" ? <AppText variant="muted">読み込み中…</AppText> : null}
-              {state.status === "error" ? (
-                <View style={styles.progress} testID={`games-error-${game}`}>
-                  <AppText variant="muted">進行状況を読み込めませんでした。再試行してください。</AppText>
-                  <PrimaryButton title="再試行" tone="secondary" onPress={() => void refreshGame(game)} />
-                </View>
-              ) : null}
-              {summary ? (
-                <View style={styles.progress} testID={`games-progress-${game}`}>
-                  <AppText variant="subtitle">保存中のゲーム</AppText>
-                  {summary.details.map((detail, index) => <AppText key={index} variant="muted">{detail}</AppText>)}
-                  {summary.progress ? (
-                    <View style={styles.progressRow}>
-                      <AppText variant="muted">{summary.progress.label}</AppText>
-                      <AppText localize={false}>{`${summary.progress.current} / ${summary.progress.total}`}</AppText>
-                    </View>
-                  ) : null}
-                  <View testID={`games-continue-${game}`}>
-                    <PrimaryButton title="続きから" tone="secondary" onPress={() => router.push({ pathname: entry.route, params: { resumeId: summary.id } })} />
+            <Card key={game}>
+              <View style={styles.gameEntry} testID={`games-${game}`}>
+                <PrimaryButton title={entry.title} tone="defeat" onPress={() => router.push(entry.route)} />
+                {state.status === "loading" ? <AppText variant="muted">読み込み中…</AppText> : null}
+                {state.status === "error" ? (
+                  <View style={styles.progress} testID={`games-error-${game}`}>
+                    <AppText variant="muted">進行状況を読み込めませんでした。再試行してください。</AppText>
+                    <PrimaryButton title="再試行" tone="secondary" onPress={() => void refreshGame(game)} />
                   </View>
-                </View>
-              ) : null}
-            </View>
+                ) : null}
+                {summary ? (
+                  <View style={styles.progress} testID={`games-progress-${game}`}>
+                    <AppText variant="subtitle">保存中のゲーム</AppText>
+                    {summary.details.map((detail, index) => <AppText key={index} variant="muted">{detail}</AppText>)}
+                    {summary.progress ? (
+                      <View style={styles.progressRow}>
+                        <AppText variant="muted">{summary.progress.label}</AppText>
+                        <AppText localize={false}>{`${summary.progress.current} / ${summary.progress.total}`}</AppText>
+                      </View>
+                    ) : null}
+                    <View testID={`games-continue-${game}`}>
+                      <PrimaryButton title="続きから" tone="secondary" onPress={() => router.push({ pathname: entry.route, params: { resumeId: summary.id } })} />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            </Card>
           );
         })}
-      </Card>
+      </View>
 
       <PrimaryButton title="部屋から出る" tone="secondary" onPress={() => router.replace("/(tabs)/rooms")} />
     </Screen>
@@ -98,7 +100,7 @@ export default function GamesScreen() {
 const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 4 },
   rule: { height: 1, backgroundColor: lightTheme.text },
-  gameCard: { width: "100%", maxWidth: 680, alignSelf: "center", gap: 16 },
+  gameList: { width: "100%", maxWidth: 680, alignSelf: "center", gap: 16 },
   gameEntry: { gap: 8 },
   progress: { gap: 6, paddingHorizontal: 8, paddingBottom: 8 },
   progressRow: { flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap" },

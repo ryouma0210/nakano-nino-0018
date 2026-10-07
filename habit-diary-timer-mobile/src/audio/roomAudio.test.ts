@@ -7,13 +7,23 @@ const settings = {
   backgroundMusicEnabled: true,
   musicVolume: 0.35,
 };
-const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation", "endurance"];
+const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation", "endurance", "endurance-recovery"];
 
 describe("room audio", () => {
   it("plays the two endurance voices together", () => {
     expect(getRoomAudioTracks("endurance", settings, true)).toEqual([
       { name: "earLick", volume: 0.7 },
       { name: "bokkisiro", volume: 0.7 },
+    ]);
+  });
+  it("replaces only the endurance recovery overlay, with no added music", () => {
+    expect(getRoomAudioTracks("endurance-recovery", settings, true)).toEqual([
+      { name: "earLick", volume: 0.7 },
+      { name: "ikunaSine", volume: 0.7 },
+    ]);
+    expect(getRoomAudioTracks("endurance-recovery", { ...settings, soundVolume: 0 }, true)).toEqual([
+      { name: "earLick", volume: 0 },
+      { name: "ikunaSine", volume: 0 },
     ]);
   });
   it("adds the preparation voice while retaining the existing preparation loop", () => {
@@ -47,7 +57,7 @@ describe("room audio", () => {
   it("disables voices independently while retaining enabled penalty music", () => {
     const mutedVoices = { ...settings, soundEnabled: false };
     expect(scenes.map((scene) => getRoomAudioTracks(scene, mutedVoices, true))).toEqual([
-      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }], [],
+      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }], [], [],
     ]);
   });
 
