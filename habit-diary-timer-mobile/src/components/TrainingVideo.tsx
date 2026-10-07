@@ -77,14 +77,17 @@ export type TrainingResult = {
   elapsedSeconds: number;
   difficulty: string;
   targetSeconds: number;
+  startedAt: number;
 };
 
 export function TrainingVideo({
   onComplete,
   slides = [],
+  disabled = false,
 }: {
   onComplete: (result: TrainingResult) => void;
   slides?: StoredFile[];
+  disabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const [currentTime, setCurrentTime] = useState(0);
@@ -104,6 +107,8 @@ export function TrainingVideo({
   const [defaultVideoIndex, setDefaultVideoIndex] = useState(0);
   const [trainingComment, setTrainingComment] = useState<ConfigurableMessage>(warmupComments[0]);
   const elapsedMilliseconds = useRef(0);
+  const sessionStartedAt = useRef(0);
+  const completionHandled = useRef(false);
   const lastTick = useRef(0);
   const previousGaugeProgress = useRef(0);
   const lastCommentSlot = useRef(-1);
@@ -314,6 +319,9 @@ export function TrainingVideo({
   }, [markerOffsets, mode, player, playEffect, playing, showRandomComment, showingStoredVideo, slides.length, storedMode]);
 
   function startTraining() {
+    if (disabled || started) return;
+    sessionStartedAt.current = Date.now();
+    completionHandled.current = false;
     elapsedMilliseconds.current = 0;
     setSessionElapsedSeconds(0);
     setGaugeElapsed(0);
@@ -343,7 +351,8 @@ export function TrainingVideo({
   }
 
   function completeTraining() {
-    if (!started) return;
+    if (!started || completionHandled.current) return;
+    completionHandled.current = true;
     if (!storedMode || showingStoredVideo) player.pause();
     setPlaying(false);
     setStarted(false);
@@ -358,6 +367,7 @@ export function TrainingVideo({
       ),
       difficulty: selected.label,
       targetSeconds: selected.targetSeconds,
+      startedAt: sessionStartedAt.current,
     });
   }
 
@@ -485,7 +495,7 @@ export function TrainingVideo({
             return (
               <Pressable
                 key={item.key}
-                disabled={started}
+                disabled={started || disabled}
                 onPress={() => setMode(item.key)}
                 style={[
                   styles.modeButton,
@@ -525,7 +535,7 @@ export function TrainingVideo({
             <AppText variant="muted">
               難易度を選択してから開始してください。
             </AppText>
-            <PrimaryButton title="調教開始" onPress={startTraining} />
+            <PrimaryButton title="調教開始" disabled={disabled} onPress={startTraining} />
           </>
         ) : (
           <AppText style={styles.startedText}>

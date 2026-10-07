@@ -3,6 +3,7 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["{0}Ptを受け取る", "Claim {0} Pt", "{0}Pt 받기", "领取{0}Pt"],
   ["{0}の本日初回クリア", "First daily clear: {0}", "오늘 첫 클리어: {0}", "今日首次通关：{0}"],
   ["モード：{0}", "Mode: {0}", "모드: {0}", "模式：{0}"],
   ["射精許可日：{0}", "Release permitted at: {0}", "사정 허가 일시: {0}", "允许射精时间：{0}"],

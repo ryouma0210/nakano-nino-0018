@@ -86,13 +86,16 @@ export const chastityHistoryService = {
   async saveDailyDetails(recordDate: string, input: ChastityDailyDetails): Promise<ChastityHistorySnapshot> {
     validateInputDate(recordDate);
     // Read caller values before entering the queue, since forms may change while a write waits.
-    const { limitLevel, feelings } = input;
+    const { limitLevel, limitState, feelings } = input;
     if (limitLevel !== null && (typeof limitLevel !== "number" || !Number.isInteger(limitLevel)
       || limitLevel < 1 || limitLevel > 100)) throw new Error("限界度合いは1〜100の整数で入力してください。");
+    if (limitState !== undefined && (limitState !== "help" || limitLevel !== 100)) {
+      throw new Error("状態を選択してください。");
+    }
     if (typeof feelings !== "string" || feelings.length > CHASTITY_MAX_NOTE_LENGTH) {
       throw new Error("内容は4000文字以内で入力してください。");
     }
-    const value = { limitLevel, feelings: feelings.trim() };
+    const value: ChastityDailyDetails = { limitLevel, ...(limitState === "help" ? { limitState } : {}), feelings: feelings.trim() };
     return queueOperation(() => fileStorageService.withExclusiveFiles(async () => {
       const data = await readHistory();
       const files = await fileStorageService.list("chastity");

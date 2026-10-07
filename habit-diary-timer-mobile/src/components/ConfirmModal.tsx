@@ -12,26 +12,27 @@ type Props = {
   showCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  inline?: boolean;
 };
 
-export function ConfirmModal({ visible, title, message, confirmLabel = "確認", confirmTone = "primary", showCancel = true, onConfirm, onCancel }: Props) {
+export function ConfirmModal({ visible, title, message, confirmLabel = "確認", confirmTone = "primary", showCancel = true, onConfirm, onCancel, inline = false }: Props) {
   const normalizedMessage = typeof message === "string" ? message.replace(/\\n/g, "\n") : message;
-  return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
-      <View style={styles.backdrop}>
-        <View style={styles.dialog}>
-          <AppText variant="subtitle">{title}</AppText>
-          <AppText style={styles.message}>{normalizedMessage}</AppText>
-          <View style={styles.actions}>
-            {showCancel ? (
-              <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" onPress={onCancel} /></View>
-            ) : null}
-            <View style={styles.action}><PrimaryButton title={confirmLabel} tone={confirmTone} onPress={onConfirm} /></View>
-          </View>
-        </View>
+  const dialog = (
+    <View style={styles.dialog}>
+      <AppText variant="subtitle">{title}</AppText>
+      <AppText style={styles.message}>{normalizedMessage}</AppText>
+      <View style={styles.actions}>
+        {showCancel ? (
+          <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" onPress={onCancel} /></View>
+        ) : null}
+        <View style={styles.action}><PrimaryButton title={confirmLabel} tone={confirmTone} onPress={onConfirm} /></View>
       </View>
-    </Modal>
+    </View>
   );
+  if (inline) return visible ? dialog : null;
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
+    <View style={styles.backdrop}>{dialog}</View>
+  </Modal>;
 }
 
 const styles = StyleSheet.create({

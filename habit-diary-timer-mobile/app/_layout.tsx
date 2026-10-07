@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type PropsWithChildren, useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import { AudioProvider } from "@/audio/AudioProvider";
 import { formatError } from "@/utils/error";
 import { AppModalProvider } from "@/components/AppModalProvider";
 import { appendWebErrorLog } from "@/utils/webErrorLog";
+import { LoopAudioMiniPlayer } from "@/components/LoopAudioMiniPlayer";
 
 type ErrorHandler = (error: Error, isFatal?: boolean) => void;
 type ErrorUtilsApi = { getGlobalHandler?: () => ErrorHandler; setGlobalHandler: (handler: ErrorHandler) => void };
@@ -110,11 +111,17 @@ function RootContent() {
           <AppModalProvider>
             <StatusBar style="light" />
             <Stack screenOptions={{ headerShown: false }} />
+            <NonTabAudioPlayer />
           </AppModalProvider>
         </AudioProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
+}
+
+function NonTabAudioPlayer() {
+  const segments = useSegments();
+  return segments[0] === "(tabs)" ? null : <LoopAudioMiniPlayer bottomInset />;
 }
 
 class AppErrorBoundary extends Component<PropsWithChildren, { details: string | null }> {

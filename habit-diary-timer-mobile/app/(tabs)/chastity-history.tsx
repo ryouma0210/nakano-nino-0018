@@ -12,9 +12,12 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
+import { SelectField } from "@/components/SelectField";
 import { lightTheme } from "@/constants/theme";
 import { roomMessages } from "@/constants/messages";
 import { getDailyChastityStatuses, selectChastityRecords } from "@/features/chastity/history";
+import { RecordFilterFields } from "@/features/records/RecordFilterFields";
+import { usePersistentRecordFilters } from "@/features/records/usePersistentRecordFilters";
 import { translateText, translateWeekday } from "@/i18n";
 import {
   CHASTITY_MAX_NOTE_LENGTH, CHASTITY_STATUSES, CHASTITY_STATUS_ICONS, CHASTITY_STATUS_LABELS,
@@ -24,6 +27,15 @@ import { toDateKey } from "@/utils/date";
 import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
 
 type DailyDraft = { limitText: string; feelings: string };
+
+const dailyLimitOptions = [
+  { value: "", label: "未選択" },
+  ...Array.from({ length: 10 }, (_, index) => {
+    const value = String((index + 1) * 10);
+    return { value, label: value === "100" ? "MAX♡" : value };
+  }),
+  { value: "help", label: "限界です。助けてください♡" },
+];
 
 const notePlaceholders: Record<ChastityStatus, string> = {
   locked: "例）2日目",
@@ -42,8 +54,10 @@ export default function ChastityHistoryScreen() {
   const [dailyDrafts, setDailyDrafts] = useState<Record<string, DailyDraft>>({});
   const [dailyError, setDailyError] = useState<{ date: string; message: string } | null>(null);
   const [dailySavedDate, setDailySavedDate] = useState<string | null>(null);
-  const [keyword, setKeyword] = useState("");
-  const searching = keyword.trim().length > 0;
+  const recordFilters = usePersistentRecordFilters("chastity", CHASTITY_STATUSES);
+  const { filters } = recordFilters;
+  const keyword = filters.keyword;
+  const searching = recordFilters.active;
   const [selectedDate, setSelectedDate] = useState(toDateKey());
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
@@ -103,8 +117,8 @@ export default function ChastityHistoryScreen() {
     const names = Object.fromEntries(CHASTITY_STATUSES.map((value) => [value, [
       CHASTITY_STATUS_LABELS[value], translateText(CHASTITY_STATUS_LABELS[value], language), CHASTITY_STATUS_ICONS[value],
     ]])) as Record<ChastityStatus, string[]>;
-    return selectChastityRecords(snapshot.records, selectedDate, keyword, names);
-  }, [snapshot.records, selectedDate, keyword, language]);
+    return selectChastityRecords(snapshot.records, selectedDate, keyword, names, filters);
+  }, [snapshot.records, selectedDate, keyword, language, filters]);
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
     const month = visibleMonth.getMonth();
@@ -117,7 +131,8 @@ export default function ChastityHistoryScreen() {
   const selectedPhoto = snapshot.photos[selectedDate];
   const selectedDetails = snapshot.dailyDetails[selectedDate];
   const dailyDraft = dailyDrafts[selectedDate] ?? {
-    limitText: selectedDetails?.limitLevel == null ? "" : String(selectedDetails.limitLevel),
+    limitText: selectedDetails?.limitState === "help" ? "help"
+      : selectedDetails?.limitLevel == null ? "" : String(selectedDetails.limitLevel),
     feelings: selectedDetails?.feelings ?? "",
   };
   const previewPhoto = previewDate ? snapshot.photos[previewDate] : undefined;
@@ -144,7 +159,7 @@ export default function ChastityHistoryScreen() {
     const [year, month] = date.split("-").map(Number);
     setSelectedDate(date);
     setVisibleMonth(new Date(year, month - 1, 1));
-    setKeyword("");
+    recordFilters.clear();
   }
 
   function openForm(record?: ChastityRecord) {
@@ -206,7 +221,8 @@ export default function ChastityHistoryScreen() {
   async function saveDailyDetails() {
     if (disabled) return;
     const date = selectedDate;
-    const limitText = dailyDraft.limitText.trim().normalize("NFKC");
+    const needsHelp = dailyDraft.limitText === "help";
+    const limitText = needsHelp ? "100" : dailyDraft.limitText.trim().normalize("NFKC");
     const limitLevel = limitText === "" ? null : Number(limitText);
     if (limitLevel !== null && (!/^\d{1,3}$/.test(limitText) || !Number.isInteger(limitLevel) || limitLevel < 1 || limitLevel > 100)) {
       setDailyError({ date, message: "限界度合いは1〜100の整数で入力してください。" });
@@ -216,7 +232,9 @@ export default function ChastityHistoryScreen() {
     setDailyError(null);
     setDailySavedDate(null);
     try {
-      const updated = await chastityHistoryService.saveDailyDetails(date, { limitLevel, feelings: dailyDraft.feelings });
+      const updated = await chastityHistoryService.saveDailyDetails(date, {
+        limitLevel, feelings: dailyDraft.feelings, ...(needsHelp ? { limitState: "help" as const } : {}),
+      });
       if (!mountedRef.current) return;
       setSnapshot(updated);
       setLoadFailed(false);
@@ -294,11 +312,14 @@ export default function ChastityHistoryScreen() {
           contractLines={roomMessages.chastityHistory.contractLines}
         />
         <TextField testID="chastity-search" label="検索" accessibilityLabel={translateText("検索", language)}
-          value={keyword} onChangeText={setKeyword} placeholder="内容・日付・状態" editable={!busy} />
+          value={keyword} onChangeText={(value) => recordFilters.update({ keyword: value })} placeholder="内容・日付・状態" editable={!busy && recordFilters.ready} />
+        <RecordFilterFields filters={filters} onChange={recordFilters.update} ready={recordFilters.ready}
+          types={CHASTITY_STATUSES.map((value) => ({ value, label: CHASTITY_STATUS_LABELS[value] }))} typeLabel="状態"
+          disabled={busy} error={recordFilters.error} storageError={recordFilters.storageError} />
         {searching ? <Card>
-          <AppText variant="subtitle">検索結果（全期間）</AppText>
-          {!loading && !loadFailed ? <AppText testID="chastity-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
-          <PrimaryButton title="検索をクリア" tone="secondary" disabled={busy} onPress={() => setKeyword("")} />
+          <AppText variant="subtitle">検索結果</AppText>
+          {recordFilters.ready && !recordFilters.error && !loading && !loadFailed ? <AppText testID="chastity-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
+          <PrimaryButton title="検索をクリア" tone="secondary" disabled={busy} onPress={recordFilters.clear} />
           {loading ? <AppText variant="muted">検索結果を読み込み中…</AppText> : loadFailed ? <>
             <AppText>記録を読み込めませんでした。</AppText>
             <PrimaryButton title="再読み込み" tone="secondary" onPress={() => void loadRecords()} />
@@ -396,15 +417,14 @@ export default function ChastityHistoryScreen() {
               <View style={styles.action}><PrimaryButton title="画像を削除" tone="secondary" disabled={disabled} onPress={() => setPendingPhotoDelete(selectedDate)} /></View>
             </View>
           </> : <PrimaryButton title="画像を添付" tone="secondary" disabled={disabled} onPress={() => void pickPhoto()} />}
-          <TextField testID="chastity-daily-limit" label="この日のおちんぽ限界度合い"
-            accessibilityLabel={translateText("この日のおちんぽ限界度合い", language)}
-            placeholder="1〜100" keyboardType="number-pad" value={dailyDraft.limitText}
-            editable={!disabled} onChangeText={(value) => editDailyDraft("limitText", value)} />
+          <SelectField key={selectedDate} testID="chastity-daily-limit" label="この日のおちんぽ限界度合い"
+            value={dailyDraft.limitText} options={dailyLimitOptions}
+            disabled={disabled} onChange={(value) => editDailyDraft("limitText", value)} />
           <TextField testID="chastity-daily-feelings" label="この日のご主人様への思い"
             accessibilityLabel={translateText("この日のご主人様への思い", language)}
             placeholder="射精したいって気持ちを入力してください♡" multiline maxLength={CHASTITY_MAX_NOTE_LENGTH}
             value={dailyDraft.feelings} editable={!disabled} onChangeText={(value) => editDailyDraft("feelings", value)} />
-          <AppText variant="muted">どちらも空欄で保存すると、この日の入力を消去します。</AppText>
+          <AppText variant="muted">限界度合いを「未選択」にし、思いを空欄で保存すると、この日の入力を消去します。</AppText>
           {dailyError?.date === selectedDate ? <AppText testID="chastity-daily-error" style={styles.error}>{dailyError.message}</AppText> : null}
           {dailySavedDate === selectedDate ? <AppText testID="chastity-daily-saved">この日の入力を保存しました。</AppText> : null}
           <View testID="chastity-daily-save">
@@ -412,10 +432,10 @@ export default function ChastityHistoryScreen() {
           </View>
         </Card> : null}
 
-        {!loading && !loadFailed && displayedRecords.length === 0 ? <Card>
+        {recordFilters.ready && !recordFilters.error && !loading && !loadFailed && displayedRecords.length === 0 ? <Card>
           <AppText variant="muted">{searching ? "条件に一致する記録はありません。" : "選択した日の記録はありません。"}</AppText>
         </Card> : null}
-        {!loading && !loadFailed ? displayedRecords.map((record) => (
+        {recordFilters.ready && !recordFilters.error && !loading && !loadFailed ? displayedRecords.map((record) => (
           <View key={record.id} testID={`chastity-record-${record.id}`}>
             <Card>
               {searching ? <AppText localize={false} variant="label">{dateLabel(record.recordDate)}</AppText> : null}

@@ -6,6 +6,7 @@ import type { AppSettings } from "@/types/models";
 import { createLoopPlayback } from "./loopPlayback";
 import { getRoomAudioTracks, type RoomAudioScene } from "./roomAudio";
 import { RoomAudioPlayback } from "./RoomAudioPlayback";
+import { useLoopSleepTimer } from "./useLoopSleepTimer";
 
 export type { RoomAudioScene } from "./roomAudio";
 
@@ -22,6 +23,8 @@ type AudioContextValue = {
   loopAudioNames: readonly LoopAudioName[];
   playLoopAudio: (name: LoopAudioName) => void;
   stopLoopAudio: (name?: LoopAudioName) => void;
+  loopSleepDeadline: number | null;
+  setLoopSleepMinutes: (minutes: number | null) => void;
   setSessionAudioActive: (active: boolean) => void;
   setRoomAudioScene: (scene: RoomAudioScene | null) => void;
 };
@@ -36,6 +39,8 @@ const AudioContext = createContext<AudioContextValue>({
   loopAudioNames: [],
   playLoopAudio: () => {},
   stopLoopAudio: () => {},
+  loopSleepDeadline: null,
+  setLoopSleepMinutes: () => {},
   setSessionAudioActive: () => {},
   setRoomAudioScene: () => {},
 });
@@ -78,6 +83,8 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     loopAudioNames: [],
     playLoopAudio: () => {},
     stopLoopAudio: () => {},
+    loopSleepDeadline: null,
+    setLoopSleepMinutes: () => {},
     setSessionAudioActive: () => {},
     setRoomAudioScene: () => {},
   }), [bgmMode, settings, updateAudioSettings]);
@@ -128,6 +135,17 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     sineW: sineWLoop,
   }), [bokkisiroLoop, earLickLoop, ikunaSineLoop, nippleScratchLoop, sineWLoop]);
   const loopPlayback = useMemo(() => createLoopPlayback(Object.values(loopPlayers)), [loopPlayers]);
+  const { deadline: loopSleepDeadline, timer: loopSleepTimer } = useLoopSleepTimer(() => {
+    loopPlayback.stop();
+    setLoopAudioNames([]);
+  });
+  const setLoopSleepMinutes = useCallback((minutes: number | null) => {
+    if (minutes === null || loopAudioNames.length > 0) loopSleepTimer.setMinutes(minutes);
+  }, [loopAudioNames.length, loopSleepTimer]);
+
+  useEffect(() => {
+    if (loopAudioNames.length === 0) loopSleepTimer.cancel();
+  }, [loopAudioNames.length, loopSleepTimer]);
 
   // useAudioPlayer releases each player; invalidate pending starts on unmount too.
   useEffect(() => () => loopPlayback.cancelPending(), [loopPlayback]);
@@ -223,9 +241,10 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   const stopLoopAudio = useCallback((name?: LoopAudioName) => {
+    if (!name) loopSleepTimer.cancel();
     loopPlayback.stop(name ? loopPlayers[name] : undefined);
     setLoopAudioNames((current) => name ? current.filter((item) => item !== name) : []);
-  }, [loopPlayback, loopPlayers]);
+  }, [loopPlayback, loopPlayers, loopSleepTimer]);
 
   const playLoopAudio = useCallback((name: LoopAudioName) => {
     if (!settings?.soundEnabled) return;
@@ -255,10 +274,12 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       loopAudioNames,
       playLoopAudio,
       stopLoopAudio,
+      loopSleepDeadline,
+      setLoopSleepMinutes,
       setSessionAudioActive,
       setRoomAudioScene,
     }),
-    [bgmMode, loopAudioNames, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return (
     <AudioContext.Provider value={value}>

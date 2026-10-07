@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { LoginBonusCalendar } from "@/components/LoginBonusCalendar";
@@ -14,15 +14,23 @@ import {
 import {
   reportRepository,
   type ActivityReport,
+  type ComparedActivityReport,
 } from "@/repositories/reportRepository";
+import { PeriodSelector } from "@/features/reports/PeriodSelector";
+import { ReportComparison } from "@/features/reports/ReportComparison";
+import { dailyComparison } from "@/features/reports/periods";
+import { useReportRefresh } from "@/features/reports/useReportRefresh";
+import { useAppModal } from "@/components/AppModalProvider";
+import { toDateKey } from "@/utils/date";
 
 type TodayData = {
   bonus: LoginBonusStatus;
   stamps: LoginBonusStamp[];
   report: ActivityReport;
+  activity: ComparedActivityReport;
 };
 
-function loadTodayData(): TodayData {
+function loadTodayData(selectedDate: string | null): TodayData {
   const bonus = loginBonusRepository.status();
   const month = bonus.today.slice(0, 7);
 
@@ -30,19 +38,35 @@ function loadTodayData(): TodayData {
     bonus,
     stamps: loginBonusRepository.monthlyStamps(month),
     report: reportRepository.today(),
+    activity: reportRepository.compare(dailyComparison(selectedDate ?? bonus.today)),
   };
 }
 
 export default function TodayScreen() {
-  const [data, setData] = useState(loadTodayData);
-  const reload = useCallback(() => setData(loadTodayData()), []);
-
-  useFocusEffect(reload);
+  const { showError } = useAppModal();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [data, setData] = useState<TodayData | null>(null);
+  const [error, setError] = useState(false);
+  const reload = useCallback(() => {
+    try { setData(loadTodayData(selectedDate)); setError(false); }
+    catch { setError(true); }
+  }, [selectedDate]);
+  useReportRefresh(reload);
 
   const claimBonus = useCallback(() => {
-    loginBonusRepository.claim();
-    setData(loadTodayData());
-  }, []);
+    try {
+      // Historical activity selection never changes the claim date.
+      loginBonusRepository.claim();
+      setData(loadTodayData(selectedDate));
+    } catch (claimError) { showError("ログインボーナスを受け取れません", claimError); }
+  }, [selectedDate, showError]);
+
+  if (!data || error) return <Screen>
+    <AppText variant="title">本日の記録</AppText>
+    <AppText>{error ? "報告を読み込めませんでした。" : "読み込み中..."}</AppText>
+    {error ? <PrimaryButton title="再読み込み" onPress={reload} /> : null}
+    <PrimaryButton title="記録・交換メニューへ戻る" tone="secondary" onPress={() => router.replace("/(tabs)/menu?section=record")} />
+  </Screen>;
 
   return (
     <Screen>
@@ -53,6 +77,7 @@ export default function TodayScreen() {
 
       <Card style={styles.bonusCard}>
         <AppText variant="subtitle">ログインボーナス</AppText>
+        <AppText variant="label" localize={false}>{data.bonus.today}</AppText>
         <View style={styles.bonusRow}>
           <View>
             <AppText variant="muted">連続ログイン</AppText>
@@ -88,16 +113,9 @@ export default function TodayScreen() {
         />
       </Card>
 
-      <Card style={styles.reportCard}>
-        <AppText variant="subtitle">本日の報告</AppText>
-        <View style={styles.grid}>
-          <Metric label="調教回数" value={`${data.report.trainingCount}回`} />
-          <Metric label="管理日数" value={`${data.report.managementDays}日`} />
-          <Metric label="獲得ポイント" value={`${data.report.earnedPoints}pt`} />
-          <Metric label="命令完了" value={`${data.report.orderCount}回`} />
-          <Metric label="お仕置き" value={`${data.report.punishmentMinutes}分`} />
-        </View>
-      </Card>
+      <PeriodSelector mode="day" value={selectedDate ?? data.bonus.today} maximum={data.bonus.today} onChange={(value) => setSelectedDate(value === toDateKey() ? null : value)} />
+      <ReportComparison title={selectedDate ? "選択日の報告" : "本日の報告"} comparison={data.activity} />
+      <PrimaryButton title="週間・月間の報告を見る" tone="record" onPress={() => router.push("/(tabs)/report")} />
 
       <PrimaryButton
         title="記録・交換メニューへ戻る"
@@ -113,15 +131,6 @@ export default function TodayScreen() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metric}>
-      <AppText variant="muted">{label}</AppText>
-      <AppText style={styles.value}>{value}</AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 12 },
   kicker: {
@@ -132,7 +141,6 @@ const styles = StyleSheet.create({
   },
   rule: { height: 1, backgroundColor: "#fff" },
   bonusCard: { borderColor: "#f6d15f" },
-  reportCard: { borderColor: "#7db7ff" },
   cardKicker: {
     color: "#aaa",
     fontSize: 12,
@@ -173,14 +181,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "900",
   },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metric: {
-    minWidth: "46%",
-    flexGrow: 1,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#444",
-    backgroundColor: "#101722",
-  },
-  value: { color: "#7db7ff", fontSize: 24, lineHeight: 32, fontWeight: "900" },
 });

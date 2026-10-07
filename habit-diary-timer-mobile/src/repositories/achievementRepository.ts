@@ -4,6 +4,23 @@ import { journalRepository } from "@/repositories/journalRepository";
 import type { TimerCompletionStatus } from "@/types/models";
 import { pointRepository } from "@/repositories/rewardRepository";
 import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
+import type { SessionCompletion } from "../features/sessions/completion";
+import { trainingOutcomeTag } from "../features/training/trainingOutcome";
+
+export type TrainingCompletionRecord = SessionCompletion & {
+  elapsedSeconds: number;
+  difficulty: string;
+  targetSeconds: number;
+  judgement: string;
+};
+
+function completionKey(session: SessionCompletion) { return `session-completion:${session.id}`; }
+function isRecorded(session: SessionCompletion) {
+  return queryOne<{ setting_value: string }>("SELECT setting_value FROM app_settings WHERE setting_key=?", [completionKey(session)])?.setting_value === "1";
+}
+function markRecorded(session: SessionCompletion) {
+  execute("INSERT INTO app_settings(setting_key, setting_value, updated_at) VALUES(?, ?, ?)", [completionKey(session), "1", session.completedAt]);
+}
 
 type CycleDates = { start_date: string; end_date: string };
 type TrainingJournal = { duration_seconds: number | null; body: string };
@@ -15,17 +32,18 @@ function daysBetweenInclusive(start: string, end: string) {
 }
 
 export const achievementRepository = {
-  recordPunishment(actualSeconds: number, status: TimerCompletionStatus = "completed") {
+  recordPunishment(actualSeconds: number, status: TimerCompletionStatus = "completed", session?: SessionCompletion) {
     const seconds = Math.floor(actualSeconds);
     if (!Number.isFinite(seconds) || seconds <= 0) return;
-    const date = toDateKey();
-    const now = toDateTimeKey();
+    const date = session?.recordDate ?? toDateKey();
+    const now = session?.completedAt ?? toDateTimeKey();
     let awarded = false;
     transaction(() => {
+      if (session && isRecorded(session)) return;
       execute(
         `INSERT INTO timer_histories(timer_name, started_at, ended_at, actual_duration_seconds, completion_status, pause_count, created_at)
          VALUES('お仕置き', ?, ?, ?, ?, 0, ?)`,
-        [now, now, seconds, status, now],
+        [session?.startedAt ?? now, now, seconds, status, now],
       );
       journalRepository.create({
         recordDate: date,
@@ -34,10 +52,31 @@ export const achievementRepository = {
         recordType: "diary",
         tags: "お仕置き,実施記録",
         durationSeconds: seconds,
+        ...(session ? { occurredAt: now } : {}),
       });
       if (status === "completed") {
         awarded = pointRepository.award(`punishment:${date}`, DAILY_ROOM_POINTS.punishment, "本日初回のお仕置きを完了", now, { notify: false });
       }
+      if (session) markRecorded(session);
+    });
+    if (awarded) pointRepository.notifyChanged();
+  },
+
+  recordTraining(result: TrainingCompletionRecord) {
+    let awarded = false;
+    transaction(() => {
+      if (isRecorded(result)) return;
+      journalRepository.create({
+        recordDate: result.recordDate,
+        title: "調教完了記録",
+        body: `タイトル: 調教完了記録\n実施日: ${result.recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒\n判定: ${result.judgement}`,
+        recordType: "diary",
+        tags: `調教,完了,射精記録,${result.difficulty},${trainingOutcomeTag(result.elapsedSeconds, result.targetSeconds)}`,
+        durationSeconds: result.elapsedSeconds,
+        occurredAt: result.completedAt,
+      });
+      awarded = pointRepository.award(`training:${result.recordDate}`, DAILY_ROOM_POINTS.training, "本日初回の調教を完了", result.completedAt, { notify: false });
+      markRecorded(result);
     });
     if (awarded) pointRepository.notifyChanged();
   },

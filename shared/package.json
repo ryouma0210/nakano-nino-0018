@@ -4,6 +4,7 @@
   "private": true,
   "exports": {
     "./date": "./date.ts",
+    "./search": "./search.ts",
     "./contract": "./contract.ts",
     "./messages": "./messages.ts"
   }

@@ -9,6 +9,7 @@ import { lightTheme } from "@/constants/theme";
 import { translateText } from "@/i18n";
 import { useDesktopLayout } from "@/hooks/useDesktopLayout";
 import { DESKTOP_SIDEBAR_WIDTH } from "@/utils/desktopLayout";
+import { LoopAudioMiniPlayer } from "./LoopAudioMiniPlayer";
 
 type Destination = "home" | "tasks" | "rooms" | "nino-room" | "outside" | "record" | "management" | "mypage";
 
@@ -24,7 +25,7 @@ const destinations = [
 ] as const;
 
 const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello", "endurance"]);
-const recordScreens = new Set(["records", "tribute", "disposal-history", "chastity-history", "rewards", "collection", "today", "report"]);
+const recordScreens = new Set(["records", "tribute", "disposal-history", "chastity-history", "rewards", "collection", "today", "report", "report-details"]);
 const managementScreens = new Set(["loop-audio", "files", "settings", "custom-orders", "manual", "external-links", "slave-contract"]);
 const BottomNavigationVisibleContext = createContext(false);
 
@@ -91,7 +92,10 @@ export function BottomNavigationLayout({ children }: PropsWithChildren) {
   return (
     <BottomNavigationVisibleContext.Provider value={showNavigation && !isDesktop}>
       <View style={[styles.layout, isDesktop && styles.desktopLayout]}>
-        <View style={styles.content}>{children}</View>
+        <View style={styles.content}>
+          {children}
+          <LoopAudioMiniPlayer bottomInset={!showNavigation || isDesktop} />
+        </View>
         {showNavigation ? <BottomNavigation sidebar={isDesktop} /> : null}
       </View>
     </BottomNavigationVisibleContext.Provider>

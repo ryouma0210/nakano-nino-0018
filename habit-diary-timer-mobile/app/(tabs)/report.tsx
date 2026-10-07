@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
@@ -11,17 +10,23 @@ import { roomMessages } from "@/constants/messages";
 import {
   reportRepository,
   type ActivityReport,
+  type ComparedActivityReport,
 } from "@/repositories/reportRepository";
+import { PeriodSelector } from "@/features/reports/PeriodSelector";
+import { ReportComparison } from "@/features/reports/ReportComparison";
+import { monthlyComparison, weeklyComparison } from "@/features/reports/periods";
+import { useReportRefresh } from "@/features/reports/useReportRefresh";
+import { toDateKey } from "@/utils/date";
 
 type Reports = {
-  week: ActivityReport;
-  month: ActivityReport;
+  week: ComparedActivityReport;
+  month: ComparedActivityReport;
 };
 
-function loadReports(): Reports {
+function loadReports(month: string): Reports {
   return {
-    week: reportRepository.recentSevenDays(),
-    month: reportRepository.currentMonth(),
+    week: reportRepository.compare(weeklyComparison()),
+    month: reportRepository.compare(monthlyComparison(month)),
   };
 }
 
@@ -46,11 +51,15 @@ function evaluation(report: ActivityReport, period: "week" | "month") {
 }
 
 export default function ReportScreen() {
-  const [reports, setReports] = useState(loadReports);
-  const reload = useCallback(() => setReports(loadReports()), []);
-  useFocusEffect(reload);
-
-  const monthLabel = `${new Date().getFullYear()}年${new Date().getMonth() + 1}月`;
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const month = selectedMonth ?? toDateKey().slice(0, 7);
+  const [reports, setReports] = useState<Reports | null>(null);
+  const [error, setError] = useState(false);
+  const reload = useCallback(() => {
+    try { setReports(loadReports(selectedMonth ?? toDateKey().slice(0, 7))); setError(false); }
+    catch { setError(true); }
+  }, [selectedMonth]);
+  useReportRefresh(reload);
   return (
     <Screen>
       <PageTitle>週間報告部屋</PageTitle>
@@ -59,21 +68,17 @@ export default function ReportScreen() {
         roomName="週間報告部屋"
         lines={[
           ...(roomMessages.report.lines ?? []),
-          { text: evaluation(reports.week, "week"), withName: true },
+          ...(reports ? [{ text: evaluation(reports.week.current, "week"), withName: true }] : []),
         ]}
         contractLines={roomMessages.report.contractLines}
       />
 
-      <ReportCard
-        title="直近7日間"
-        report={reports.week}
-        evaluation={evaluation(reports.week, "week")}
-      />
-      <ReportCard
-        title={monthLabel}
-        report={reports.month}
-        evaluation={evaluation(reports.month, "month")}
-      />
+      <PeriodSelector mode="month" value={month} maximum={toDateKey().slice(0, 7)} onChange={(value) => setSelectedMonth(value === toDateKey().slice(0, 7) ? null : value)} />
+      {error ? <Card><AppText>報告を読み込めませんでした。</AppText><PrimaryButton title="再読み込み" onPress={reload} /></Card> : reports ? <>
+        <ReportComparison title="直近7日間" comparison={reports.week} />
+        <ReportComparison title="選択月の報告" comparison={reports.month} />
+        <Card><AppText>{evaluation(reports.month.current, "month")}</AppText></Card>
+      </> : <AppText variant="muted">読み込み中...</AppText>}
 
       <PrimaryButton
         title="記録・交換メニューへ戻る"
@@ -88,61 +93,4 @@ export default function ReportScreen() {
     </Screen>
   );
 }
-
-function ReportCard({
-  title,
-  report,
-  evaluation: message,
-}: {
-  title: string;
-  report: ActivityReport;
-  evaluation: string;
-}) {
-  return (
-    <Card style={styles.reportCard}>
-      <AppText variant="subtitle">{title}</AppText>
-      <View style={styles.grid}>
-        <Metric label="調教回数" value={`${report.trainingCount}回`} />
-        <Metric label="管理日数" value={`${report.managementDays}日`} />
-        <Metric label="獲得ポイント" value={`${report.earnedPoints}pt`} />
-        <Metric label="命令完了" value={`${report.orderCount}回`} />
-        <Metric label="お仕置き" value={`${report.punishmentMinutes}分`} />
-      </View>
-      <View style={styles.evaluation}>
-        <AppText style={styles.name}>ニノ</AppText>
-        <AppText>{message}</AppText>
-      </View>
-    </Card>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metric}>
-      <AppText variant="muted">{label}</AppText>
-      <AppText style={styles.value}>{value}</AppText>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  reportCard: { borderColor: "#7db7ff" },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metric: {
-    minWidth: "46%",
-    flexGrow: 1,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#444",
-    backgroundColor: "#101722",
-  },
-  value: { color: "#7db7ff", fontSize: 24, lineHeight: 32, fontWeight: "900" },
-  evaluation: {
-    gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#555",
-    paddingTop: 12,
-  },
-  name: { color: "#e31e2f", fontWeight: "900" },
-});
 
