@@ -1,4 +1,12 @@
 {
+  "保存中のゲームが見つかりません。ゲーム部屋で進行状況を確認してください。": "The saved game could not be found. Check your progress in the Game Room.",
+  "進行状況を読み込めませんでした。再試行してください。": "Progress could not be loaded. Please try again.",
+  "盤上の石": "Discs on the board",
+  "進行状況": "Progress",
+  "最初は「未完了」を表示します。「すべて」に切り替えると、実施済みや対象外の項目も確認できます。": "The list starts with Not completed. Switch to All to also see completed and ineligible items.",
+  "各項目を押すと対象画面へ移動します。画面を開き直すと「未完了」に戻ります。": "Tap an item to open its screen. Returning to this screen resets the filter to Not completed.",
+  "ホームの「ゲーム部屋」、または部屋一覧から入れます。途中のゲームには進行状況と「続きから」を表示します。": "Open the Game Room from Home or the room list. Games in progress show their progress and a Continue button.",
+  "「続きから」で保存したゲームを再開します。タイマーと高速自動対局は一時停止した状態から再開操作ができます。": "Select Continue to return to a saved game. Timers and fast automatic matches remain paused until you resume them.",
   "逝きそう♡": "I'm about to come ♡",
   "ピンクのマスに置いて。あなたの一手を見せて。": "Place your disc on the pink square. Show me your move.",
   "この一手は私に任せて。ここに置くわね。": "Leave this move to me. I'll place your disc here.",
