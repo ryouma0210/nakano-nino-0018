@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
   FlatList,
   Modal,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useNavigation } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -25,7 +24,6 @@ import {
 } from "@/features/endurance/assets";
 import {
   EnduranceMedia,
-  MediaChoice,
   type EnduranceVideoHandle,
 } from "@/features/endurance/EnduranceMedia";
 import {
@@ -36,7 +34,6 @@ import {
   ENDURANCE_PRESETS,
   failEnduranceSlide,
   finishEndurance,
-  MAX_CUSTOM_MEDIA,
   RECOVERY_DURATION_MS,
   remainingEnduranceSlides,
   SLIDE_DURATION_MS,
@@ -47,13 +44,24 @@ import {
 } from "@/features/endurance/game";
 import {
   loadEndurance,
+  saveEnduranceCurrent,
   saveEnduranceResult,
   unlockEndurance,
 } from "@/features/endurance/service";
 import { useActiveTimer } from "@/features/endurance/useActiveTimer";
+import { createEnduranceSession, type EnduranceSession } from "@/features/endurance/storage";
+import { resolveEnduranceMedia } from "@/features/endurance/mediaResolver";
+import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
 import { orderEnduranceMedia } from "@/features/endurance/mediaOrder";
+import { EnduranceFilePicker } from "@/features/endurance/EnduranceFilePicker";
+import {
+  reconcileEnduranceFileSelection,
+  toggleEnduranceFileSelection,
+  type EnduranceFileSelection,
+} from "@/features/endurance/fileSelection";
 import { displayedFileName, storedFileKey } from "@/features/files/fileList";
-import { formatCountdown } from "@/features/sugoroku/countdown";
+import { fileHasPurpose } from "@/features/files/usages";
+import { createCountdown, formatCountdown } from "@/features/sugoroku/countdown";
 import {
   fileStorageService,
   mimeTypeForName,
@@ -61,6 +69,7 @@ import {
 } from "@/services/fileStorageService";
 
 export default function EnduranceScreen() {
+  const navigation = useNavigation();
   const { setRoomAudioScene } = useAppAudio();
   const { showError, showNotice } = useAppModal();
   const [focused, setFocused] = useState(false);
@@ -70,9 +79,13 @@ export default function EnduranceScreen() {
   );
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [fileLoadFailed, setFileLoadFailed] = useState(false);
   const [preset, setPreset] = useState<EndurancePreset>("game-1");
   const [files, setFiles] = useState<StoredFile[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [fileSelection, setFileSelection] = useState<EnduranceFileSelection>({ knownKeys: [], selectedKeys: [] });
+  const selectedKeys = fileSelection.selectedKeys;
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const fileLoadRequest = useRef(0);
   const [media, setMedia] = useState<EnduranceMediaItem[]>([]);
   const [game, setGame] = useState<EnduranceGame | null>(null);
   const [result, setResult] = useState<EnduranceResult | null>(null);
@@ -85,6 +98,10 @@ export default function EnduranceScreen() {
   const [passwordError, setPasswordError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [savedCurrent, setSavedCurrent] = useState<EnduranceSession | null>(null);
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(false);
+  const [initialVideo, setInitialVideo] = useState<{ progress: EnduranceVideoProgress; complete: boolean } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [confirmRetire, setConfirmRetire] = useState(false);
@@ -95,10 +112,18 @@ export default function EnduranceScreen() {
   const [galleryIndex, setGalleryIndex] = useState(0);
   const savingRef = useRef(false);
   const actionLock = useRef(false);
-  const exitAfterSave = useRef(false);
+  const sessionRef = useRef<EnduranceSession | null>(null);
+  const finishedRef = useRef(false);
+  const historyFailedRef = useRef(false);
+  const autosaveFailedRef = useRef(false);
+  const lastCheckpoint = useRef("");
+  const pendingTransition = useRef<{ session: EnduranceSession; media: EnduranceMediaItem[] } | null>(null);
+  const checkpointRef = useRef<(force?: boolean) => boolean>(() => true);
+  const pauseTimersRef = useRef<() => void>(() => {});
+  const departRef = useRef<() => boolean>(() => true);
   const activeGame = game !== null && result === null;
   const active =
-    focused && foreground && activeGame && !showHistory && !confirmRetire;
+    focused && foreground && activeGame && !showHistory && !confirmRetire && !autosaveFailed;
   const slideTimer = useActiveTimer(
     SLIDE_DURATION_MS,
     active && game?.preset !== "game-6" && !game?.recovering,
@@ -112,17 +137,47 @@ export default function EnduranceScreen() {
   const extraTimer = useActiveTimer(RECOVERY_DURATION_MS, active && game?.preset !== "game-6", () => {
     showNotice("時間になりました", "3分が経過しました。");
   });
+  const roomAudioActive = active && game?.preset !== "game-6" && (
+    (!game?.recovering && slideTimer.state.status === "running") || extraTimer.state.status === "running"
+  );
+  const refreshFiles = useCallback(async () => {
+    const request = ++fileLoadRequest.current;
+    setLoading(true);
+    setFileLoadFailed(false);
+    try {
+      const stored = await fileStorageService.list("endurance");
+      if (request !== fileLoadRequest.current) return;
+      const next = stored.filter((file) => fileHasPurpose(file, "endurance") && /^(image|video)\//.test(mimeTypeForName(file.name)));
+      setFiles(next);
+      setFileSelection((previous) => reconcileEnduranceFileSelection(previous, next.map(storedFileKey)));
+      return next;
+    } catch (error) {
+      if (request !== fileLoadRequest.current) return;
+      setFileLoadFailed(true);
+      showError("ファイルを読み込めませんでした", error);
+    } finally {
+      if (request === fileLoadRequest.current) setLoading(false);
+    }
+  }, [showError]);
 
   useFocusEffect(
     useCallback(() => {
-      let live = true;
       setFocused(true);
-      setLoading(true);
       setLoadFailed(false);
       try {
         const saved = loadEndurance();
         setHistory(saved.history);
         setUnlocked(saved.unlocked);
+        // A failed departure keeps the unsaved in-memory state available for retry.
+        if (!autosaveFailedRef.current && !historyFailedRef.current) {
+          setSavedCurrent(saved.current);
+          setGame(null);
+          setMedia([]);
+          setResult(null);
+          sessionRef.current = null;
+          finishedRef.current = false;
+          lastCheckpoint.current = "";
+        }
         if (!saved.unlocked)
           setPreset((current) =>
             current === "game-5" || current === "game-6" ? "game-1" : current,
@@ -131,68 +186,67 @@ export default function EnduranceScreen() {
         setLoadFailed(true);
         showError("勃起我慢を読み込めませんでした", error);
       }
-      void fileStorageService
-        .list("endurance")
-        .then((next) => {
-          if (!live) return;
-          setFiles(
-            next.filter((file) =>
-              /^(image|video)\//.test(mimeTypeForName(file.name)),
-            ),
-          );
-          setSelectedKeys((keys) =>
-            keys.filter((key) =>
-              next.some((file) => storedFileKey(file) === key),
-            ),
-          );
-        })
-        .catch((error) => {
-          if (live) showError("ファイルを読み込めませんでした", error);
-        })
-        .finally(() => {
-          if (live) setLoading(false);
-        });
+      void refreshFiles();
       return () => {
-        live = false;
+        departRef.current();
+        fileLoadRequest.current++;
         setFocused(false);
         setShowHistory(false);
+        setShowFilePicker(false);
         setUnlockTarget(null);
         setPassword("");
       };
-    }, [showError]),
+    }, [refreshFiles, showError]),
   );
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) =>
-      setForeground(state === "active"),
-    );
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") {
+        pauseTimersRef.current();
+        checkpointRef.current(true);
+      }
+      setForeground(state === "active");
+    });
     return () => subscription.remove();
   }, []);
+  useEffect(() => navigation.addListener("beforeRemove", (event) => {
+    pauseTimersRef.current();
+    if (!checkpointRef.current(true)) event.preventDefault();
+  }), [navigation]);
   useEffect(() => {
-    if (!active || game?.preset === "game-6") return;
+    if (typeof window === "undefined") return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      pauseTimersRef.current();
+      if (checkpointRef.current(true)) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, []);
+  useEffect(() => {
+    if (!roomAudioActive) return;
     setRoomAudioScene("endurance");
     return () => setRoomAudioScene(null);
-  }, [active, game?.preset, setRoomAudioScene]);
+  }, [roomAudioActive, setRoomAudioScene]);
   useEffect(() => {
     actionLock.current = false;
   }, [game, result]);
+  useEffect(() => { checkpointRef.current(); }, [slideTimer.state.status, extraTimer.state.status]);
+  useEffect(() => {
+    if (!active) return;
+    const interval = setInterval(() => checkpointRef.current(), 1000);
+    return () => clearInterval(interval);
+  }, [active]);
 
   const selectedMedia: EnduranceMediaItem[] =
     preset === "custom"
       ? selectedKeys.flatMap((key) => {
           const file = files.find((item) => storedFileKey(item) === key);
-          if (!file) return [];
-          return [
-            {
-              id: key,
-              label: displayedFileName(file),
-              kind: mimeTypeForName(file.name).startsWith("video/")
-                ? ("video" as const)
-                : ("image" as const),
-              source: { uri: file.uri },
-            },
-          ];
+          return file ? [mediaForFile(file)] : [];
         })
       : enduranceAssets[preset];
+  const resumeMedia = savedCurrent ? resolveEnduranceMedia(savedCurrent.mediaIds,
+    savedCurrent.game.preset === "custom" ? files.map(mediaForFile) : enduranceAssets[savedCurrent.game.preset]) : null;
   const configured = hasCompleteEnduranceAssets(preset, selectedMedia);
   const locked = (preset === "game-5" || preset === "game-6") && !unlocked;
   const currentIndex = result ? galleryIndex : (game?.index ?? 0);
@@ -232,45 +286,127 @@ export default function EnduranceScreen() {
     }
   }
   function toggleFile(file: StoredFile) {
-    const key = storedFileKey(file);
-    setSelectedKeys((keys) =>
-      keys.includes(key)
-        ? keys.filter((value) => value !== key)
-        : keys.length < MAX_CUSTOM_MEDIA
-          ? [...keys, key]
-          : keys,
-    );
+    setFileSelection((previous) => toggleEnduranceFileSelection(previous, storedFileKey(file)));
   }
-  function start() {
-    if (!configured || locked || loading || loadFailed || savingRef.current)
-      return;
-    setMedia(orderEnduranceMedia(preset, selectedMedia));
-    setGame(createEnduranceGame(preset, selectedMedia.length));
+  function applySession(session: EnduranceSession, ordered: EnduranceMediaItem[]) {
+    sessionRef.current = session;
+    pendingTransition.current = null;
+    finishedRef.current = false;
+    autosaveFailedRef.current = false;
+    historyFailedRef.current = false;
+    setAutosaveFailed(false);
+    setSavedCurrent(session);
+    setPreset(session.game.preset);
+    setMedia(ordered);
+    setGame(session.game);
     setResult(null);
     setSaveFailed(false);
     setMediaFailed(false);
-    setVideoComplete(false);
-    setVideoProgress({ positionMs: 0, durationMs: null });
+    setVideoComplete(session.videoComplete);
+    setVideoProgress(session.videoProgress);
+    setInitialVideo(session.game.preset === "game-6" ? { progress: session.videoProgress, complete: session.videoComplete } : null);
     setGalleryIndex(0);
-    slideTimer.reset();
-    extraTimer.reset();
+    slideTimer.restore(session.slideTimer);
+    extraTimer.restore(session.extraTimer);
+  }
+  function writeCurrent(session: EnduranceSession) {
+    const serialized = JSON.stringify(session);
+    if (serialized !== lastCheckpoint.current) {
+      if (!saveEnduranceCurrent(session)) throw new Error("This saved game has already finished.");
+      lastCheckpoint.current = serialized;
+    }
+    setSavedCurrent(session);
+  }
+  function markAutosaveFailed() {
+    autosaveFailedRef.current = true;
+    setAutosaveFailed(true);
+    slideTimer.pause();
+    extraTimer.pause();
+  }
+  function checkpoint(force = false): boolean {
+    if (historyFailedRef.current || pendingTransition.current) return false;
+    if (finishedRef.current || !sessionRef.current) return true;
+    if (autosaveFailedRef.current && !force) return false;
+    try {
+      const session = createEnduranceSession({
+        ...sessionRef.current,
+        slideTimer: slideTimer.getSnapshot(),
+        extraTimer: extraTimer.getSnapshot(),
+        videoProgress: sessionRef.current.game.preset === "game-6"
+          ? videoRef.current?.getProgress() ?? sessionRef.current.videoProgress
+          : sessionRef.current.videoProgress,
+      });
+      writeCurrent(session);
+      sessionRef.current = session;
+      autosaveFailedRef.current = false;
+      setAutosaveFailed(false);
+      return true;
+    } catch {
+      markAutosaveFailed();
+      return false;
+    }
+  }
+  function saveTransition(session: EnduranceSession, ordered: EnduranceMediaItem[]) {
+    try {
+      writeCurrent(session);
+      applySession(session, ordered);
+    } catch {
+      pendingTransition.current = { session, media: ordered };
+      markAutosaveFailed();
+      actionLock.current = false;
+    }
+  }
+  function retryAutosave() {
+    const pending = pendingTransition.current;
+    if (pending) saveTransition(pending.session, pending.media);
+    else checkpoint(true);
+  }
+  function startNew() {
+    if (!configured || locked || loading || loadFailed || (preset === "custom" && fileLoadFailed) || savingRef.current) return;
+    const ordered = orderEnduranceMedia(preset, selectedMedia);
+    saveTransition(createEnduranceSession({
+      game: createEnduranceGame(preset, ordered.length), mediaIds: ordered.map((item) => item.id),
+      slideTimer: createCountdown(SLIDE_DURATION_MS), extraTimer: createCountdown(RECOVERY_DURATION_MS),
+      videoProgress: { positionMs: 0, durationMs: null }, videoComplete: false,
+    }), ordered);
+  }
+  function start() {
+    if (savedCurrent) setConfirmNew(true);
+    else startNew();
+  }
+  async function resume() {
+    const session = savedCurrent;
+    if (!session || loading || loadFailed || autosaveFailed ||
+      ((session.game.preset === "game-5" || session.game.preset === "game-6") && !unlocked)) return;
+    const availableFiles = session.game.preset === "custom" ? await refreshFiles() : files;
+    if (!availableFiles) return;
+    const ordered = resolveEnduranceMedia(session.mediaIds,
+      session.game.preset === "custom" ? availableFiles.map(mediaForFile) : enduranceAssets[session.game.preset]);
+    if (!ordered) return;
+    lastCheckpoint.current = JSON.stringify(session);
+    applySession(session, ordered);
   }
   function persist(finished: EnduranceResult) {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setSaveFailed(false);
+    historyFailedRef.current = false;
     try {
       const saved = saveEnduranceResult(finished);
       setHistory(saved.history);
-      if (exitAfterSave.current) router.replace("/(tabs)/games");
+      sessionRef.current = null;
+      pendingTransition.current = null;
+      setSavedCurrent(null);
+      autosaveFailedRef.current = false;
+      setAutosaveFailed(false);
     } catch (error) {
+      historyFailedRef.current = true;
       setSaveFailed(true);
       showError("プレイ履歴を保存できませんでした", error);
     } finally {
       savingRef.current = false;
       setSaving(false);
-      exitAfterSave.current = false;
     }
   }
   function finish(retired: boolean, currentGame = game) {
@@ -279,6 +415,7 @@ export default function EnduranceScreen() {
       ? videoRef.current?.getProgress() ?? videoProgress
       : undefined;
     const finished = finishEndurance(currentGame, retired, new Date().toISOString(), progress);
+    finishedRef.current = true;
     slideTimer.pause();
     extraTimer.pause();
     setResult(finished);
@@ -292,50 +429,101 @@ export default function EnduranceScreen() {
       finish(false);
       return;
     }
-    setGame(
-      advanceEndurance(
+    const nextGame = advanceEndurance(
         game,
         game.preset === "game-6"
           ? videoComplete
           : slideTimer.state.status === "complete",
         extraTimer.state.status === "complete",
-      ),
-    );
-    setMediaFailed(false);
-    setVideoComplete(false);
-    slideTimer.reset();
-    extraTimer.reset();
+      );
+    saveTransition(createEnduranceSession({
+      game: nextGame, mediaIds: media.map((item) => item.id),
+      slideTimer: createCountdown(SLIDE_DURATION_MS), extraTimer: createCountdown(RECOVERY_DURATION_MS),
+      videoProgress: { positionMs: 0, durationMs: null }, videoComplete: false,
+    }), media);
   }
   function fail() {
-    if (!game || game.recovering || result || actionLock.current) return;
+    if (!game || game.recovering || result || !active || actionLock.current) return;
     actionLock.current = true;
     if (game.preset === "game-6") {
       finish(false, failEnduranceSlide(game));
       return;
     }
-    setGame(failEnduranceSlide(game));
-    slideTimer.pause();
-    extraTimer.reset();
+    saveTransition(createEnduranceSession({
+      game: failEnduranceSlide(game), mediaIds: media.map((item) => item.id),
+      slideTimer: slideTimer.getSnapshot(), extraTimer: createCountdown(RECOVERY_DURATION_MS),
+      videoProgress: { positionMs: 0, durationMs: null }, videoComplete: false,
+    }), media);
   }
   function leave() {
-    if (activeGame) {
-      exitAfterSave.current = true;
-      setConfirmRetire(true);
-    } else if (!saveFailed) router.replace("/(tabs)/games");
+    if (checkpoint(true)) router.replace("/(tabs)/games");
   }
   const onMediaError = useCallback(() => setMediaFailed(true), []);
-  const onVideoEnd = useCallback(() => setVideoComplete(true), []);
-  const onVideoProgress = useCallback((progress: EnduranceVideoProgress) => setVideoProgress(progress), []);
+  const onVideoEnd = useCallback(() => {
+    if (sessionRef.current?.game.preset !== "game-6" || finishedRef.current) return;
+    sessionRef.current = { ...sessionRef.current, videoComplete: true };
+    setVideoComplete(true);
+    checkpointRef.current();
+  }, []);
+  const onVideoProgress = useCallback((progress: EnduranceVideoProgress) => {
+    if (sessionRef.current?.game.preset !== "game-6" || finishedRef.current) return;
+    sessionRef.current = { ...sessionRef.current, videoProgress: progress };
+    setVideoProgress(progress);
+  }, []);
+  useLayoutEffect(() => {
+    checkpointRef.current = checkpoint;
+    pauseTimersRef.current = () => { slideTimer.pause(); extraTimer.pause(); };
+    departRef.current = () => {
+      slideTimer.pause();
+      extraTimer.pause();
+      const saved = checkpoint(true);
+      if (!saved) {
+        showError("進行状況を保存できませんでした", new Error("進行状況を保存できませんでした。保存を再試行してから続けてください。"));
+        return false;
+      }
+      sessionRef.current = null;
+      setGame(null);
+      setMedia([]);
+      return true;
+    };
+  });
 
   return (
     <Screen desktopLayout="single">
-      <AppText variant="title">我慢</AppText>
+      <AppText variant="title">勃起我慢</AppText>
       {loading ? <ActivityIndicator color="#fff" /> : null}
       {loadFailed ? (
         <AppText style={styles.failed}>勃起我慢を読み込めませんでした</AppText>
       ) : null}
+      {autosaveFailed ? (
+        <Card>
+          <AppText style={styles.failed}>進行状況を保存できませんでした。保存を再試行してから続けてください。</AppText>
+          <PrimaryButton title="進行状況の保存を再試行" onPress={retryAutosave} />
+        </Card>
+      ) : null}
       {!activeGame && !result ? (
         <>
+          {savedCurrent ? (
+            <Card>
+              <AppText variant="subtitle">保存中のゲーム</AppText>
+              <AppText>{ENDURANCE_LABELS[savedCurrent.game.preset]}</AppText>
+              <AppText localize={false}>{`${savedCurrent.game.index + 1} / ${savedCurrent.game.total}`}</AppText>
+              <AppText variant="muted">進行状況は自動保存されます。タイマーは再開時に一時停止しています。</AppText>
+              {!loading && !resumeMedia ? (
+                <AppText style={styles.failed}>続きの素材を読み込めませんでした。ファイル格納で元のファイルを確認してください。保存した進行状況は残っています。</AppText>
+              ) : null}
+              {savedCurrent.game.preset === "custom" && (!resumeMedia || fileLoadFailed) ? (
+                <PrimaryButton title="ファイルを再読み込み" tone="secondary" disabled={loading} onPress={() => void refreshFiles()} />
+              ) : null}
+              <PrimaryButton title="続きから" tone="defeat"
+                disabled={loading || loadFailed || autosaveFailed || !resumeMedia || (savedCurrent.game.preset === "custom" && fileLoadFailed)}
+                onPress={() => {
+                  if ((savedCurrent.game.preset === "game-5" || savedCurrent.game.preset === "game-6") && !unlocked) {
+                    choosePreset(savedCurrent.game.preset);
+                  } else void resume();
+                }} />
+            </Card>
+          ) : null}
           <View style={styles.presets}>
             {ENDURANCE_PRESETS.map((value) => (
               <View key={value} style={styles.preset}>
@@ -361,25 +549,19 @@ export default function EnduranceScreen() {
                   使う画像・動画を選んでください。開始時にランダムな順番で表示します。
                 </AppText>
                 <AppText variant="muted">最大100件まで選択できます。</AppText>
-                {files.length === 0 ? (
+                {!loading && !fileLoadFailed && files.length === 0 ? (
                   <AppText variant="muted">
                     勃起我慢ゲーム用の画像・動画がありません。ファイル格納で用途を追加してください。
                   </AppText>
                 ) : null}
-                <ScrollView style={styles.fileList} nestedScrollEnabled>
-                  {files.map((file) => (
-                    <MediaChoice
-                      key={storedFileKey(file)}
-                      label={displayedFileName(file)}
-                      selected={selectedKeys.includes(storedFileKey(file))}
-                      onPress={() => toggleFile(file)}
-                    />
-                  ))}
-                </ScrollView>
+                {fileLoadFailed ? <AppText style={styles.failed}>ファイルを読み込めませんでした</AppText> : null}
                 <PrimaryButton
-                  title="ファイル格納"
+                  title="ファイル選択"
                   tone="preparation"
-                  onPress={() => router.push("/(tabs)/files")}
+                  onPress={() => {
+                    setShowFilePicker(true);
+                    if (!loading) void refreshFiles();
+                  }}
                 />
               </>
             ) : (
@@ -389,9 +571,9 @@ export default function EnduranceScreen() {
             )}
             {!configured ? <AppText variant="muted">素材未設定</AppText> : null}
             <PrimaryButton
-              title="ゲーム開始"
+              title={savedCurrent ? "新しいゲームを開始" : "ゲーム開始"}
               tone="defeat"
-              disabled={!configured || locked || loading || loadFailed}
+              disabled={!configured || locked || loading || loadFailed || autosaveFailed || (preset === "custom" && fileLoadFailed)}
               onPress={start}
             />
           </Card>
@@ -408,9 +590,11 @@ export default function EnduranceScreen() {
             {currentMedia.label}
           </AppText>
           <EnduranceMedia
-            key={currentMedia.id}
+            key={`${game.id}:${currentMedia.id}`}
             item={currentMedia}
             active={active}
+            loopVideo={game.preset === "custom"}
+            audioActive={game.preset === "game-6" ? active : roomAudioActive}
             onNext={
               result
                 ? galleryIndex < media.length - 1
@@ -428,6 +612,8 @@ export default function EnduranceScreen() {
             onVideoEnd={onVideoEnd}
             onVideoProgress={game.preset === "game-6" ? onVideoProgress : undefined}
             videoRef={game.preset === "game-6" ? videoRef : undefined}
+            initialVideoProgress={initialVideo?.progress}
+            initialVideoComplete={initialVideo?.complete}
             onError={onMediaError}
           />
           {mediaFailed ? (
@@ -437,6 +623,7 @@ export default function EnduranceScreen() {
           ) : null}
           {activeGame ? (
             <>
+              <AppText variant="muted">進行状況は自動保存されます。タイマーは再開時に一時停止しています。</AppText>
               {game.preset === "game-6" ? (
                 <View>
                   <AppText variant="subtitle">動画の再生時間</AppText>
@@ -467,8 +654,8 @@ export default function EnduranceScreen() {
                     }
                     onPress={
                       slideTimer.state.status === "running"
-                        ? slideTimer.pause
-                        : slideTimer.start
+                        ? () => { slideTimer.pause(); checkpoint(true); }
+                        : () => { slideTimer.start(); checkpoint(true); }
                     }
                   />
                 </Card>
@@ -498,8 +685,8 @@ export default function EnduranceScreen() {
                       disabled={!active}
                       onPress={
                         extraTimer.state.status === "running"
-                          ? extraTimer.pause
-                          : extraTimer.start
+                          ? () => { extraTimer.pause(); checkpoint(true); }
+                          : () => { extraTimer.start(); checkpoint(true); }
                       }
                     />
                   </View>
@@ -507,7 +694,8 @@ export default function EnduranceScreen() {
                     <PrimaryButton
                       title="リセット"
                       tone="secondary"
-                      onPress={extraTimer.reset}
+                      disabled={!active}
+                      onPress={() => { extraTimer.reset(); checkpoint(true); }}
                     />
                   </View>
                 </View>
@@ -535,7 +723,7 @@ export default function EnduranceScreen() {
                     : "次へ"
                 }
                 tone="defeat"
-                disabled={!ready}
+                disabled={!ready || !active}
                 onPress={next}
               />
               <View style={styles.row}>
@@ -543,7 +731,7 @@ export default function EnduranceScreen() {
                   <PrimaryButton
                     title="我慢失敗"
                     tone="punishment"
-                    disabled={game.recovering}
+                    disabled={game.recovering || !active}
                     onPress={fail}
                   />
                 </View>
@@ -551,8 +739,8 @@ export default function EnduranceScreen() {
                   <PrimaryButton
                     title="リタイア"
                     tone="primary"
+                    disabled={autosaveFailed}
                     onPress={() => {
-                      exitAfterSave.current = false;
                       setConfirmRetire(true);
                     }}
                   />
@@ -585,6 +773,7 @@ export default function EnduranceScreen() {
               setResult(null);
               setGame(null);
               setMedia([]);
+              finishedRef.current = false;
             }}
           />
         </Card>
@@ -621,6 +810,11 @@ export default function EnduranceScreen() {
         onPress={() => setShowHistory(true)}
       />
       <PrimaryButton
+        title="ファイル格納"
+        tone="preparation"
+        onPress={() => { if (checkpoint(true)) router.push("/(tabs)/files"); }}
+      />
+      <PrimaryButton
         title="ゲーム部屋へ戻る"
         tone="secondary"
         disabled={saving || saveFailed}
@@ -631,6 +825,25 @@ export default function EnduranceScreen() {
         history={history}
         onClose={() => setShowHistory(false)}
       />
+      <EnduranceFilePicker
+        visible={showFilePicker}
+        files={files}
+        selectedKeys={selectedKeys}
+        loading={loading}
+        loadFailed={fileLoadFailed}
+        onToggle={toggleFile}
+        onRetry={() => void refreshFiles()}
+        onClose={() => setShowFilePicker(false)}
+      />
+      <ConfirmModal
+        visible={confirmNew}
+        title="新しいゲームを始めますか？"
+        message="保存中のゲームを上書きして、新しいゲームを始めます。"
+        confirmLabel="新しいゲームを開始"
+        confirmTone="defeat"
+        onCancel={() => setConfirmNew(false)}
+        onConfirm={() => { setConfirmNew(false); startNew(); }}
+      />
       <ConfirmModal
         visible={confirmRetire}
         title="リタイア"
@@ -638,7 +851,6 @@ export default function EnduranceScreen() {
         confirmLabel="リタイア"
         confirmTone="primary"
         onCancel={() => {
-          exitAfterSave.current = false;
           setConfirmRetire(false);
         }}
         onConfirm={() => {
@@ -691,6 +903,14 @@ export default function EnduranceScreen() {
   );
 }
 
+function mediaForFile(file: StoredFile): EnduranceMediaItem {
+  return {
+    id: storedFileKey(file), label: displayedFileName(file),
+    kind: mimeTypeForName(file.name).startsWith("video/") ? "video" : "image",
+    source: { uri: file.uri },
+  };
+}
+
 function formatPlaybackTime(milliseconds: number) {
   return formatCountdown(Math.floor(milliseconds / 1000) * 1000);
 }
@@ -707,6 +927,7 @@ function ResultDetails({ result }: { result: EnduranceResult }) {
       >
         {result.outcome === "cleared" ? "クリア" : "未達成"}
       </AppText>
+      <DailyGameRewardNotice game="endurance" resultId={result.id} />
       {result.preset === "game-6" ? (
         <View style={styles.resultRows}>
           {result.outcome !== "cleared" ? (
@@ -802,7 +1023,6 @@ const styles = StyleSheet.create({
   presets: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   preset: { minWidth: 140, flexGrow: 1, flexBasis: "45%", gap: 4 },
   center: { textAlign: "center" },
-  fileList: { maxHeight: 260 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   button: { flex: 1, minWidth: 110 },
   clock: {

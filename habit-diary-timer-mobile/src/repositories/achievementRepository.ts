@@ -1,7 +1,9 @@
-import { execute, query, queryOne } from "@/database/client";
+import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateKey, toDateTimeKey } from "@/utils/date";
 import { journalRepository } from "@/repositories/journalRepository";
 import type { TimerCompletionStatus } from "@/types/models";
+import { pointRepository } from "@/repositories/rewardRepository";
+import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
 
 type CycleDates = { start_date: string; end_date: string };
 type TrainingJournal = { duration_seconds: number | null; body: string };
@@ -14,21 +16,30 @@ function daysBetweenInclusive(start: string, end: string) {
 
 export const achievementRepository = {
   recordPunishment(actualSeconds: number, status: TimerCompletionStatus = "completed") {
-    if (actualSeconds <= 0) return;
+    const seconds = Math.floor(actualSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+    const date = toDateKey();
     const now = toDateTimeKey();
-    execute(
-      `INSERT INTO timer_histories(timer_name, started_at, ended_at, actual_duration_seconds, completion_status, pause_count, created_at)
-       VALUES('お仕置き', ?, ?, ?, ?, 0, ?)`,
-      [now, now, Math.floor(actualSeconds), status, now],
-    );
-    journalRepository.create({
-      recordDate: toDateKey(),
-      title: "お仕置き記録",
-      body: `お仕置き部屋で${Math.floor(actualSeconds)}秒受けました。`,
-      recordType: "diary",
-      tags: "お仕置き,実施記録",
-      durationSeconds: Math.floor(actualSeconds),
+    let awarded = false;
+    transaction(() => {
+      execute(
+        `INSERT INTO timer_histories(timer_name, started_at, ended_at, actual_duration_seconds, completion_status, pause_count, created_at)
+         VALUES('お仕置き', ?, ?, ?, ?, 0, ?)`,
+        [now, now, seconds, status, now],
+      );
+      journalRepository.create({
+        recordDate: date,
+        title: "お仕置き記録",
+        body: `お仕置き部屋で${seconds}秒受けました。`,
+        recordType: "diary",
+        tags: "お仕置き,実施記録",
+        durationSeconds: seconds,
+      });
+      if (status === "completed") {
+        awarded = pointRepository.award(`punishment:${date}`, DAILY_ROOM_POINTS.punishment, "本日初回のお仕置きを完了", now, { notify: false });
+      }
     });
+    if (awarded) pointRepository.notifyChanged();
   },
 
   summary() {

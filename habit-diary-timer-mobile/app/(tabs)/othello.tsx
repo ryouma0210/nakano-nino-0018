@@ -30,12 +30,12 @@ import {
 } from "@/features/othello/OthelloActionModal";
 import {
   discardOthelloCurrent,
-  loadOthello,
   saveOthelloCurrent,
-  saveOthelloResult,
   type OthelloCurrent,
   type OthelloHistoryEntry,
 } from "@/features/othello/storage";
+import { loadRewardedOthello as loadOthello, saveRewardedOthelloResult as saveOthelloResult } from "@/services/gameCompletionService";
+import { DailyGameRewardNotice } from "@/components/DailyGameRewardNotice";
 import {
   CPU_ADVANTAGE_DIALOGUE_MS,
   DISC_FLIP_DURATION_MS,
@@ -1006,7 +1006,10 @@ export default function OthelloScreen() {
               <AppText variant="muted">プレイ履歴を保存中…</AppText>
             ) : null}
             {finished && saveStatus === "saved" ? (
-              <AppText variant="muted">プレイ履歴に保存しました。</AppText>
+              <>
+                <AppText variant="muted">プレイ履歴に保存しました。</AppText>
+                {match ? <DailyGameRewardNotice game="othello" resultId={match.id} /> : null}
+              </>
             ) : null}
             {finished && saveStatus === "error" ? (
               <Card>

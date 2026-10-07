@@ -15,6 +15,7 @@ export type OthelloHistoryEntry = {
   cpuCount: number;
   result: "win" | "loss" | "draw";
   reason: "completed" | "surrender";
+  dailyRewardEligible?: true;
 };
 
 export type SavedAssistance = { kind: "manual" | "single"; move: number }
@@ -96,6 +97,7 @@ function earnedAchievements(history: OthelloHistoryEntry[], previous: OthelloAch
 function isEntry(value: unknown): value is OthelloHistoryEntry {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const entry = value as Record<string, unknown>;
+  if ("dailyRewardEligible" in entry && (entry.dailyRewardEligible !== true || entry.result !== "win" || entry.reason !== "completed")) return false;
   if (typeof entry.id !== "string" || entry.id.trim().length === 0 || entry.id.length > 200
     || !isTimestamp(entry.startedAt) || !isTimestamp(entry.completedAt)
     || Date.parse(entry.startedAt) > Date.parse(entry.completedAt)
@@ -109,7 +111,8 @@ function isEntry(value: unknown): value is OthelloHistoryEntry {
 
 function copyEntry(entry: OthelloHistoryEntry): OthelloHistoryEntry {
   const { id, startedAt, completedAt, difficulty, humanCount, cpuCount, result, reason } = entry;
-  return { id, startedAt, completedAt, difficulty, humanCount, cpuCount, result, reason };
+  return { id, startedAt, completedAt, difficulty, humanCount, cpuCount, result, reason,
+    ...(entry.dailyRewardEligible ? { dailyRewardEligible: true as const } : {}) };
 }
 
 function latest(entries: OthelloHistoryEntry[]): OthelloHistoryEntry[] {

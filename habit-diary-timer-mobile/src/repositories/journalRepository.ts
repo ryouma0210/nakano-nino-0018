@@ -125,7 +125,8 @@ export const journalRepository = {
         `DELETE FROM point_transactions
          WHERE created_at LIKE ?
            AND source_key NOT LIKE 'daily-order:%'
-           AND source_key NOT LIKE 'management-task:%'`,
+           AND source_key NOT LIKE 'management-task:%'
+           AND source_key NOT LIKE 'defeat:%'`,
         [likeDate],
       );
       execute("DELETE FROM reward_redemptions WHERE redeemed_at LIKE ?", [

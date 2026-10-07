@@ -6,10 +6,17 @@ import { managementRouletteService as roulette } from "./managementRouletteServi
 import { MANAGEMENT_EXTENSION_MINUTES, MANAGEMENT_ROULETTE_KEY, parseManagementRoulette, validateManagementRouletteSettings } from "./managementRouletteStorage";
 
 const journal = vi.hoisted(() => ({ upsertSystemRecord: vi.fn() }));
+const pointChanges = vi.hoisted(() => ({ notifyChanged: vi.fn() }));
 vi.mock("@/database/client", () => import("../database/client.web"));
 vi.mock("@/services/customCommandService", () => import("./customCommandService"));
 vi.mock("@/repositories/journalRepository", () => ({ journalRepository: journal }));
-vi.mock("@/repositories/rewardRepository", () => ({ pointRepository: { award: (key: string, points: number, description: string) => client.execute("INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at) VALUES(?, ?, ?, ?)", [key, points, description, new Date().toISOString()]) } }));
+vi.mock("@/repositories/rewardRepository", () => ({ pointRepository: {
+  award: (key: string, points: number, description: string, createdAt = new Date().toISOString()) => client.execute(
+    "INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at) VALUES(?, ?, ?, ?)",
+    [key, points, description, createdAt],
+  ).changes > 0,
+  notifyChanged: pointChanges.notifyChanged,
+} }));
 vi.mock("@/utils/date", () => import("../utils/date"));
 vi.mock("@/constants/messages", () => ({
   dailyOrderMessages: [{ text: "Daily", withName: false }],
@@ -99,7 +106,10 @@ describe("daily requirements and release", () => {
     expect(finished.day.endedAt).not.toBeNull();
     expect(() => spin(id, 0)).toThrow();
     expect(roulette.finishDay(id)).toEqual(finished);
-    expect(client.query("SELECT * FROM point_transactions")).toHaveLength(1);
+    expect(client.query("SELECT * FROM point_transactions")).toEqual([
+      expect.objectContaining({ points: 25 }),
+    ]);
+    expect(pointChanges.notifyChanged).toHaveBeenCalledOnce();
     const daily = managementRepository.todayTask(initial.cycle)!;
     expect(daily.completed_at).toBeTruthy(); expect(daily.instruction).toContain("管理時間を3分延長");
     expect(() => roulette.finishManagement(id)).toThrow();
@@ -175,6 +185,7 @@ describe("atomic extensions and cleanup", () => {
     expect(() => roulette.finishDay(initial.cycle.id)).toThrow("quota");
     expect(raw()).toBe(before); expect(managementRepository.todayTask(initial.cycle)?.completed_at).toBeFalsy();
     expect(client.query("SELECT * FROM point_transactions")).toEqual([]);
+    expect(pointChanges.notifyChanged).not.toHaveBeenCalled();
     expect(roulette.finishDay(initial.cycle.id).day.endedAt).toBeTruthy();
     expect(client.query("SELECT * FROM point_transactions")).toHaveLength(1);
   });

@@ -250,7 +250,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           execute("DELETE FROM tribute_income_records");
           execute("DELETE FROM timer_histories");
           execute("DELETE FROM habit_records");
-          execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%'");
+          execute("DELETE FROM point_transactions WHERE source_key LIKE 'training:%' OR source_key LIKE 'daily-order:%' OR source_key LIKE 'management-task:%' OR source_key LIKE 'defeat:%' OR source_key LIKE 'brainwash:%' OR source_key LIKE 'preparation:%' OR source_key LIKE 'punishment:%'");
           execute("DELETE FROM journals");
           await dailyOrderService.clearOrders();
           await clearSugoroku();

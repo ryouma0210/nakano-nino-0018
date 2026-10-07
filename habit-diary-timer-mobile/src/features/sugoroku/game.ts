@@ -46,6 +46,8 @@ export type SugorokuGame = {
   penaltyPoints: number | null;
   /** Absent in legacy saves; older actions are never reconstructed. */
   logs?: SugorokuLogEntry[];
+  /** Only new completed wins opt in to daily rewards; legacy history stays unchanged. */
+  dailyRewardEligible?: true;
 };
 
 export type SugorokuTile = {
@@ -366,6 +368,8 @@ export function validateGame(value: unknown): value is SugorokuGame {
   if (value.penaltyRoll !== null && !validDie(value.penaltyRoll)) return false;
   if (value.penaltyPoints !== null && !nonNegativeInteger(value.penaltyPoints)) return false;
   if ("logs" in value && !validLogs(value.logs)) return false;
+  if ("dailyRewardEligible" in value && (value.dailyRewardEligible !== true || value.phase !== "finished"
+    || (value.outcome !== "goal-1" && value.outcome !== "goal-2"))) return false;
 
   const state = value as SugorokuGame;
   if ("adjustedDiceResult" in value) {
