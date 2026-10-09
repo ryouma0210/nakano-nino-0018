@@ -47,9 +47,10 @@ describe("room audio", () => {
     ]);
   });
 
-  it("plays only the ear-lick voice and temptation music for an othello temptation", () => {
+  it("adds the othello voice overlay alongside the existing base voice and music", () => {
     expect(getRoomAudioTracks("othello-temptation", settings, true)).toEqual([
       { name: "earLick", volume: 0.7 },
+      { name: "sikosiko", volume: 0.7 },
       { name: "penaltyBgm", volume: 0.35 },
     ]);
   });
@@ -69,6 +70,7 @@ describe("room audio", () => {
     ]);
     expect(getRoomAudioTracks("othello-temptation", mutedMusic, true)).toEqual([
       { name: "earLick", volume: 0.7 },
+      { name: "sikosiko", volume: 0.7 },
     ]);
     for (const scene of scenes.filter((name) => name !== "sugoroku-penalty" && name !== "othello-temptation")) {
       expect(getRoomAudioTracks(scene, mutedMusic, true)).toEqual(getRoomAudioTracks(scene, settings, true));
@@ -93,10 +95,12 @@ describe("room audio", () => {
     ]);
     expect(getRoomAudioTracks("othello-temptation", { ...settings, soundVolume: 0, musicVolume: 0.8 }, true)).toEqual([
       { name: "earLick", volume: 0 },
+      { name: "sikosiko", volume: 0 },
       { name: "penaltyBgm", volume: 0.8 },
     ]);
     expect(getRoomAudioTracks("othello-temptation", { ...settings, soundVolume: 0.2, musicVolume: 0 }, true)).toEqual([
       { name: "earLick", volume: 0.2 },
+      { name: "sikosiko", volume: 0.2 },
       { name: "penaltyBgm", volume: 0 },
     ]);
   });

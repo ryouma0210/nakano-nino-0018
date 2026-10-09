@@ -3,28 +3,23 @@ import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { loopAudioLabels } from "@/audio/loopAudioLabels";
+import { loopAudioOptions } from "@/audio/loopAudioLabels";
+import { useLoopSleepRemaining } from "@/audio/useLoopSleepRemaining";
 import { translateText } from "@/i18n";
 import { AppText } from "./AppText";
 import { LocalizedPressable as Pressable } from "./LocalizedPressable";
 import { PrimaryButton } from "./PrimaryButton";
-import { secondsToClock } from "@/utils/date";
+import { LoopAudioControls } from "./LoopAudioControls";
 
 export function LoopAudioMiniPlayer({ bottomInset = false }: { bottomInset?: boolean }) {
-  const { loopAudioNames, stopLoopAudio, loopSleepDeadline, setLoopSleepMinutes, settings } = useAppAudio();
+  const { loopAudioNames, stopLoopAudio, loopSleepDeadline, settings } = useAppAudio();
   const [expanded, setExpanded] = useState(false);
-  const [now, setNow] = useState(Date.now);
+  const remaining = useLoopSleepRemaining(loopSleepDeadline);
   const insets = useSafeAreaInsets();
-  useEffect(() => {
-    if (loopSleepDeadline === null) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [loopSleepDeadline]);
   useEffect(() => { if (!loopAudioNames.length) setExpanded(false); }, [loopAudioNames.length]);
   if (loopAudioNames.length === 0) return null;
-  const names = loopAudioNames.map((name) => translateText(loopAudioLabels[name], settings?.language ?? "ja")).join(" / ");
-  const remaining = loopSleepDeadline === null ? null : secondsToClock(Math.max(0, Math.ceil((loopSleepDeadline - now) / 1000)));
+  const playingAudios = loopAudioOptions.filter(({ key }) => loopAudioNames.includes(key));
+  const names = playingAudios.map(({ title }) => translateText(title, settings?.language ?? "ja")).join(" / ");
   return <>
     <View testID="loop-mini-player" style={[styles.bar, bottomInset && { paddingBottom: Math.max(6, insets.bottom) }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="再生中の音声と停止タイマー" onPress={() => setExpanded(true)} style={styles.info}>
@@ -46,20 +41,7 @@ export function LoopAudioMiniPlayer({ bottomInset = false }: { bottomInset?: boo
       <View style={[styles.backdrop, { paddingTop: Math.max(20, insets.top), paddingBottom: Math.max(20, insets.bottom) }]}>
         <View style={styles.dialog} accessibilityViewIsModal onAccessibilityEscape={() => setExpanded(false)}>
           <ScrollView contentContainerStyle={styles.dialogContent}>
-            <AppText variant="subtitle" accessibilityRole="header">再生中の音声</AppText>
-            {loopAudioNames.map((name) => <View key={name} style={styles.track}>
-              <AppText style={styles.trackName}>{loopAudioLabels[name]}</AppText>
-              <PrimaryButton title="停止" tone="secondary" onPress={() => stopLoopAudio(name)} />
-            </View>)}
-            <AppText variant="subtitle">停止タイマー</AppText>
-            {remaining ? <AppText localize={false}>{`${translateText("停止まで", settings?.language ?? "ja")} ${remaining}`}</AppText> : <AppText variant="muted">タイマー未設定</AppText>}
-            <View style={styles.presets}>
-              {[5, 15, 30, 60].map((minutes) => <View key={minutes} style={styles.preset}>
-                <PrimaryButton title={`${minutes}分`} tone="secondary" onPress={() => setLoopSleepMinutes(minutes)} />
-              </View>)}
-            </View>
-            <PrimaryButton title="タイマーを解除" tone="secondary" disabled={loopSleepDeadline === null} onPress={() => setLoopSleepMinutes(null)} />
-            <PrimaryButton title="すべて停止" tone="danger" onPress={() => stopLoopAudio()} />
+            <LoopAudioControls />
             <PrimaryButton title="閉じる" onPress={() => setExpanded(false)} />
           </ScrollView>
         </View>
@@ -81,8 +63,4 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "#000b" },
   dialog: { width: "100%", maxWidth: 460, maxHeight: "100%", backgroundColor: "#181017", borderRadius: 12, borderWidth: 1, borderColor: "#a26b85", overflow: "hidden" },
   dialogContent: { padding: 20, gap: 14 },
-  track: { flexDirection: "row", alignItems: "center", gap: 12 },
-  trackName: { flex: 1 },
-  presets: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  preset: { flexGrow: 1, flexBasis: "42%" },
 });

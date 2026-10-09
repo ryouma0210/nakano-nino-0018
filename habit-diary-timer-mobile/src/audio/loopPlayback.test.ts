@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLoopPlayback } from "./loopPlayback";
+import { loopAudioOptions } from "./loopAudioLabels";
 
 function makePlayer() {
   const player = {
@@ -23,7 +24,7 @@ function deferredSeek() {
 
 describe("loop playback", () => {
   it("starts all loops concurrently using the sound volume", async () => {
-    const players = Array.from({ length: 5 }, makePlayer);
+    const players = loopAudioOptions.map(makePlayer);
     const playback = createLoopPlayback(players);
     players.forEach((player) => playback.play(player, 0.35));
     await Promise.resolve();
@@ -98,7 +99,7 @@ describe("loop playback", () => {
   });
 
   it("stops all playing loops and prevents pending starts from restarting", async () => {
-    const players = Array.from({ length: 3 }, makePlayer);
+    const players = loopAudioOptions.map(makePlayer);
     const seeks = [deferredSeek(), deferredSeek()];
     seeks.forEach((seek, index) => players[index].seekTo.mockReturnValueOnce(seek.promise));
     const playback = createLoopPlayback(players);
@@ -146,5 +147,19 @@ describe("loop playback", () => {
     seeks.forEach((seek) => seek.resolve());
     await Promise.all(seeks.map((seek) => seek.promise));
     players.forEach((player) => expect(player.play).not.toHaveBeenCalled());
+  });
+
+  it("still stops remaining loops when a released player rejects pause", async () => {
+    const players = [makePlayer(), makePlayer()];
+    const playback = createLoopPlayback(players);
+    players.forEach((player) => playback.play(player, 1));
+    await Promise.resolve();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    players[0].pause.mockImplementation(() => { throw new Error("already released"); });
+    try {
+      playback.stop();
+      expect(players[1].playing).toBe(false);
+      expect(error).toHaveBeenCalledOnce();
+    } finally { error.mockRestore(); }
   });
 });

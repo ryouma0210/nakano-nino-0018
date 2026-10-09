@@ -94,7 +94,7 @@ export function BottomNavigationLayout({ children }: PropsWithChildren) {
       <View style={[styles.layout, isDesktop && styles.desktopLayout]}>
         <View style={styles.content}>
           {children}
-          <LoopAudioMiniPlayer bottomInset={!showNavigation || isDesktop} />
+          {!isOutside ? <LoopAudioMiniPlayer bottomInset={!showNavigation || isDesktop} /> : null}
         </View>
         {showNavigation ? <BottomNavigation sidebar={isDesktop} /> : null}
       </View>

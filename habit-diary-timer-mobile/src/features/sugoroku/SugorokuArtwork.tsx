@@ -3,6 +3,7 @@ import { Image, Modal, ScrollView, StyleSheet, View, type GestureResponderEvent,
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
+import { ImageExpandBadge } from "@/components/ImageExpandBadge";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { getSugorokuImages } from "./images";
 import type { SugorokuTile } from "./game";
@@ -108,10 +109,7 @@ function ArtworkPager({ tile, sources, selectedIndex, failedIndices, onSelect, o
                     onPress={() => { if (!moved.current && index === settledPage.current) onExpand(); }}
                   >
                     <Image source={source} resizeMode="contain" style={styles.image} onError={() => onImageError(index)} accessible={false} />
-                    <View style={styles.expandBadge} pointerEvents="none">
-                      <Ionicons name="expand-outline" size={18} color="#fff" />
-                      <AppText style={styles.controlText}>拡大</AppText>
-                    </View>
+                    <ImageExpandBadge />
                   </Pressable>
                 ) : (
                   <Image source={source} resizeMode="contain" style={styles.image} onError={() => onImageError(index)} accessible={false} />
@@ -280,7 +278,6 @@ const styles = StyleSheet.create({
   activeSquare: { backgroundColor: "#d7b85b", borderColor: "#f3db91" },
   emblem: { borderWidth: 1, borderColor: "#6685ac", borderRadius: 28, padding: 20, backgroundColor: "#14263e" },
   title: { textAlign: "center", color: "#e7f0ff" },
-  expandBadge: { position: "absolute", bottom: 10, right: 10, flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 5, backgroundColor: "rgba(0,0,0,0.85)" },
   controlText: { color: "#fff", fontWeight: "700" },
   fullscreen: { flex: 1, backgroundColor: "#080d14", gap: 12 },
   fullscreenHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },

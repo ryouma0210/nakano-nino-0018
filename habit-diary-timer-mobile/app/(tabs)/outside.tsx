@@ -9,6 +9,7 @@ import { contractService } from "@/services/gameRoomService";
 import { AppText } from "@/components/AppText";
 import { LocalizedPressable } from "@/components/LocalizedPressable";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { LoopAudioControls } from "@/components/LoopAudioControls";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { pointRepository, rewardRepository } from "@/repositories/rewardRepository";
 import { dailyGameRewardService } from "@/services/dailyGameRewardService";
@@ -393,7 +394,7 @@ function playerSpriteForFacing(facing: Direction) {
 
 export default function OutsideScreen() {
   const navigation = useNavigation();
-  const { playEffect, stopEffect, setBgmMode } = useAppAudio();
+  const { playEffect, stopEffect, setBgmMode, loopAudioNames } = useAppAudio();
   const insets = useSafeAreaInsets();
   const fadeOpacity = useRef(new Animated.Value(0)).current;
   const [level, setLevel] = useState(initializeLevel);
@@ -417,7 +418,8 @@ export default function OutsideScreen() {
   const [playerFacing, setPlayerFacing] = useState<Direction>("down");
   const [crystalOpen, setCrystalOpen] = useState(false);
   const [questCrystalOpen, setQuestCrystalOpen] = useState(false);
-  const [questTab, setQuestTab] = useState<"daily" | "story" | "help">("daily");
+  const [battleAudioOpen, setBattleAudioOpen] = useState(false);
+  const [questTab, setQuestTab] = useState<"daily" | "story" | "help" | "audio">("daily");
   const questFromMap = useRef(false);
   const [questExitPending, setQuestExitPending] = useState(false);
   const outsideFocused = useRef(false);
@@ -474,7 +476,7 @@ export default function OutsideScreen() {
   const [displayedCharmTurns, setDisplayedCharmTurns] = useState(0);
   const [displayedTemptationGauge, setDisplayedTemptationGauge] = useState(0);
   const [displayedBattleAilments, setDisplayedBattleAilments] = useState<BattleAilments>(noBattleAilments);
-  const mapModalOpen = crystalOpen || questCrystalOpen || questExitPending || warningSignOpen || statusModalOpen || playerStatusModalOpen;
+  const mapModalOpen = crystalOpen || questCrystalOpen || questExitPending || warningSignOpen || statusModalOpen || playerStatusModalOpen || battleAudioOpen;
   const canMove = phase === "explore" && mapStep === 0 && !isMovingArea && !mapModalOpen;
 
   const resetToCrossroad = useCallback(() => {
@@ -485,6 +487,7 @@ export default function OutsideScreen() {
     setPlayerFacing("down");
     setCrystalOpen(false);
     setQuestCrystalOpen(false);
+    setBattleAudioOpen(false);
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
     setPendingBattleMessage(null);
@@ -1237,7 +1240,7 @@ export default function OutsideScreen() {
   }
 
   function resolveCommand(command: BattleCommand) {
-    if (phase !== "battle") return;
+    if (phase !== "battle" || battleAudioOpen) return;
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
     setPendingGameOver(null);
@@ -1489,7 +1492,7 @@ export default function OutsideScreen() {
   }
 
   function advanceLossScene() {
-    if (phase !== "loss") return;
+    if (phase !== "loss" || battleAudioOpen) return;
     setLossEventIndex((current) => {
       if (current >= 19) return current;
       const next = current + 1;
@@ -1560,6 +1563,7 @@ export default function OutsideScreen() {
   }, [encounterStage, playerHp, playerMp, returnCharmTurns]);
 
   useEffect(() => {
+    if (battleAudioOpen) return undefined;
     const finishedVictory = phase === "result";
     const finishedDefeat = phase === "loss" && lossEventIndex >= 19;
     if (!finishedVictory && !finishedDefeat) {
@@ -1591,10 +1595,10 @@ export default function OutsideScreen() {
         : [lossSummary, defeatMapQuips[encounterStage]]);
     });
     return () => animation.stop();
-  }, [encounterStage, fadeOpacity, isLossReplay, lossEventIndex, lossSummary, phase, resetBattle, resultSummary]);
+  }, [battleAudioOpen, encounterStage, fadeOpacity, isLossReplay, lossEventIndex, lossSummary, phase, resetBattle, resultSummary]);
 
   function handleBattleMessagePress() {
-    if (phase !== "battle") return;
+    if (phase !== "battle" || battleAudioOpen) return;
     setDisplayedBattle(battle);
     setDisplayedCharmTurns(charmTurns);
     setDisplayedTemptationGauge(temptationGauge);
@@ -1641,9 +1645,9 @@ export default function OutsideScreen() {
 
   if (phase === "battle" || phase === "result" || phase === "loss") {
     return (
-      <View style={styles.root}>
+      <View testID="outside-battle-screen" style={styles.root}>
         <View style={[styles.battleScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          <View style={[styles.battleStage, phase === "loss" && styles.lossBattleStage]}>
+          <View pointerEvents={battleAudioOpen ? "none" : "auto"} style={[styles.battleStage, phase === "loss" && styles.lossBattleStage]}>
             {phase === "loss" ? (
               <>
                 <Pressable {...advanceKeyboardProps} style={styles.lossStage} onPress={advanceLossScene}>
@@ -1653,7 +1657,7 @@ export default function OutsideScreen() {
                     style={styles.lossImage}
                     resizeMode="cover"
                   />
-                  <AppText style={styles.lossImageLabel}>
+                  <AppText style={[styles.lossImageLabel, loopAudioNames.length > 0 && styles.lossImageLabelWithAudio]}>
                     {lossEventIndex + 1} / 20
                   </AppText>
                   {levelDownFlash.visible ? (
@@ -1671,7 +1675,7 @@ export default function OutsideScreen() {
               </>
             ) : (
               <>
-                <Animated.View style={[styles.enemyOverlay, { transform: [{ translateX: enemyShake }] }]}>
+                <Animated.View style={[styles.enemyOverlay, loopAudioNames.length > 0 && styles.enemyOverlayWithAudio, { transform: [{ translateX: enemyShake }] }]}>
                   <AppText style={[styles.enemyOverlayName, { color: succubus.color }]}>{succubus.title} Lv.{succubus.level}</AppText>
                   <StatGauge label="HP" value={displayedBattle.enemyHp} max={enemyMaxHp[activeSuccubusStage]} color="#ff4fa3" />
                 </Animated.View>
@@ -1839,13 +1843,39 @@ export default function OutsideScreen() {
             pointerEvents="none"
             style={[styles.fadeOverlay, { opacity: fadeOpacity }]}
           />
+          {loopAudioNames.length > 0 ? <LocalizedPressable
+            testID="outside-battle-audio-launcher"
+            accessibilityRole="button"
+            accessibilityLabel="再生中の音声と停止タイマー"
+            accessibilityState={{ expanded: battleAudioOpen }}
+            disabled={battleAwaitingChoice && battleMenu !== "root"}
+            onPress={() => setBattleAudioOpen(true)}
+            style={[styles.battleAudioLauncher, { top: insets.top + 10 }]}
+          >
+            <Ionicons name="musical-notes" size={20} color="#b7edff" />
+            <AppText style={styles.questLauncherText}>音声</AppText>
+          </LocalizedPressable> : null}
+          <Modal visible={battleAudioOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setBattleAudioOpen(false)}>
+            <View style={[styles.crystalModalBackdrop, { paddingTop: Math.max(20, insets.top), paddingBottom: Math.max(20, insets.bottom) }]}>
+              <View testID="outside-battle-audio-modal" style={[styles.crystalModal, styles.questModal]}>
+                <ScrollView contentContainerStyle={styles.crystalModalContent}>
+                  <AppText variant="subtitle">再生中の音声と停止タイマー</AppText>
+                  <AppText variant="muted">ループ音声の停止・停止タイマーを操作できます。BGMは対象外です。</AppText>
+                  <LoopAudioControls />
+                  <View testID="outside-battle-audio-close">
+                    <PrimaryButton title="閉じる" onPress={() => setBattleAudioOpen(false)} />
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.root} pointerEvents={questExitPending ? "none" : "auto"}>
+    <View testID="outside-screen" style={styles.root} pointerEvents={questExitPending ? "none" : "auto"}>
       <View style={[
         styles.mapScreen,
         {
@@ -2036,16 +2066,23 @@ export default function OutsideScreen() {
         onDismiss={() => questExit.modalClosed()}
       >
         <View style={[styles.crystalModalBackdrop, { paddingTop: Math.max(20, insets.top), paddingBottom: Math.max(20, insets.bottom) }]}>
-          <View style={[styles.crystalModal, styles.questModal]}>
+          <View testID="outside-quest-modal" style={[styles.crystalModal, styles.questModal]}>
             <ScrollView contentContainerStyle={styles.crystalModalContent} showsVerticalScrollIndicator={false}>
               <AppText style={styles.questModalTitle}>クエスト</AppText>
-              <AppText style={styles.questModalHelp}>条件を達成して報酬を受け取ってください。</AppText>
+              <AppText style={styles.questModalHelp}>{questTab === "audio"
+                ? "ループ音声の停止・停止タイマーを操作できます。BGMは対象外です。"
+                : "条件を達成して報酬を受け取ってください。"}</AppText>
               <View style={styles.questTabs} accessibilityRole="tablist">
-                {(["daily", "story", "help"] as const).map((tab) => (
-                  <LocalizedPressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: questTab === tab }}
-                    accessibilityLabel={tab === "daily" ? "デイリー" : tab === "story" ? "ストーリー" : "遊び方"}
-                    onPress={() => setQuestTab(tab)} style={[styles.questTab, questTab === tab && styles.questTabSelected]}>
-                    <AppText>{tab === "daily" ? "デイリー" : tab === "story" ? "ストーリー" : "遊び方"}</AppText>
+                {([
+                  { key: "daily", label: "デイリー" },
+                  { key: "story", label: "ストーリー" },
+                  { key: "help", label: "遊び方" },
+                  { key: "audio", label: "音声" },
+                ] as const).map((tab) => (
+                  <LocalizedPressable key={tab.key} testID={`outside-quest-tab-${tab.key}`} accessibilityRole="tab" accessibilityState={{ selected: questTab === tab.key }}
+                    accessibilityLabel={tab.label}
+                    onPress={() => setQuestTab(tab.key)} style={[styles.questTab, questTab === tab.key && styles.questTabSelected]}>
+                    <AppText style={styles.questTabText}>{tab.label}</AppText>
                   </LocalizedPressable>
                 ))}
               </View>
@@ -2070,7 +2107,9 @@ export default function OutsideScreen() {
                 ))}
               </View> : null}
 
-              {questTab !== "help" ? <View style={[styles.questSection, questTab === "story" && styles.storyQuestSection]}>
+              {questTab === "audio" ? <LoopAudioControls /> : null}
+
+              {questTab === "daily" || questTab === "story" ? <View style={[styles.questSection, questTab === "story" && styles.storyQuestSection]}>
                 <AppText style={styles.questSectionTitle}>{questTab === "daily" ? "デイリークエスト" : "クエスト"}</AppText>
                 <AppText style={styles.questSectionHelp}>{questTab === "daily" ? "毎日更新／各10Pt" : "全5段階・順番に解放／各50Pt"}</AppText>
                 <QuestList quests={questTab === "daily" ? dailyQuests : storyQuests}
@@ -2078,7 +2117,7 @@ export default function OutsideScreen() {
               </View> : null}
 
               <AppText style={styles.questBalance}>所持Pt {availablePoints}Pt</AppText>
-              <Pressable style={styles.crystalSettingsCloseButton} onPress={closeQuestCrystal}>
+              <Pressable testID="outside-quest-close" style={styles.crystalSettingsCloseButton} onPress={closeQuestCrystal}>
                 <AppText style={styles.crystalSettingsCloseButtonText}>閉じる</AppText>
               </Pressable>
               <PrimaryButton
@@ -2850,9 +2889,11 @@ const styles = StyleSheet.create({
   },
   questModal: { borderColor: "#28b9ff", backgroundColor: "#06131d" },
   questLauncher: { position: "absolute", right: 8, top: 8, zIndex: 30, minWidth: 60, minHeight: 52, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: "#35c7ff", backgroundColor: "#06131df0", padding: 5 },
+  battleAudioLauncher: { position: "absolute", right: 12, zIndex: 101, elevation: 101, minWidth: 48, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: "#35c7ff", backgroundColor: "#06131df0", padding: 4 },
   questLauncherText: { color: "#b7edff", fontSize: 10, lineHeight: 14 },
   questTabs: { flexDirection: "row", gap: 6 },
   questTab: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 44, paddingHorizontal: 4, borderWidth: 1, borderColor: "#45667a", borderRadius: 6 },
+  questTabText: { fontSize: 12, lineHeight: 18, textAlign: "center" },
   questTabSelected: { backgroundColor: "#16527a", borderColor: "#35c7ff" },
   questModalTitle: { color: "#35c7ff", fontSize: 24, fontWeight: "900" },
   questModalHelp: { color: "#d8f4ff", fontSize: 14, lineHeight: 21 },
@@ -3554,6 +3595,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  enemyOverlayWithAudio: { right: 72 },
   enemyOverlayName: {
     flex: 1,
     fontSize: 13,
@@ -3634,6 +3676,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
+  lossImageLabelWithAudio: { right: 72 },
   battleMessageBox: {
     borderWidth: 2,
     borderColor: "#fff",
