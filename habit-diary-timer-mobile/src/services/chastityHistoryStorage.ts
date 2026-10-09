@@ -17,7 +17,7 @@ export type ChastityRecord = {
   updatedAt: string;
 };
 export type ChastityRecordInput = Pick<ChastityRecord, "recordDate" | "status"> & { note?: string };
-export type ChastityDailyDetails = { limitLevel: number | null; feelings: string };
+export type ChastityDailyDetails = { limitLevel: number | null; limitState?: "help"; feelings: string };
 export type ChastityCalendarDisplay = "icons" | "photos";
 export type SavedHistory = {
   version: 1;
@@ -59,6 +59,7 @@ function isDailyDetails(value: unknown): value is ChastityDailyDetails {
   const details = value as Record<string, unknown>;
   return (details.limitLevel === null || (typeof details.limitLevel === "number"
     && Number.isInteger(details.limitLevel) && details.limitLevel >= 1 && details.limitLevel <= 100))
+    && (!Object.hasOwn(details, "limitState") || (details.limitState === "help" && details.limitLevel === 100))
     && typeof details.feelings === "string" && details.feelings.length <= CHASTITY_MAX_NOTE_LENGTH;
 }
 

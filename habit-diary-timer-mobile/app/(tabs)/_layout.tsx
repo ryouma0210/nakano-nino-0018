@@ -36,6 +36,7 @@ export default function TabLayout() {
         <Stack.Screen name="collection" options={{ title: t("コレクション部屋") }} />
         <Stack.Screen name="today" options={{ title: t("本日の記録") }} />
         <Stack.Screen name="report" options={{ title: t("週間報告部屋") }} />
+        <Stack.Screen name="report-details" options={{ title: t("集計の内訳") }} />
         <Stack.Screen name="contract" options={{ title: t("契約部屋") }} />
         <Stack.Screen name="files" options={{ title: t("ファイル格納部屋") }} />
         <Stack.Screen name="settings" options={{ title: t("アプリ設定") }} />

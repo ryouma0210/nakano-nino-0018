@@ -1,16 +1,19 @@
-import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
+import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useAudioPlayer } from "expo-audio";
 import { AppState, Platform } from "react-native";
 import { settingsService } from "@/services/settingsService";
 import type { AppSettings } from "@/types/models";
 import { createLoopPlayback } from "./loopPlayback";
 import { getRoomAudioTracks, type RoomAudioScene } from "./roomAudio";
 import { RoomAudioPlayback } from "./RoomAudioPlayback";
+import { useLoopSleepTimer } from "./useLoopSleepTimer";
+import { useLoopMediaControls } from "./useLoopMediaControls";
+import { translateText } from "@/i18n";
 
 export type { RoomAudioScene } from "./roomAudio";
 
 type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
-export type LoopAudioName = "earLick" | "nippleScratch" | "ikunaSine" | "bokkisiro" | "sineW";
+export type LoopAudioName = "earLick" | "nippleScratch" | "ikunaSine" | "bokkisiro" | "sineW" | "dase" | "kousokusikosiko" | "kousokutikubikarikari" | "sikosiko";
 export type BgmMode = "default" | "outsideBright" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
   settings: AppSettings | null;
@@ -22,6 +25,8 @@ type AudioContextValue = {
   loopAudioNames: readonly LoopAudioName[];
   playLoopAudio: (name: LoopAudioName) => void;
   stopLoopAudio: (name?: LoopAudioName) => void;
+  loopSleepDeadline: number | null;
+  setLoopSleepMinutes: (minutes: number | null) => void;
   setSessionAudioActive: (active: boolean) => void;
   setRoomAudioScene: (scene: RoomAudioScene | null) => void;
 };
@@ -36,6 +41,8 @@ const AudioContext = createContext<AudioContextValue>({
   loopAudioNames: [],
   playLoopAudio: () => {},
   stopLoopAudio: () => {},
+  loopSleepDeadline: null,
+  setLoopSleepMinutes: () => {},
   setSessionAudioActive: () => {},
   setRoomAudioScene: () => {},
 });
@@ -78,6 +85,8 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     loopAudioNames: [],
     playLoopAudio: () => {},
     stopLoopAudio: () => {},
+    loopSleepDeadline: null,
+    setLoopSleepMinutes: () => {},
     setSessionAudioActive: () => {},
     setRoomAudioScene: () => {},
   }), [bgmMode, settings, updateAudioSettings]);
@@ -120,26 +129,48 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   const ikunaSineLoop = useAudioPlayer(require("../../assets/audio/ikuna-sine.m4a"));
   const bokkisiroLoop = useAudioPlayer(require("../../assets/audio/bokkisiro.m4a"));
   const sineWLoop = useAudioPlayer(require("../../assets/audio/sine-w.m4a"));
+  const daseLoop = useAudioPlayer(require("../../assets/audio/dase.m4a"));
+  const kousokusikosikoLoop = useAudioPlayer(require("../../assets/audio/kousokusikosiko.m4a"));
+  const kousokutikubikarikariLoop = useAudioPlayer(require("../../assets/audio/kousokutikubikarikari.m4a"));
+  const sikosikoLoop = useAudioPlayer(require("../../assets/audio/sikosiko.m4a"));
   const loopPlayers = useMemo(() => ({
     earLick: earLickLoop,
     nippleScratch: nippleScratchLoop,
     ikunaSine: ikunaSineLoop,
     bokkisiro: bokkisiroLoop,
     sineW: sineWLoop,
-  }), [bokkisiroLoop, earLickLoop, ikunaSineLoop, nippleScratchLoop, sineWLoop]);
-  const loopPlayback = useMemo(() => createLoopPlayback(Object.values(loopPlayers)), [loopPlayers]);
+    dase: daseLoop,
+    kousokusikosiko: kousokusikosikoLoop,
+    kousokutikubikarikari: kousokutikubikarikariLoop,
+    sikosiko: sikosikoLoop,
+  } satisfies Record<LoopAudioName, typeof earLickLoop>), [bokkisiroLoop, daseLoop, earLickLoop, ikunaSineLoop, kousokusikosikoLoop, kousokutikubikarikariLoop, nippleScratchLoop, sikosikoLoop, sineWLoop]);
+  const manualLoopPlayers = useMemo(() => Object.values(loopPlayers), [loopPlayers]);
+  const loopPlayback = useMemo(() => createLoopPlayback(manualLoopPlayers), [manualLoopPlayers]);
+  const stopLoopAudioRef = useRef<(name?: LoopAudioName) => void>(() => {});
+  const loopMediaControls = useLoopMediaControls(
+    manualLoopPlayers,
+    loopAudioNames.length > 0,
+    translateText("ループ音声", settings?.language ?? "ja"),
+    () => stopLoopAudioRef.current(),
+    (player) => loopPlayback.stop(player),
+    (player) => {
+      const name = (Object.keys(loopPlayers) as LoopAudioName[]).find((key) => loopPlayers[key] === player);
+      if (name) stopLoopAudioRef.current(name);
+    },
+  );
+  const { deadline: loopSleepDeadline, timer: loopSleepTimer } = useLoopSleepTimer(() => stopLoopAudioRef.current());
+  const setLoopSleepMinutes = useCallback((minutes: number | null) => {
+    if (minutes === null || loopAudioNames.length > 0) loopSleepTimer.setMinutes(minutes);
+  }, [loopAudioNames.length, loopSleepTimer]);
+
+  useEffect(() => {
+    if (loopAudioNames.length === 0) loopSleepTimer.cancel();
+  }, [loopAudioNames.length, loopSleepTimer]);
 
   // useAudioPlayer releases each player; invalidate pending starts on unmount too.
   useEffect(() => () => loopPlayback.cancelPending(), [loopPlayback]);
 
   useEffect(() => {
-    if (typeof setAudioModeAsync === "function") {
-      setAudioModeAsync({
-        interruptionMode: "mixWithOthers",
-        playsInSilentMode: true,
-        shouldPlayInBackground: true,
-      }).catch(console.error);
-    }
     settingsService.load().then(setSettings);
   }, []);
 
@@ -223,15 +254,20 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   const stopLoopAudio = useCallback((name?: LoopAudioName) => {
+    // Update intent before pause/seek emits status events. A local single-stop
+    // must not be mistaken for an OS request to stop all the loops.
+    loopMediaControls.stop(name ? loopPlayers[name] : undefined);
+    if (!name) loopSleepTimer.cancel();
     loopPlayback.stop(name ? loopPlayers[name] : undefined);
     setLoopAudioNames((current) => name ? current.filter((item) => item !== name) : []);
-  }, [loopPlayback, loopPlayers]);
+  }, [loopMediaControls, loopPlayback, loopPlayers, loopSleepTimer]);
+  stopLoopAudioRef.current = stopLoopAudio;
 
   const playLoopAudio = useCallback((name: LoopAudioName) => {
     if (!settings?.soundEnabled) return;
     setLoopAudioNames((current) => current.includes(name) ? current : [...current, name]);
-    loopPlayback.play(loopPlayers[name], settings.soundVolume);
-  }, [loopPlayback, loopPlayers, settings]);
+    loopMediaControls.start(loopPlayers[name], () => loopPlayback.play(loopPlayers[name], settings.soundVolume));
+  }, [loopMediaControls, loopPlayback, loopPlayers, settings]);
 
   useEffect(() => {
     if (!settings || loopAudioNames.length === 0) return;
@@ -255,10 +291,12 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       loopAudioNames,
       playLoopAudio,
       stopLoopAudio,
+      loopSleepDeadline,
+      setLoopSleepMinutes,
       setSessionAudioActive,
       setRoomAudioScene,
     }),
-    [bgmMode, loopAudioNames, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return (
     <AudioContext.Provider value={value}>

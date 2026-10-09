@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoredFile } from "../../services/fileStorageService";
-import { displayedFileName, filterAndSortFiles, selectedVisibleFiles, storedFileKey } from "./fileList";
+import { displayedFileName, filterAndSortFiles, filterFilesByName, selectedVisibleFiles, storedFileKey } from "./fileList";
 
 function file(name: string, purpose: StoredFile["purpose"] = "training", size = 10): StoredFile {
   return { name, purpose, size, uri: "data:video/mp4;base64,c2FtZQ==" };
@@ -24,6 +24,30 @@ describe("stored file list", () => {
     const unrelated = file("1700000000002_3_Winter.mp4");
     expect(filterAndSortFiles([match, otherRoom, unrelated], "training", " SUMmER ", "name")).toEqual([match]);
     expect(displayedFileName(match)).toBe("Summer Holiday.MP4");
+  });
+
+  it("searches game media names without reordering sources or dropping hidden selections", () => {
+    const first = file("1700000000000_2_Holiday 10.MP4");
+    const second = file("1700000000001_1_holiday 2.png", "endurance");
+    const hidden = file("Winter.mp4");
+    const source = [first, hidden, second];
+    const selected = new Set([storedFileKey(first), storedFileKey(hidden)]);
+    expect(filterFilesByName(source, " HOLIDAY ")).toEqual([first, second]);
+    expect(filterFilesByName(source, "missing")).toEqual([]);
+    expect(filterFilesByName(source, "")).toEqual(source);
+    expect(selectedVisibleFiles(source, selected)).toEqual([first, hidden]);
+    expect(source[0].uri).toBe(first.uri);
+  });
+
+  it("matches full-width names and half-width kana without changing stored names, media, or order", () => {
+    const wide = file("1700000000000_1_ＨＯＬＩＤＡＹ　ガイド.MP4");
+    const narrow = file("1700000000001_2_Holiday ｶﾞｲﾄﾞ.png");
+    const source = [narrow, wide];
+    expect(filterFilesByName(source, " ｈｏｌｉｄａｙ ガイド ")).toEqual(source);
+    expect(filterFilesByName(source, "HOLIDAY ｶﾞｲﾄﾞ")).toEqual(source);
+    expect(displayedFileName(wide)).toBe("ＨＯＬＩＤＡＹ　ガイド.MP4");
+    expect(storedFileKey(wide)).toBe("training:1700000000000_1_ＨＯＬＩＤＡＹ　ガイド.MP4");
+    expect(filterFilesByName(source, "ガイド")[0]).toBe(narrow);
   });
 
   it("orders import dates numerically and leaves undated legacy files at the end", () => {

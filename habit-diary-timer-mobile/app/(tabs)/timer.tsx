@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Image, Modal, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
@@ -26,6 +26,12 @@ import {
 } from "@/services/fileStorageService";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppModal } from "@/components/AppModalProvider";
+import { PendingResultConfirmation, SessionSaveNotice } from "@/features/sessions/SessionSaveFeedback";
+import { createRetryableSessionSave, createSessionCompletion, type SessionCompletion } from "@/features/sessions/completion";
+import { usePendingResultGuard } from "@/features/sessions/usePendingResultGuard";
+import type { TimerCompletionStatus } from "@/types/models";
+
+type PendingTimerResult = SessionCompletion & { elapsedSeconds: number; status: TimerCompletionStatus };
 
 const gaugeSpeeds = [
   { label: "ゆっくり", value: 0.5 },
@@ -96,7 +102,13 @@ export default function TimerScreen() {
     setSessionAudioActive,
     settings,
   } = useAppAudio();
-  const { showNotice, showError } = useAppModal();
+  const { showNotice } = useAppModal();
+  const [resultSave] = useState(() => createRetryableSessionSave((result: PendingTimerResult) => {
+    achievementRepository.recordPunishment(result.elapsedSeconds, result.status, result);
+  }));
+  const saveState = useSyncExternalStore(resultSave.subscribe, resultSave.getSnapshot, resultSave.getSnapshot);
+  const unsaved = saveState.pending !== null;
+  const exitGuard = usePendingResultGuard(unsaved, resultSave.hasPending, resultSave.discard);
 
   useEffect(
     () => () => {
@@ -193,20 +205,21 @@ export default function TimerScreen() {
   }, [remaining, running, totalSeconds]);
 
   useEffect(() => {
-    if (!running || remaining !== 0 || sessionRecorded.current) return;
-    sessionRecorded.current = true;
-    try {
-      achievementRepository.recordPunishment(totalSeconds, "completed");
-    } catch (error) {
-      showError("お仕置き記録の保存に失敗しました", error);
-    }
+    if (!running || remaining !== 0 || sessionRecorded.current || resultSave.hasPending()) return;
+    const result: PendingTimerResult = {
+      ...createSessionCompletion("punishment", startedAt.current),
+      elapsedSeconds: totalSeconds,
+      status: "completed",
+    };
     stopLoopAudio();
     setSessionAudioActive(false);
     playEffect("complete");
     setRunning(false);
-  }, [playEffect, remaining, running, setSessionAudioActive, showError, stopLoopAudio, totalSeconds]);
+    sessionRecorded.current = resultSave.submit(result);
+  }, [playEffect, remaining, resultSave, running, setSessionAudioActive, stopLoopAudio, totalSeconds]);
 
   function start() {
+    if (resultSave.hasPending()) return;
     const enteredMinutes = Number(minutes);
     if (!Number.isFinite(enteredMinutes) || enteredMinutes < minMinutes) {
       showNotice(
@@ -243,22 +256,31 @@ export default function TimerScreen() {
   }
 
   function stop() {
+    if (sessionRecorded.current || resultSave.hasPending()) return;
     const elapsedSeconds = totalSeconds - remaining;
-    try {
-      if (!sessionRecorded.current)
-        achievementRepository.recordPunishment(elapsedSeconds, "stopped");
-    } catch (error) {
-      showError("お仕置き記録の保存に失敗しました", error);
-      return;
-    }
-    sessionRecorded.current = true;
+    const result: PendingTimerResult = {
+      ...createSessionCompletion("punishment", startedAt.current),
+      elapsedSeconds,
+      status: "stopped",
+    };
     stopLoopAudio();
     setSessionAudioActive(false);
     setRunning(false);
+    sessionRecorded.current = resultSave.submit(result);
+    if (!sessionRecorded.current) return;
     showNotice(
       "記録しました",
       `お仕置き記録を調教日記へ保存しました。\n実施時間：${elapsedSeconds}秒`,
     );
+  }
+
+  function retryResult() {
+    const result = resultSave.getSnapshot().pending;
+    if (!result) return;
+    sessionRecorded.current = resultSave.retry();
+    if (!sessionRecorded.current) return;
+    exitGuard.cancel();
+    showNotice("記録しました", `お仕置き記録を調教日記へ保存しました。\n実施時間：${result.elapsedSeconds}秒`);
   }
 
   return (
@@ -297,6 +319,12 @@ export default function TimerScreen() {
         </AppText>
       </Card>
       <Card>
+        {saveState.pending ? (
+          <SessionSaveNotice onRetry={retryResult}>
+            <AppText>{`実施日：${saveState.pending.recordDate}`}</AppText>
+            <AppText>{`実施時間：${saveState.pending.elapsedSeconds}秒`}</AppText>
+          </SessionSaveNotice>
+        ) : null}
         {!running ? (
           <PunishmentMedia
             key={mediaMode}
@@ -310,10 +338,11 @@ export default function TimerScreen() {
           value={minutes}
           onChangeText={setMinutes}
           keyboardType="number-pad"
-          editable={!running}
+          editable={!running && !unsaved}
         />
         <PrimaryButton
           title={remaining === 0 ? "もう一度開始" : "お仕置き開始"}
+          disabled={unsaved}
           onPress={start}
         />
       </Card>
@@ -326,6 +355,11 @@ export default function TimerScreen() {
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
+      />
+      <PendingResultConfirmation
+        visible={exitGuard.requested}
+        onCancel={exitGuard.cancel}
+        onConfirm={exitGuard.confirm}
       />
       <Modal
         visible={running}

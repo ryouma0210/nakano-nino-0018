@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
+import { PendingResultConfirmation, SessionSaveNotice } from "@/features/sessions/SessionSaveFeedback";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -10,18 +11,16 @@ import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
 import { TrainingVideo, type TrainingResult } from "@/components/TrainingVideo";
 import { lightTheme } from "@/constants/theme";
-import { journalRepository } from "@/repositories/journalRepository";
+import { achievementRepository, type TrainingCompletionRecord } from "@/repositories/achievementRepository";
 import { formatDateJa, toDateKey } from "@/utils/date";
 import {
   fileStorageService,
   type StoredFile,
 } from "@/services/fileStorageService";
-import { pointRepository } from "@/repositories/rewardRepository";
-import { DAILY_ROOM_POINTS } from "@/constants/roomPoints";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
-import { useAppModal } from "@/components/AppModalProvider";
-import { trainingOutcomeTag } from "@/features/training/trainingOutcome";
+import { createRetryableSessionSave, createSessionCompletion } from "@/features/sessions/completion";
+import { usePendingResultGuard } from "@/features/sessions/usePendingResultGuard";
 
 const trainingJudgementGroups = [
   { comments: [
@@ -56,18 +55,22 @@ function trainingJudgement(seconds: number, targetSeconds: number) {
   return group.comments[Math.floor(Math.random() * group.comments.length)];
 }
 
-type TrainingCompletion = TrainingResult & { judgement: string };
-
 export default function HabitsScreen() {
   const insets = useSafeAreaInsets();
   const { settings } = useAppAudio();
-  const { showError } = useAppModal();
   const playerName = settings?.playerName.trim() ?? "";
-  const [trainingResult, setTrainingResult] = useState<TrainingCompletion | null>(
+  const [trainingResult, setTrainingResult] = useState<TrainingCompletionRecord | null>(
     null,
   );
   const [trainingFiles, setTrainingFiles] = useState<StoredFile[]>([]);
   const [mediaMode, setMediaMode] = useState<"default" | "stored">("default");
+  const [resultSave] = useState(() => createRetryableSessionSave(achievementRepository.recordTraining));
+  const saveState = useSyncExternalStore(resultSave.subscribe, resultSave.getSnapshot, resultSave.getSnapshot);
+  const unsaved = saveState.pending !== null;
+  const exitGuard = usePendingResultGuard(unsaved, resultSave.hasPending, () => {
+    resultSave.discard();
+    setTrainingResult(null);
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -82,22 +85,15 @@ export default function HabitsScreen() {
   );
 
   function completeTraining(result: TrainingResult) {
-    try {
-      const recordDate = toDateKey();
-      const judgement = trainingJudgement(result.elapsedSeconds, result.targetSeconds);
-      journalRepository.create({
-        recordDate,
-        title: "調教完了記録",
-        body: `タイトル: 調教完了記録\n実施日: ${recordDate}\n難易度: ${result.difficulty}\n秒数: ${result.elapsedSeconds}秒\n判定: ${judgement}`,
-        recordType: "diary",
-        tags: `調教,完了,射精記録,${result.difficulty},${trainingOutcomeTag(result.elapsedSeconds, result.targetSeconds)}`,
-        durationSeconds: result.elapsedSeconds,
-      });
-      pointRepository.award(`training:${recordDate}`, DAILY_ROOM_POINTS.training, "本日初回の調教を完了");
-      setTrainingResult({ ...result, judgement });
-    } catch (error) {
-      showError("調教記録の保存に失敗しました", error);
-    }
+    if (resultSave.hasPending()) return;
+    const completed = {
+      ...result,
+      ...createSessionCompletion("training", result.startedAt),
+      judgement: trainingJudgement(result.elapsedSeconds, result.targetSeconds),
+    };
+    // Keep the exact result visible even when the first transaction fails.
+    setTrainingResult(completed);
+    resultSave.submit(completed);
   }
 
   const resultJudgement = trainingResult?.judgement ?? "";
@@ -144,6 +140,7 @@ export default function HabitsScreen() {
       <TrainingVideo
         key={mediaMode}
         onComplete={completeTraining}
+        disabled={unsaved || trainingResult !== null}
         slides={mediaMode === "stored" ? trainingFiles : []}
       />
 
@@ -163,6 +160,7 @@ export default function HabitsScreen() {
         animationType="fade"
         transparent
         statusBarTranslucent
+        onRequestClose={() => {}}
       >
         <ScrollView
           style={styles.completeScroll}
@@ -189,7 +187,7 @@ export default function HabitsScreen() {
               <AppText variant="label">タイトル</AppText>
               <AppText>調教完了記録</AppText>
               <AppText variant="label">実施日</AppText>
-              <AppText>{formatDateJa(toDateKey())}</AppText>
+              <AppText>{formatDateJa(trainingResult?.recordDate ?? toDateKey())}</AppText>
               <AppText variant="label">難易度</AppText>
               <AppText>{trainingResult?.difficulty ?? "-"}</AppText>
               <AppText variant="label">秒数</AppText>
@@ -198,14 +196,17 @@ export default function HabitsScreen() {
               </AppText>
               <AppText variant="label">判定メッセージ</AppText>
               <AppText>{namedResultJudgement}</AppText>
-              <AppText variant="muted">調教日記へ保存しました。</AppText>
+              {unsaved ? (
+                <SessionSaveNotice onRetry={() => { if (resultSave.retry()) exitGuard.cancel(); }} />
+              ) : <AppText variant="muted">調教日記へ保存しました。</AppText>}
             </View>
+            <PendingResultConfirmation visible={exitGuard.requested} inline onCancel={exitGuard.cancel} onConfirm={exitGuard.confirm} />
             {trainingResult && trainingResult.elapsedSeconds < trainingResult.targetSeconds ? (
               <PrimaryButton
                 title="お仕置き部屋へ"
                 tone="punishment"
                 onPress={() => {
-                  setTrainingResult(null);
+                  if (!resultSave.hasPending()) setTrainingResult(null);
                   router.replace("/(tabs)/timer");
                 }}
               />
@@ -214,7 +215,7 @@ export default function HabitsScreen() {
               title="部屋から出る"
               tone="secondary"
               onPress={() => {
-                setTrainingResult(null);
+                if (!resultSave.hasPending()) setTrainingResult(null);
                 router.replace("/(tabs)/rooms");
               }}
             />
@@ -222,7 +223,7 @@ export default function HabitsScreen() {
               title="ホームへ戻る"
               tone="secondary"
               onPress={() => {
-                setTrainingResult(null);
+                if (!resultSave.hasPending()) setTrainingResult(null);
                 router.replace("/(tabs)");
               }}
             />

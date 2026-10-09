@@ -23,6 +23,8 @@ import { TextField } from "@/components/TextField";
 import { lightTheme } from "@/constants/theme";
 import { roomMessages } from "@/constants/messages";
 import { selectDisposalRecords } from "@/features/records/search";
+import { RecordFilterFields } from "@/features/records/RecordFilterFields";
+import { usePersistentRecordFilters } from "@/features/records/usePersistentRecordFilters";
 import { translateText, translateWeekday } from "@/i18n";
 import {
   DISPOSAL_MAX_COUNT,
@@ -41,8 +43,10 @@ export default function DisposalHistoryScreen() {
   const language = settings?.language ?? "ja";
   const locale = language === "en" ? "en-US" : language === "ko" ? "ko-KR" : language === "zh" ? "zh-CN" : "ja-JP";
   const [records, setRecords] = useState<DisposalRecord[]>([]);
-  const [keyword, setKeyword] = useState("");
-  const searching = keyword.trim().length > 0;
+  const recordFilters = usePersistentRecordFilters("disposal");
+  const { filters } = recordFilters;
+  const keyword = filters.keyword;
+  const searching = recordFilters.active;
   const [selectedDate, setSelectedDate] = useState(toDateKey());
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
@@ -97,8 +101,8 @@ export default function DisposalHistoryScreen() {
 
   const dailyCounts = useMemo(() => getDailyDisposalCounts(records), [records]);
   const displayedRecords = useMemo(
-    () => selectDisposalRecords(records, selectedDate, keyword),
-    [records, selectedDate, keyword],
+    () => selectDisposalRecords(records, selectedDate, keyword, filters),
+    [records, selectedDate, keyword, filters],
   );
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
@@ -128,7 +132,7 @@ export default function DisposalHistoryScreen() {
     const [year, month] = date.split("-").map(Number);
     setSelectedDate(date);
     setVisibleMonth(new Date(year, month - 1, 1));
-    setKeyword("");
+    recordFilters.clear();
   }
 
   function openForm(record?: DisposalRecord) {
@@ -212,13 +216,16 @@ export default function DisposalHistoryScreen() {
           label="検索"
           accessibilityLabel={translateText("検索", language)}
           value={keyword}
-          onChangeText={setKeyword}
+          editable={!busy && recordFilters.ready}
+          onChangeText={(value) => recordFilters.update({ keyword: value })}
           placeholder="内容・日付・回数"
         />
+        <RecordFilterFields filters={filters} onChange={recordFilters.update} ready={recordFilters.ready}
+          disabled={busy} error={recordFilters.error} storageError={recordFilters.storageError} />
         {searching ? <Card>
-          <AppText variant="subtitle">検索結果（全期間）</AppText>
-          {!loading && !loadFailed ? <AppText testID="disposal-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
-          <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => setKeyword("")} />
+          <AppText variant="subtitle">検索結果</AppText>
+          {recordFilters.ready && !recordFilters.error && !loading && !loadFailed ? <AppText testID="disposal-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
+          <PrimaryButton title="検索をクリア" tone="secondary" disabled={busy} onPress={recordFilters.clear} />
           {loading ? <AppText variant="muted">検索結果を読み込み中…</AppText> : loadFailed ? (
             <><AppText>記録を読み込めませんでした。</AppText><PrimaryButton title="再読み込み" tone="tribute" onPress={() => void loadRecords()} /></>
           ) : null}
@@ -291,10 +298,10 @@ export default function DisposalHistoryScreen() {
           <PrimaryButton title="記録する" tone="tribute" disabled={busy || loading || loadFailed} onPress={() => openForm()} />
         </Card> : null}
 
-        {!loading && !loadFailed && displayedRecords.length === 0 ? (
+        {recordFilters.ready && !recordFilters.error && !loading && !loadFailed && displayedRecords.length === 0 ? (
           <Card><AppText variant="muted">{searching ? "条件に一致する記録はありません。" : "選択した日の記録はありません。"}</AppText></Card>
         ) : null}
-        {!loading && !loadFailed ? displayedRecords.map((record) => (
+        {recordFilters.ready && !recordFilters.error && !loading && !loadFailed ? displayedRecords.map((record) => (
           <View key={record.id} testID={`disposal-record-${record.id}`}>
             <Card>
               {searching ? <AppText localize={false} variant="label">{dateLabel(record.recordDate)}</AppText> : null}

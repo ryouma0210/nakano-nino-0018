@@ -241,9 +241,15 @@ describe("bounded backup export and import", () => {
     expect(mocks.multiSet).not.toHaveBeenCalled();
   });
 
-  it("round-trips daily details, shared photo metadata and image bytes in a complete backup", async () => {
+  it.each(["android", "web"])("round-trips daily details, shared photo metadata and image bytes in a complete backup on %s", async (platform) => {
+    mocks.platform.OS = platform;
     const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos",
-      dailyDetails: { "2026-10-05": { limitLevel: 100, feelings: "Today’s note\nSecond line" }, "2026-10-04": { limitLevel: null, feelings: "Note only" } } });
+      dailyDetails: {
+        "2026-10-05": { limitLevel: 100, limitState: "help", feelings: "Today’s note\nSecond line" },
+        "2026-10-04": { limitLevel: null, feelings: "Note only" },
+        "2026-10-03": { limitLevel: 100, feelings: "Ordinary maximum" },
+        "2026-10-02": { limitLevel: 45, feelings: "Legacy level" },
+      } });
     mocks.storage.set(CHASTITY_STORAGE_KEY, saved);
     const photo = { name: "photo.png", purpose: "chastity", size: 3, uri: "file:///photo.png" };
     mocks.list.mockResolvedValue([photo]);
@@ -259,9 +265,15 @@ describe("bounded backup export and import", () => {
     expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
   });
 
-  it("keeps daily details and image references in save-only backups without replacing local files", async () => {
+  it.each(["android", "web"])("keeps daily details and image references in save-only backups without replacing local files on %s", async (platform) => {
+    mocks.platform.OS = platform;
     const saved = JSON.stringify({ version: 1, records: [], photos: { "2026-10-05": "photo.png" }, calendarDisplay: "photos",
-      dailyDetails: { "2026-10-05": { limitLevel: 1, feelings: "A daily note" } } });
+      dailyDetails: {
+        "2026-10-05": { limitLevel: 100, limitState: "help", feelings: "A daily note" },
+        "2026-10-04": { limitLevel: 100, feelings: "Ordinary maximum" },
+        "2026-10-03": { limitLevel: 45, feelings: "Legacy level" },
+        "2026-10-02": { limitLevel: 1, feelings: "" },
+      } });
     mocks.storage.set(CHASTITY_STORAGE_KEY, saved);
     const payload = await savePayload();
     expect(payload.files).toBeUndefined();
@@ -293,6 +305,25 @@ describe("bounded backup export and import", () => {
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.multiSet).not.toHaveBeenCalled();
+  });
+
+  it.each(["save", "complete"] as const)("rejects invalid limit states before any %s restore writes", async (kind) => {
+    const payload = await savePayload();
+    payload.kind = kind;
+    if (kind === "complete") payload.files = [];
+    const before = [...mocks.storage];
+    for (const details of [
+      { limitLevel: 100, limitState: "unknown" }, { limitLevel: 100, limitState: null },
+      { limitLevel: 45, limitState: "help" }, { limitLevel: null, limitState: "help" },
+    ]) {
+      payload.asyncStorage[CHASTITY_STORAGE_KEY] = JSON.stringify({ version: 1, records: [], photos: {}, calendarDisplay: "icons",
+        dailyDetails: { "2026-10-05": { ...details, feelings: "A daily note" } } });
+      await expect(backupService.restore(payload)).rejects.toThrow("貞操帯管理記録");
+      expect([...mocks.storage]).toEqual(before);
+      expect(mocks.execute).not.toHaveBeenCalled();
+      expect(mocks.prepare).not.toHaveBeenCalled();
+      expect(mocks.multiSet).not.toHaveBeenCalled();
+    }
   });
 
   it("rejects malformed daily photo metadata before changing database or files", async () => {

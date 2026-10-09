@@ -24,6 +24,16 @@ function permutations(values: readonly ChastityStatus[]): ChastityStatus[][] {
 }
 
 describe("chastity record calendar and search", () => {
+  it("combines date, status and keyword while retaining inclusive bounds and selected-day fallback", () => {
+    expect(selectChastityRecords(records, "2026-10-06", "", statusNames, {
+      fromDate: "2026-03-02", toDate: "2026-03-02", recordType: "washing",
+    }).map((item) => item.id)).toEqual(["old"]);
+    expect(selectChastityRecords(records, "2026-03-02", "original", statusNames, {
+      fromDate: "2026-10-06", toDate: "2026-10-06", recordType: "locked",
+    }).map((item) => item.id)).toEqual(["latest"]);
+    expect(selectChastityRecords(records, "2026-10-06", "blue", statusNames, { recordType: "locked" })).toEqual([]);
+    expect(selectChastityRecords(records, "2026-10-06", "", statusNames, { fromDate: "2026-02-30" })).toEqual([]);
+  });
   it("keeps multiple records on the selected date and shows the newest first", () => {
     expect(selectChastityRecords(records, "2026-10-06", "", statusNames).map((item) => item.id))
       .toEqual(["latest", "dream", "earlier"]);

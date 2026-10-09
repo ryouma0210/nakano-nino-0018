@@ -18,7 +18,8 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { TextField } from "@/components/TextField";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
-import { Screen } from "@/components/Screen";
+import { FileLibraryList } from "@/features/files/FileLibraryList";
+import { useFileListPreferences } from "@/features/files/useFileListPreferences";
 import { FileGalleryViewer } from "@/features/files/FileGalleryViewer";
 import { useCompletionNotice } from "@/features/files/useCompletionNotice";
 import { FILE_USAGES, getFileUsages, type FileUsage } from "@/features/files/usages";
@@ -34,8 +35,6 @@ import {
   filterAndSortFiles,
   selectedVisibleFiles,
   storedFileKey,
-  type FilePurposeFilter,
-  type FileSortOrder,
 } from "@/features/files/fileList";
 
 const usageLabels: Record<FileUsage, string> = { training: "調教用", punishment: "お仕置き用", endurance: "勃起我慢用" };
@@ -63,12 +62,12 @@ export default function FilesScreen() {
   const showDeleteNotice = useCompletionNotice(deleteResult);
   const listLocked = deleting || maintenance.active;
   const focusedRef = useRef(false);
-  const [purposeFilter, setPurposeFilter] = useState<FilePurposeFilter>("all");
+  const { preferences, hydrated: preferencesHydrated, error: preferencesError, update: updatePreferences, retry: retryPreferences } = useFileListPreferences();
+  const { purpose: purposeFilter, sort, columns } = preferences;
+  const preferencesLocked = listLocked || !preferencesHydrated;
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<FileSortOrder>("newest");
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [selected, setSelected] = useState<StoredFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile[] | null>(null);
   const [editingFile, setEditingFile] = useState<StoredFile | null>(null);
@@ -258,14 +257,18 @@ export default function FilesScreen() {
   const tileWidth = columns === 1 ? "100%" : columns === 2 ? "47.5%" : "31%";
 
   return (
-    <Screen>
-      <PageTitle>ファイル格納部屋</PageTitle>
-      <RoomConversation
+    <>
+      <FileLibraryList
+        files={visibleFiles}
+        columns={columns}
+        title={<PageTitle>ファイル格納部屋</PageTitle>}
+        conversation={<RoomConversation
         characterSource={require("../../assets/characters/files-nino.png")}
         roomName="ファイル格納部屋"
         lines={roomMessages.files.lines}
         contractLines={roomMessages.files.contractLines}
-      />
+        />}
+        header={<View style={styles.listSections}>
       <View style={styles.uploadButtons}>
         <View style={styles.grow}>
           <PrimaryButton title="調教用" tone="save" disabled={filesBusy} onPress={() => upload("training")} />
@@ -301,6 +304,13 @@ export default function FilesScreen() {
         使用量 {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
       </AppText>
       <Card style={styles.displaySettings}>
+        {!preferencesHydrated && !preferencesError ? <AppText variant="muted">表示設定を読み込み中…</AppText> : null}
+        {preferencesError ? (
+          <View style={styles.displaySettings}>
+            <AppText accessibilityRole="alert">{preferencesError === "load" ? "表示設定を読み込めませんでした。" : "表示設定を保存できませんでした。"}</AppText>
+            <PrimaryButton title="再試行" tone="secondary" onPress={retryPreferences} />
+          </View>
+        ) : null}
         <TextField
           label="ファイル名で検索"
           placeholder="名前の一部を入力"
@@ -323,11 +333,11 @@ export default function FilesScreen() {
           ] as const).map(([value, label]) => (
             <Pressable
               key={value}
-              disabled={listLocked}
+              disabled={preferencesLocked}
               accessibilityRole="button"
-              accessibilityState={{ selected: purposeFilter === value, disabled: listLocked }}
+              accessibilityState={{ selected: purposeFilter === value, disabled: preferencesLocked }}
               onPress={() => {
-                setPurposeFilter(value);
+                updatePreferences({ purpose: value });
                 setSelectedKeys(new Set());
               }}
               style={[styles.optionButton, purposeFilter === value && styles.optionButtonSelected]}
@@ -348,10 +358,10 @@ export default function FilesScreen() {
           ] as const).map(([value, label]) => (
             <Pressable
               key={value}
-              disabled={listLocked}
+              disabled={preferencesLocked}
               accessibilityRole="button"
-              accessibilityState={{ selected: sort === value, disabled: listLocked }}
-              onPress={() => setSort(value)}
+              accessibilityState={{ selected: sort === value, disabled: preferencesLocked }}
+              onPress={() => updatePreferences({ sort: value })}
               style={[styles.optionButton, styles.sortOption, sort === value && styles.optionButtonSelected]}
             >
               <AppText style={[styles.optionText, sort === value && styles.optionTextSelected]}>{label}</AppText>
@@ -363,7 +373,10 @@ export default function FilesScreen() {
           {([1, 2, 3] as const).map((value) => (
             <Pressable
               key={value}
-              onPress={() => setColumns(value)}
+              disabled={preferencesLocked}
+              accessibilityRole="button"
+              accessibilityState={{ selected: columns === value, disabled: preferencesLocked }}
+              onPress={() => updatePreferences({ columns: value })}
               style={[styles.optionButton, columns === value && styles.optionButtonSelected]}
             >
               <AppText style={[styles.optionText, columns === value && styles.optionTextSelected]}>
@@ -428,8 +441,8 @@ export default function FilesScreen() {
       {files.length > 0 && visibleFiles.length === 0 ? (
         <Card><AppText variant="muted">該当するファイルはありません。</AppText></Card>
       ) : null}
-      <View style={styles.fileGrid}>
-      {visibleFiles.map((file, index) => (
+        </View>}
+        renderItem={({ item: file, index }) => (
         <View key={storedFileKey(file)} style={[styles.fileTile, { width: tileWidth }, selectionMode && selectedKeys.has(storedFileKey(file)) && styles.fileTileSelected]}>
           <NativePressable
             disabled={listLocked}
@@ -489,8 +502,8 @@ export default function FilesScreen() {
             </Pressable>
           ) : null}
         </View>
-      ))}
-      </View>
+        )}
+        footer={<>
       <PrimaryButton
         title="管理・設定メニューへ戻る"
         tone="secondary"
@@ -500,6 +513,8 @@ export default function FilesScreen() {
         title="ホームへ戻る"
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
+      />
+        </>}
       />
       {selected ? (
         <FileGalleryViewer files={visibleFiles} selectedKey={storedFileKey(selected)} onSelect={setSelected} onClose={() => setSelected(null)} />
@@ -540,7 +555,7 @@ export default function FilesScreen() {
         onCancel={() => setPendingDelete(null)}
         onConfirm={confirmDelete}
       />
-    </Screen>
+    </>
   );
 }
 
@@ -648,7 +663,7 @@ const styles = StyleSheet.create({
   optionButtonSelected: { borderColor: "#fff", backgroundColor: "#fff" },
   optionText: { color: "#fff", fontSize: 11, fontWeight: "900" },
   optionTextSelected: { color: "#000" },
-  fileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  listSections: { gap: 14 },
   fileTile: {
     overflow: "hidden",
     borderWidth: 1,

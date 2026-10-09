@@ -25,6 +25,9 @@ import {
 } from "@/features/othello/game";
 import { moveCoordinate, OthelloBoard } from "@/features/othello/OthelloBoard";
 import { OthelloHistoryModal } from "@/features/othello/OthelloHistoryModal";
+import { OthelloTemptationModal } from "@/features/othello/OthelloTemptationModal";
+import { isTemptationPending, prepareTemptation, type TemptationPresentation } from "@/features/othello/temptation";
+import { OTHELLO_TEMPTATION_IMAGES } from "@/features/othello/temptationImages";
 import {
   OthelloActionModal,
   type OthelloAction,
@@ -127,10 +130,8 @@ export default function OthelloScreen() {
     "completed",
   );
   const [showFinalPosition, setShowFinalPosition] = useState(false);
-  const [temptation, setTemptation] = useState<{
-    board: Board;
-    index: number;
-  } | null>(null);
+  const [temptation, setTemptation] = useState<TemptationPresentation | null>(null);
+  const temptationRef = useRef<TemptationPresentation | null>(null);
   const [assistance, setAssistance] = useState<Assistance>(null);
   const assistanceRef = useRef<Assistance>(null);
   const [actionTarget, setActionTarget] = useState<ActionTarget>(null);
@@ -141,6 +142,11 @@ export default function OthelloScreen() {
   const historyVersion = useRef(0);
   const saving = useRef(false);
   const pendingResult = useRef<OthelloHistoryEntry | null>(null);
+
+  const updateTemptation = useCallback((value: TemptationPresentation | null) => {
+    temptationRef.current = value;
+    setTemptation(value);
+  }, []);
 
   const updateAssistance = useCallback((value: Assistance) => {
     assistanceRef.current = value;
@@ -245,11 +251,11 @@ export default function OthelloScreen() {
       currentGame.current = next;
       setGame(next);
       setCpuPlan(null);
-      setTemptation(null);
+      updateTemptation(null);
       if (next?.status !== "playing" || assistanceRef.current?.kind !== "fast")
         updateAssistance(null);
     },
-    [updateAssistance],
+    [updateAssistance, updateTemptation],
   );
 
   const finishFlip = useCallback((board: Board) => {
@@ -324,6 +330,9 @@ export default function OthelloScreen() {
     [difficulty, fastMode, game],
   );
   const pressurePending = pressureCue !== null && pressureAcknowledged !== game;
+  const temptationPending = isTemptationPending(game, difficulty, assistance !== null, temptation);
+  const temptationIntroOpen = temptation !== null && temptation.board === game?.board
+    && temptation.index !== null && !temptation.acknowledged;
 
   useEffect(() => {
     if (
@@ -334,6 +343,7 @@ export default function OthelloScreen() {
       progressStatus !== "saved" ||
       dialog !== null ||
       historyOpen ||
+      temptationIntroOpen ||
       actionTarget !== null ||
       (assistance?.kind === "fast" && assistance.paused)
     )
@@ -358,6 +368,7 @@ export default function OthelloScreen() {
     historyOpen,
     pressurePending,
     progressStatus,
+    temptationIntroOpen,
     transitioning,
   ]);
 
@@ -371,6 +382,7 @@ export default function OthelloScreen() {
       progressStatus !== "saved" ||
       dialog !== null ||
       historyOpen ||
+      temptationIntroOpen ||
       actionTarget !== null ||
       game?.status !== "playing"
     )
@@ -385,7 +397,7 @@ export default function OthelloScreen() {
     if (
       !assistance &&
       !isCpuTurn &&
-      !shouldShowTemptation(snapshot.board, difficulty)
+      (!shouldShowTemptation(snapshot.board, difficulty) || temptation?.board === snapshot.board)
     )
       return;
 
@@ -396,7 +408,8 @@ export default function OthelloScreen() {
           activeRef.current &&
           version === jobVersion.current &&
           currentGame.current === snapshot &&
-          assistanceRef.current === assistance;
+          assistanceRef.current === assistance &&
+          !(temptationRef.current?.board === snapshot.board && !temptationRef.current.acknowledged);
         if (!isCurrent()) return;
         if (assistance?.kind === "single") {
           if (
@@ -422,8 +435,9 @@ export default function OthelloScreen() {
           }
         } else {
           const move = getTemptingMove(snapshot.board, difficulty);
-          if (move !== null && isCurrent())
-            setTemptation({ board: snapshot.board, index: move });
+          if (isCurrent()) updateTemptation(prepareTemptation(
+            temptationRef.current, snapshot.board, move, OTHELLO_TEMPTATION_IMAGES,
+          ));
         }
       },
       assistance?.kind === "single"
@@ -454,8 +468,11 @@ export default function OthelloScreen() {
     historyOpen,
     pressurePending,
     progressStatus,
+    temptation,
+    temptationIntroOpen,
     transitioning,
     updateAssistance,
+    updateTemptation,
   ]);
 
   const legalMoves = useMemo(() => {
@@ -469,6 +486,7 @@ export default function OthelloScreen() {
       progressStatus !== "saved" ||
       dialog !== null ||
       historyOpen ||
+      temptationPending ||
       actionTarget !== null ||
       assistance?.kind === "fast"
     )
@@ -487,6 +505,7 @@ export default function OthelloScreen() {
     historyOpen,
     pressurePending,
     progressStatus,
+    temptationPending,
     transitioning,
   ]);
   const score = game ? getScore(game.board) : null;
@@ -499,6 +518,7 @@ export default function OthelloScreen() {
       ? fixedMove
       : temptation !== null &&
           temptation.board === game?.board &&
+          temptation.index !== null &&
           legalMoves.includes(temptation.index)
         ? temptation.index
         : null;
@@ -614,6 +634,7 @@ export default function OthelloScreen() {
       dialog !== null ||
       historyOpen ||
       actionTargetRef.current !== null ||
+      isTemptationPending(snapshot, difficulty, control !== null, temptationRef.current) ||
       snapshot?.status !== "playing" ||
       snapshot.turn !== 1 ||
       !getLegalMoves(snapshot.board, 1).includes(index)
@@ -642,6 +663,7 @@ export default function OthelloScreen() {
       !activeRef.current ||
       assistanceRef.current !== null ||
       actionTargetRef.current !== null ||
+      isTemptationPending(snapshot, difficulty, assistanceRef.current !== null, temptationRef.current) ||
       snapshot !== game ||
       snapshot?.status !== "playing" ||
       snapshot.turn !== 1 ||
@@ -728,6 +750,13 @@ export default function OthelloScreen() {
     pendingResult.current = null;
     setMatch(null);
     commit(null);
+  }
+
+  function acknowledgeTemptation() {
+    const current = temptationRef.current;
+    if (transitionRef.current || !current || current.board !== currentGame.current?.board) return;
+    jobVersion.current += 1;
+    updateTemptation({ ...current, acknowledged: true });
   }
 
   async function saveAndLeave(destination: "games" | "lobby" = "games") {
@@ -987,6 +1016,7 @@ export default function OthelloScreen() {
               interactive={
                 !flipPending &&
                 !pressurePending &&
+                !temptationPending &&
                 assistance?.kind !== "single" &&
                 assistance?.kind !== "fast"
               }
@@ -997,6 +1027,7 @@ export default function OthelloScreen() {
                 !transitioning &&
                 dialog === null &&
                 !historyOpen &&
+                !temptationIntroOpen &&
                 actionTarget === null &&
                 !(assistance?.kind === "fast" && assistance.paused)
               }
@@ -1160,6 +1191,14 @@ export default function OthelloScreen() {
           onPress={leave}
         />
       </View>
+      {active && temptationIntroOpen && temptation && dialog === null && !historyOpen && actionTarget === null ? (
+        <OthelloTemptationModal
+          presentation={temptation}
+          coordinate={moveCoordinate(temptation.index!)}
+          invitation={INVITATIONS[(64 - getScore(temptation.board).empty) % INVITATIONS.length]}
+          onClose={acknowledgeTemptation}
+        />
+      ) : null}
       <OthelloHistoryModal
         visible={historyOpen}
         history={history}

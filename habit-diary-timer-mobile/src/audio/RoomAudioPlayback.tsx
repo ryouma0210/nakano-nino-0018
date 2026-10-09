@@ -9,6 +9,7 @@ const sources: Record<RoomAudioTrackName, number> = {
   earLick: require("../../assets/audio/miminame.m4a"),
   ikunaSine: require("../../assets/audio/ikuna-sine.m4a"),
   sineW: require("../../assets/audio/sine-w.m4a"),
+  sikosiko: require("../../assets/audio/sikosiko.m4a"),
   penaltyBgm: require("../../assets/audio/yuuwakubgm.m4a"),
 };
 

@@ -12,6 +12,8 @@ type JournalInput = {
   isFavorite?: boolean;
   tags?: string;
   durationSeconds?: number;
+  /** Fixed local timestamp for completion results that may be retried later. */
+  occurredAt?: string;
 };
 
 export const journalRepository = {
@@ -54,13 +56,13 @@ export const journalRepository = {
   },
 
   create(input: JournalInput) {
-    const now = toDateTimeKey();
+    const now = input.occurredAt ?? toDateTimeKey();
     const result = execute(
       `INSERT INTO journals(record_date, record_time, title, body, record_type, mood, rating, is_favorite, duration_seconds, tags, created_at, updated_at)
        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.recordDate || toDateKey(),
-        toTimeKey(),
+        input.occurredAt ? input.occurredAt.slice(11, 16) : toTimeKey(),
         input.title,
         input.body,
         input.recordType,

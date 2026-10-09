@@ -16,8 +16,13 @@ export function createLoopPlayback(players: readonly LoopPlayer[]) {
   };
   const cancelPending = () => { players.forEach(invalidate); };
   const pauseAndReset = (player: LoopPlayer) => {
-    player.pause();
-    player.seekTo(0).catch(console.error);
+    try {
+      player.pause();
+      player.seekTo(0).catch(console.error);
+    } catch (error) {
+      // A released/broken player must not prevent the remaining loops stopping.
+      console.error(error);
+    }
   };
 
   return {
@@ -34,10 +39,10 @@ export function createLoopPlayback(players: readonly LoopPlayer[]) {
       player.pause();
       player.loop = true;
       player.volume = volume;
-      player.seekTo(0).then(() => {
+      return player.seekTo(0).then(() => {
         // Stopping or replaying this loop invalidates only its pending start.
         if (requests.get(player) === currentRequest) player.play();
-      }).catch(console.error);
+      });
     },
   };
 }

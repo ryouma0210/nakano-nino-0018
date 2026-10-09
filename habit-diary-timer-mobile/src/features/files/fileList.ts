@@ -1,5 +1,6 @@
 import type { FilePurpose, StoredFile } from "../../services/fileStorageService";
 import { fileHasPurpose } from "./usages";
+import { normalizeSearchText } from "@nino/shared/search";
 
 export type FileSortOrder = "newest" | "oldest" | "name" | "size";
 export type FilePurposeFilter = "all" | FilePurpose;
@@ -21,17 +22,21 @@ export function displayedFileName(file: StoredFile) {
   return storedNameParts(file.name).name;
 }
 
+/** Search does not reorder media or change selections owned by the caller. */
+export function filterFilesByName(files: readonly StoredFile[], search: string) {
+  const query = normalizeSearchText(search).trim();
+  return files.filter((file) => normalizeSearchText(displayedFileName(file)).includes(query)
+    || normalizeSearchText(file.name).includes(query));
+}
+
 export function filterAndSortFiles(
   files: readonly StoredFile[],
   purpose: FilePurposeFilter,
   search: string,
   sort: FileSortOrder,
 ) {
-  const query = search.trim().toLocaleLowerCase();
-  return files.filter((file) => (
+  return filterFilesByName(files, search).filter((file) => (
     file.purpose !== "chastity" && (purpose === "all" || fileHasPurpose(file, purpose))
-    && (displayedFileName(file).toLocaleLowerCase().includes(query)
-      || file.name.toLocaleLowerCase().includes(query))
   )).sort((left, right) => {
     const a = storedNameParts(left.name);
     const b = storedNameParts(right.name);

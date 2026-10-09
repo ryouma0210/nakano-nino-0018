@@ -1,5 +1,6 @@
 import type { ChastityRecord, ChastityStatus } from "../../services/chastityHistoryService";
 import { CHASTITY_STATUSES } from "../../services/chastityHistoryStorage";
+import { hasRecordFilters, matchesRecordDate, recordFilterError, type RecordFilters } from "../records/filters";
 
 const normalize = (value: string) => value.normalize("NFKC").toLocaleLowerCase();
 
@@ -8,10 +9,14 @@ export function selectChastityRecords(
   selectedDate: string,
   keyword: string,
   statusNames: Readonly<Record<ChastityStatus, readonly string[]>>,
+  filters: Partial<RecordFilters> = {},
 ): ChastityRecord[] {
+  if (recordFilterError(filters)) return [];
   const tokens = normalize(keyword).trim().split(/\s+/).filter(Boolean);
+  const searching = hasRecordFilters({ ...filters, keyword });
   return records.filter((record) => {
-    if (tokens.length === 0) return record.recordDate === selectedDate;
+    if (!matchesRecordDate(record.recordDate, filters) || (filters.recordType && record.status !== filters.recordType)) return false;
+    if (!searching) return record.recordDate === selectedDate;
     const [year, month, day] = record.recordDate.split("-").map(Number);
     const fields = [
       record.note, record.status, ...statusNames[record.status], record.recordDate,

@@ -3,7 +3,7 @@ const { defineConfig } = require("eslint/config");
 
 module.exports = defineConfig([
   {
-    ignores: ["node_modules/**", ".expo/**", "dist/**", "dist-web-electron/**"],
+    ignores: ["node_modules/**", ".expo/**", ".expo-*/**", ".web-*/**", ".codex-tmp/**", "dist/**", "dist-web-electron/**"],
   },
   expoConfig,
   {

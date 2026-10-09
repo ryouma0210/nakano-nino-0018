@@ -8,20 +8,35 @@ import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Screen } from "@/components/Screen";
 import { manualSections } from "@/features/manual/content";
+import { searchManual } from "@/features/manual/search";
+import { TextField } from "@/components/TextField";
+import { translateText } from "@/i18n";
 
 export default function ManualScreen() {
-  const { playEffect } = useAppAudio();
+  const { playEffect, settings } = useAppAudio();
+  const [keyword, setKeyword] = useState("");
   const [sectionId, setSectionId] = useState(manualSections[0].id);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const section = manualSections.find((item) => item.id === sectionId) ?? manualSections[0];
+  const searching = keyword.trim().length > 0;
+  const results = searching
+    ? searchManual(manualSections, keyword, (text) => translateText(text, settings?.language ?? "ja"))
+    : section.entries.map((entry) => ({ section, entry }));
 
   return (
     <Screen desktopLayout="single">
       <View style={styles.content}>
         <PageTitle>マニュアル</PageTitle>
         <AppText variant="muted">確認したい項目を選ぶと、使い方を表示します。</AppText>
+        <TextField testID="manual-search" label="マニュアルを検索" value={keyword}
+          onChangeText={(value) => { setKeyword(value); setExpandedId(null); }}
+          placeholder="機能名・説明文をすべて検索" accessibilityLabel={translateText("マニュアルを検索", settings?.language ?? "ja")} />
+        {searching ? <View style={styles.searchSummary}>
+          <AppText accessibilityLiveRegion="polite">{`検索結果：${results.length}件`}</AppText>
+          <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => { setKeyword(""); setExpandedId(null); }} />
+        </View> : null}
 
-        <View style={styles.categories}>
+        {!searching ? <View style={styles.categories}>
           {manualSections.map((item) => (
             <Pressable
               key={item.id}
@@ -46,10 +61,11 @@ export default function ManualScreen() {
               </AppText>
             </Pressable>
           ))}
-        </View>
+        </View> : null}
 
-        <AppText variant="subtitle" accessibilityRole="header">{section.title}</AppText>
-        {section.entries.map((entry) => {
+        {!searching ? <AppText variant="subtitle" accessibilityRole="header">{section.title}</AppText> : null}
+        {searching && results.length === 0 ? <AppText variant="muted">該当する説明がありません。別の言葉で検索してください。</AppText> : null}
+        {results.map(({ section: entrySection, entry }) => {
           const expanded = expandedId === entry.id;
           return (
             <View key={entry.id} style={[styles.entry, expanded && styles.entryExpanded]}>
@@ -66,11 +82,13 @@ export default function ManualScreen() {
                 }}
                 style={({ pressed }) => [styles.entryHeading, pressed && styles.pressed]}
               >
+                {searching ? <AppText variant="muted">{entrySection.title}</AppText> : null}
                 <View style={styles.titleRow}>
                   <AppText variant="subtitle" style={styles.entryTitle}>{entry.title}</AppText>
                   <AppText localize={false} style={styles.indicator}>{expanded ? "−" : "+"}</AppText>
                 </View>
                 {entry.summary ? <AppText variant="muted">{entry.summary}</AppText> : null}
+                {searching && !expanded ? <AppText variant="muted">{entry.details.find((detail) => searchManual([{ ...entrySection, entries: [{ ...entry, title: "", summary: "", details: [detail] }] }], keyword, (text) => translateText(text, settings?.language ?? "ja")).length > 0) ?? entry.details[0]}</AppText> : null}
               </Pressable>
               {expanded ? (
                 <View style={styles.details} testID={`manual-details-${entry.id}`}>
@@ -103,6 +121,7 @@ export default function ManualScreen() {
 
 const styles = StyleSheet.create({
   content: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 14 },
+  searchSummary: { gap: 8 },
   categories: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   category: {
     flexGrow: 1,

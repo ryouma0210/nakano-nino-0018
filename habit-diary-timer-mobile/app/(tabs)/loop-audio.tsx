@@ -8,32 +8,10 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { roomMessages } from "@/constants/messages";
-import { useAppAudio, type LoopAudioName } from "@/audio/AudioProvider";
+import { useAppAudio } from "@/audio/AudioProvider";
+import { loopAudioOptions as loopAudios } from "@/audio/loopAudioLabels";
 import { lightTheme } from "@/constants/theme";
 import { contractService } from "@/services/gameRoomService";
-
-const loopAudios: { key: LoopAudioName; title: string }[] = [
-  {
-    key: "bokkisiro",
-    title: "勃起しろ",
-  },
-  {
-    key: "earLick",
-    title: "耳舐め",
-  },
-  {
-    key: "nippleScratch",
-    title: "乳首カリカリ",
-  },
-  {
-    key: "sineW",
-    title: "死ね",
-  },
-  {
-    key: "ikunaSine",
-    title: "逝くな×死ね",
-  },
-];
 
 export default function LoopAudioScreen() {
   const { loopAudioNames, playLoopAudio, stopLoopAudio, settings } = useAppAudio();
@@ -66,6 +44,7 @@ export default function LoopAudioScreen() {
         <AppText variant="muted">
           画面を移動しても流れ続けます。停止する場合は「停止」を押してください。
         </AppText>
+        <AppText variant="muted">画面下部のプレイヤーから停止タイマーを設定できます。館の外では、右上のクエストの「音声」タブから操作します。</AppText>
         <PrimaryButton
           title="すべて停止"
           tone="danger"
