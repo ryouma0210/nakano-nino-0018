@@ -44,7 +44,7 @@ export default function LoopAudioScreen() {
         <AppText variant="muted">
           画面を移動しても流れ続けます。停止する場合は「停止」を押してください。
         </AppText>
-        <AppText variant="muted">画面下部のプレイヤーをタップすると、停止タイマーを設定できます。</AppText>
+        <AppText variant="muted">画面下部のプレイヤーから停止タイマーを設定できます。館の外では、右上のクエストの「音声」タブから操作します。</AppText>
         <PrimaryButton
           title="すべて停止"
           tone="danger"

@@ -176,7 +176,7 @@ describe("hard mode dialogue cues", () => {
 });
 
 describe("othello audio scenes", () => {
-  it("keeps both hard-mode loops during either turn without a temptation square", () => {
+  it("keeps the hard-mode audio scene during either turn without a temptation square", () => {
     for (const game of [createGame(), playMove(createGame(), 19), singleMoveAt(33), humanPassAt(33), humanPass()]) {
       expect(getOthelloAudioScene(game, "hard", true, null)).toBe("othello-temptation");
     }
@@ -198,10 +198,12 @@ describe("othello audio scenes", () => {
     const scene = getOthelloAudioScene(humanPass(), "hard", true, null);
     const settings = { soundEnabled: true, backgroundMusicEnabled: true, soundVolume: 0.6, musicVolume: 0.3 };
     expect(getRoomAudioTracks(scene, settings, true)).toEqual([
-      { name: "earLick", volume: 0.6 }, { name: "penaltyBgm", volume: 0.3 },
+      { name: "earLick", volume: 0.6 }, { name: "sikosiko", volume: 0.6 }, { name: "penaltyBgm", volume: 0.3 },
     ]);
     expect(getRoomAudioTracks(scene, { ...settings, soundEnabled: false }, true)).toEqual([{ name: "penaltyBgm", volume: 0.3 }]);
-    expect(getRoomAudioTracks(scene, { ...settings, backgroundMusicEnabled: false }, true)).toEqual([{ name: "earLick", volume: 0.6 }]);
+    expect(getRoomAudioTracks(scene, { ...settings, backgroundMusicEnabled: false }, true)).toEqual([
+      { name: "earLick", volume: 0.6 }, { name: "sikosiko", volume: 0.6 },
+    ]);
     expect(getRoomAudioTracks(scene, settings, false)).toEqual([]);
   });
 });
