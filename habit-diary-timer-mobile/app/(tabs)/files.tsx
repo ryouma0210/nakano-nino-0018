@@ -16,6 +16,7 @@ import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { TextField } from "@/components/TextField";
+import { Disclosure } from "@/components/Disclosure";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { FileLibraryList } from "@/features/files/FileLibraryList";
@@ -66,6 +67,7 @@ export default function FilesScreen() {
   const { purpose: purposeFilter, sort, columns } = preferences;
   const preferencesLocked = listLocked || !preferencesHydrated;
   const [search, setSearch] = useState("");
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<StoredFile | null>(null);
@@ -303,7 +305,7 @@ export default function FilesScreen() {
       <AppText variant="muted">
         使用量 {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
       </AppText>
-      <Card style={styles.displaySettings}>
+      <View style={styles.displaySettings}>
         {!preferencesHydrated && !preferencesError ? <AppText variant="muted">表示設定を読み込み中…</AppText> : null}
         {preferencesError ? (
           <View style={styles.displaySettings}>
@@ -311,7 +313,10 @@ export default function FilesScreen() {
             <PrimaryButton title="再試行" tone="secondary" onPress={retryPreferences} />
           </View>
         ) : null}
+        <Disclosure title="検索" active={search.trim().length > 0 || purposeFilter !== "all"} testID="files-search-toggle"
+          expanded={searchExpanded} onExpandedChange={setSearchExpanded}>
         <TextField
+          testID="files-search"
           label="ファイル名で検索"
           placeholder="名前の一部を入力"
           value={search}
@@ -385,7 +390,8 @@ export default function FilesScreen() {
             </Pressable>
           ))}
         </View>
-      </Card>
+        </Disclosure>
+      </View>
       <Card style={styles.displaySettings}>
         <AppText>{`表示中：${visibleFiles.length}件`}</AppText>
         <PrimaryButton

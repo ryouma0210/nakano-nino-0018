@@ -15,3 +15,10 @@ export const loopAudioLabels: Record<LoopAudioName, string> = {
 export const loopAudioOptions = (
   Object.keys(loopAudioLabels) as LoopAudioName[]
 ).map((key) => ({ key, title: loopAudioLabels[key] }));
+
+/** Match the selector order even when clips were started in a different order. */
+export function loopMediaTitle(names: readonly LoopAudioName[], translate: (text: string) => string): string {
+  const selected = new Set(names);
+  return loopAudioOptions.filter(({ key }) => selected.has(key)).map(({ title }) => translate(title)).join(" / ")
+    || translate("ループ音声");
+}

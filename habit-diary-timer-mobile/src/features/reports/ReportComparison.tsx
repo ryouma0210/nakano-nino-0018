@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
+import { Disclosure } from "@/components/Disclosure";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import type { ComparedActivityReport } from "@/repositories/reportRepository";
 import { reportMetrics } from "./metrics";
@@ -13,9 +14,19 @@ export function ReportComparison({ title, comparison }: { title: string; compari
       <AppText variant="subtitle">{title}</AppText>
       <AppText variant="label">今回の期間</AppText>
       <AppText localize={false}>{reportPeriodLabel(comparison.periods.current)}</AppText>
+      <AppText variant="muted">数値や棒を押すと、集計に使った記録を確認できます。</AppText>
+      <View testID="report-current-metrics" style={styles.grid}>
+        {reportMetrics.map((metric) => <Pressable key={metric.key}
+          testID={`report-current-${metric.key}`} accessibilityRole="button" accessibilityLabel="今回の記録を確認"
+          onPress={() => router.push({ pathname: "/(tabs)/report-details", params: { metric: metric.key, ...comparison.periods.current } })}
+          style={({ pressed }) => [styles.currentMetric, pressed && styles.pressed]}>
+          <AppText variant="label">{metric.label}</AppText>
+          <AppText style={styles.value}>{`${comparison.current[metric.key].toLocaleString()}${metric.unit}`}</AppText>
+        </Pressable>)}
+      </View>
+      <Disclosure title="前回比較" testID="report-comparison-toggle">
       <AppText variant="muted">比較する前の期間</AppText>
       <AppText localize={false} variant="muted">{reportPeriodLabel(comparison.periods.previous)}</AppText>
-      <AppText variant="muted">数値や棒を押すと、集計に使った記録を確認できます。</AppText>
       <View style={styles.grid}>
         {reportMetrics.map((metric) => {
           const current = comparison.current[metric.key];
@@ -51,6 +62,7 @@ export function ReportComparison({ title, comparison }: { title: string; compari
           );
         })}
       </View>
+      </Disclosure>
     </Card>
   );
 }
@@ -58,6 +70,8 @@ export function ReportComparison({ title, comparison }: { title: string; compari
 const styles = StyleSheet.create({
   card: { borderColor: "#7db7ff", gap: 8 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  currentMetric: { flexGrow: 1, flexBasis: 200, minWidth: 0, minHeight: 44, paddingHorizontal: 10, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: "#444", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   metric: { flexGrow: 1, flexBasis: 240, minWidth: 0, gap: 5, padding: 12, borderWidth: 1, borderColor: "#444", backgroundColor: "#101722" },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   value: { color: "#a8ceff", fontSize: 21, lineHeight: 28, fontWeight: "800" },

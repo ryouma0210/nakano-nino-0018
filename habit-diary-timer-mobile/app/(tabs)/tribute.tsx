@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
+import { CalendarGrid } from "@/components/CalendarGrid";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -382,15 +383,14 @@ export default function TributeScreen() {
         <PrimaryButton title="お貢ぎを登録" tone="danger" onPress={addRecord} />
       </Card>
 
-      <Card>
+      <RecordFilterFields filters={recordFilters.filters} onChange={recordFilters.update} types={tributeFilterTypes}
+        ready={recordFilters.ready} error={recordFilters.error} storageError={recordFilters.storageError}>
         <AppText variant="subtitle">履歴を検索</AppText>
         <AppText variant="muted">検索条件は下の履歴一覧に適用します。上の月別集計と基本収入は変更しません。</AppText>
         <TextField label="検索" accessibilityLabel="履歴を検索" testID="tribute-search"
           value={recordFilters.filters.keyword} editable={recordFilters.ready}
           onChangeText={(keyword) => recordFilters.update({ keyword })} placeholder="コメント・日付・金額" />
-      </Card>
-      <RecordFilterFields filters={recordFilters.filters} onChange={recordFilters.update} types={tributeFilterTypes}
-        ready={recordFilters.ready} error={recordFilters.error} storageError={recordFilters.storageError} />
+      </RecordFilterFields>
       {recordFilters.active ? <Card>
         {recordFilters.ready && !recordFilters.error ? <AppText testID="tribute-search-count">
           {`検索結果：${displayedRecords.length + displayedIncomeRecords.length}件`}
@@ -540,7 +540,7 @@ function DateSelector({
     <View style={styles.dateSelector} testID={`tribute-${amountTone}-calendar`}>
       <AppText variant="label" style={styles.calendarText}>{label}</AppText>
       <AppText localize={false} style={styles.calendarMonth}>{monthLabel(month, language)}</AppText>
-      <View style={styles.weekRow}>
+      <CalendarGrid testID={`tribute-${amountTone}-weekdays`}>
         {Array.from({ length: 7 }, (_, index) => (
           <AppText
             key={index}
@@ -550,8 +550,8 @@ function DateSelector({
             {translateWeekday(index, language)}
           </AppText>
         ))}
-      </View>
-      <View style={styles.dayGrid}>
+      </CalendarGrid>
+      <CalendarGrid testID={`tribute-${amountTone}-days`}>
         {calendarDays.map((date, index) => {
           if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
           const { dateKey, day, dayOfWeek, holiday } = date;
@@ -586,7 +586,7 @@ function DateSelector({
             </Pressable>
           );
         })}
-      </View>
+      </CalendarGrid>
       <AppText variant="muted" style={styles.calendarHelp}>選択中：{formatDateJa(value)}</AppText>
     </View>
   );
@@ -707,17 +707,13 @@ const styles = StyleSheet.create({
   calendarText: { color: "#111" },
   calendarMonth: { color: "#111", textAlign: "center", fontSize: 18, fontWeight: "900" },
   calendarHelp: { color: "#555" },
-  weekRow: { flexDirection: "row" },
   weekDay: {
-    width: `${100 / 7}%`,
     color: "#111",
     textAlign: "center",
     fontSize: 12,
     fontWeight: "800",
   },
-  dayGrid: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: {
-    width: `${100 / 7}%`,
     minWidth: 0,
     minHeight: 52,
     paddingHorizontal: 1,

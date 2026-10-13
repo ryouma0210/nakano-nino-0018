@@ -10,26 +10,35 @@ import { AppText } from "./AppText";
 import { LocalizedPressable as Pressable } from "./LocalizedPressable";
 import { PrimaryButton } from "./PrimaryButton";
 import { LoopAudioControls } from "./LoopAudioControls";
+import { contractService } from "@/services/gameRoomService";
 
 export function LoopAudioMiniPlayer({ bottomInset = false }: { bottomInset?: boolean }) {
   const { loopAudioNames, stopLoopAudio, loopSleepDeadline, settings } = useAppAudio();
   const [expanded, setExpanded] = useState(false);
+  const [canStart, setCanStart] = useState(false);
   const remaining = useLoopSleepRemaining(loopSleepDeadline);
   const insets = useSafeAreaInsets();
   useEffect(() => { if (!loopAudioNames.length) setExpanded(false); }, [loopAudioNames.length]);
+  useEffect(() => {
+    if (!expanded) return;
+    let active = true;
+    contractService.load().then((contract) => { if (active) setCanStart(Boolean(contract.signedAt)); }).catch(console.error);
+    return () => { active = false; };
+  }, [expanded]);
+  const openControls = () => { setCanStart(false); setExpanded(true); };
   if (loopAudioNames.length === 0) return null;
   const playingAudios = loopAudioOptions.filter(({ key }) => loopAudioNames.includes(key));
   const names = playingAudios.map(({ title }) => translateText(title, settings?.language ?? "ja")).join(" / ");
   return <>
     <View testID="loop-mini-player" style={[styles.bar, bottomInset && { paddingBottom: Math.max(6, insets.bottom) }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="再生中の音声と停止タイマー" onPress={() => setExpanded(true)} style={styles.info}>
+      <Pressable accessibilityRole="button" accessibilityLabel="再生中の音声と停止タイマー" onPress={openControls} style={styles.info}>
         <Ionicons name="musical-notes" size={20} color="#ffbad4" />
         <View style={styles.labels}>
           <AppText localize={false} numberOfLines={1} style={styles.names}>{names}</AppText>
           <AppText variant="muted" style={styles.hint}>再生中・タップして設定</AppText>
         </View>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="停止タイマー" onPress={() => setExpanded(true)} style={styles.timerButton}>
+      <Pressable accessibilityRole="button" accessibilityLabel="停止タイマー" onPress={openControls} style={styles.timerButton}>
         <Ionicons name="timer-outline" size={19} color="#c7dfff" />
         {remaining ? <AppText localize={false} style={styles.remaining}>{remaining}</AppText> : null}
       </Pressable>
@@ -39,9 +48,9 @@ export function LoopAudioMiniPlayer({ bottomInset = false }: { bottomInset?: boo
     </View>
     <Modal visible={expanded} transparent animationType="fade" onRequestClose={() => setExpanded(false)}>
       <View style={[styles.backdrop, { paddingTop: Math.max(20, insets.top), paddingBottom: Math.max(20, insets.bottom) }]}>
-        <View style={styles.dialog} accessibilityViewIsModal onAccessibilityEscape={() => setExpanded(false)}>
+        <View testID="loop-mini-dialog" style={styles.dialog} accessibilityViewIsModal onAccessibilityEscape={() => setExpanded(false)}>
           <ScrollView contentContainerStyle={styles.dialogContent}>
-            <LoopAudioControls />
+            <LoopAudioControls canStart={canStart} />
             <PrimaryButton title="閉じる" onPress={() => setExpanded(false)} />
           </ScrollView>
         </View>
