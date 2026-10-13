@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
+import { CalendarGrid } from "@/components/CalendarGrid";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { translateText, translateWeekday } from "@/i18n";
 import { formatPickerValue, pickerDateFormatter } from "./format";
@@ -105,11 +106,11 @@ export function DatePickerModal({ mode, label, value, allowClear, minimum, maxim
             </Pressable>
           </View>
           {view === "day" ? <>
-            <View style={styles.grid}>{Array.from({ length: 7 }, (_, index) =>
+            <CalendarGrid testID="date-picker-weekdays">{Array.from({ length: 7 }, (_, index) =>
               <AppText key={index} localize={false} style={[styles.weekday, index === 0 && styles.sunday, index === 6 && styles.saturday]}>
                 {translateWeekday(index, language)}
-              </AppText>)}</View>
-            <View style={styles.grid}>{calendarMonthGrid(month).map((date, index) => {
+              </AppText>)}</CalendarGrid>
+            <CalendarGrid testID="date-picker-days">{calendarMonthGrid(month).map((date, index) => {
               if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
               const enabled = isPickerValueSelectable(date, "day", bounds);
               const selected = date === value;
@@ -122,8 +123,8 @@ export function DatePickerModal({ mode, label, value, allowClear, minimum, maxim
                   <AppText localize={false} style={[styles.choiceText, selected && styles.selectedText]}>{Number(date.slice(-2))}</AppText>
                 </Pressable>
               </View>;
-            })}</View>
-          </> : view === "month" ? <View style={styles.grid}>{Array.from({ length: 12 }, (_, index) => {
+            })}</CalendarGrid>
+          </> : view === "month" ? <CalendarGrid columns={3} testID="date-picker-months">{Array.from({ length: 12 }, (_, index) => {
             const key = `${month.slice(0, 4)}-${String(index + 1).padStart(2, "0")}`;
             const enabled = selectableMonth(key);
             const selected = key === value.slice(0, 7);
@@ -137,7 +138,7 @@ export function DatePickerModal({ mode, label, value, allowClear, minimum, maxim
                 </AppText>
               </Pressable>
             </View>;
-          })}</View> : <View style={styles.grid}>{years.map((candidate) => {
+          })}</CalendarGrid> : <CalendarGrid columns={3} testID="date-picker-years">{years.map((candidate) => {
             const enabled = selectableYear(candidate);
             const selected = candidate === Number(value.slice(0, 4));
             return <View key={candidate} style={styles.largeCell}>
@@ -148,7 +149,7 @@ export function DatePickerModal({ mode, label, value, allowClear, minimum, maxim
                 <AppText localize={false} style={[styles.choiceText, selected && styles.selectedText]}>{candidate}</AppText>
               </Pressable>
             </View>;
-          })}</View>}
+          })}</CalendarGrid>}
           {allowClear ? <View testID="date-picker-clear"><PrimaryButton title="指定なし" tone="secondary" onPress={() => onSelect("")} /></View> : null}
         </ScrollView>
       </View>
@@ -166,12 +167,11 @@ const styles = StyleSheet.create({
   iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 4 },
   heading: { flex: 1, minHeight: 44, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center" },
   headingText: { fontWeight: "700", textAlign: "center", flexShrink: 1 },
-  grid: { flexDirection: "row", flexWrap: "wrap" },
-  weekday: { width: `${100 / 7}%`, textAlign: "center", color: "#aaa", fontSize: 12 },
+  weekday: { textAlign: "center", color: "#aaa", fontSize: 12 },
   sunday: { color: "#ff8c98" },
   saturday: { color: "#7db7ff" },
-  dayCell: { width: `${100 / 7}%`, height: 46, padding: 1 },
-  largeCell: { width: `${100 / 3}%`, height: 54, padding: 3 },
+  dayCell: { height: 46, padding: 1 },
+  largeCell: { height: 54, padding: 3 },
   choice: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 4, borderWidth: 1, borderColor: "transparent" },
   choiceText: { textAlign: "center" },
   today: { borderColor: "#999" },

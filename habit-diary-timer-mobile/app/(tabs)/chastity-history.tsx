@@ -7,6 +7,7 @@ import { useAppModal } from "@/components/AppModalProvider";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
+import { CalendarGrid } from "@/components/CalendarGrid";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -311,11 +312,12 @@ export default function ChastityHistoryScreen() {
           lines={roomMessages.chastityHistory.lines}
           contractLines={roomMessages.chastityHistory.contractLines}
         />
-        <TextField testID="chastity-search" label="検索" accessibilityLabel={translateText("検索", language)}
-          value={keyword} onChangeText={(value) => recordFilters.update({ keyword: value })} placeholder="内容・日付・状態" editable={!busy && recordFilters.ready} />
         <RecordFilterFields filters={filters} onChange={recordFilters.update} ready={recordFilters.ready}
           types={CHASTITY_STATUSES.map((value) => ({ value, label: CHASTITY_STATUS_LABELS[value] }))} typeLabel="状態"
-          disabled={busy} error={recordFilters.error} storageError={recordFilters.storageError} />
+          disabled={busy} error={recordFilters.error} storageError={recordFilters.storageError}>
+          <TextField testID="chastity-search" label="検索" accessibilityLabel={translateText("検索", language)}
+            value={keyword} onChangeText={(value) => recordFilters.update({ keyword: value })} placeholder="内容・日付・状態" editable={!busy && recordFilters.ready} />
+        </RecordFilterFields>
         {searching ? <Card>
           <AppText variant="subtitle">検索結果</AppText>
           {recordFilters.ready && !recordFilters.error && !loading && !loadFailed ? <AppText testID="chastity-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
@@ -347,14 +349,14 @@ export default function ChastityHistoryScreen() {
             </AppText>
             <PrimaryButton title="›" tone="secondary" disabled={busy || toDateKey(visibleMonth).slice(0, 7) >= today.slice(0, 7)} onPress={() => changeMonth(1)} />
           </View>
-          <View style={styles.weekRow}>
+          <CalendarGrid testID="chastity-calendar-weekdays">
             {Array.from({ length: 7 }, (_, index) => (
               <AppText key={index} localize={false} style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}>
                 {translateWeekday(index, language)}
               </AppText>
             ))}
-          </View>
-          <View style={styles.calendarGrid}>
+          </CalendarGrid>
+          <CalendarGrid testID="chastity-calendar-days">
             {calendarDays.map((date, index) => {
               if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
               const future = date > today;
@@ -387,7 +389,7 @@ export default function ChastityHistoryScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </CalendarGrid>
           <View style={styles.legend}>
             {CHASTITY_STATUSES.map((value) => <AppText key={value} localize={false} style={styles.legendText}>{renderStatusLabel(value)}</AppText>)}
           </View>
@@ -523,10 +525,8 @@ const styles = StyleSheet.create({
   calendarText: { color: "#111" },
   monthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   monthTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "900" },
-  weekRow: { flexDirection: "row" },
-  weekDay: { width: `${100 / 7}%`, color: "#111", textAlign: "center", fontSize: 12, fontWeight: "800" },
-  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: `${100 / 7}%`, height: 64, paddingHorizontal: 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#d7d7d7", backgroundColor: "#fff" },
+  weekDay: { color: "#111", textAlign: "center", fontSize: 12, fontWeight: "800" },
+  dayCell: { height: 64, paddingHorizontal: 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#d7d7d7", backgroundColor: "#fff" },
   dayText: { color: "#111", fontWeight: "800" },
   dayMarkers: { width: "100%", height: 32, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", alignContent: "center" },
   dayIcon: { color: "#111", width: "50%", maxWidth: 17, textAlign: "center", fontSize: 12, lineHeight: 15 },

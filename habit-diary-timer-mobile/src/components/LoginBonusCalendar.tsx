@@ -1,6 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
+import { CalendarGrid } from "@/components/CalendarGrid";
 import { translateWeekday } from "@/i18n";
 import type { LoginBonusStamp } from "@/repositories/loginBonusRepository";
 import { isJapaneseHoliday } from "@/utils/japaneseHoliday";
@@ -25,7 +26,7 @@ export function LoginBonusCalendar({ stamps, today }: Props) {
       <AppText variant="subtitle" style={styles.monthTitle}>
         {monthLabel}のスタンプ
       </AppText>
-      <View style={styles.weekRow}>
+      <CalendarGrid testID="login-bonus-weekdays">
         {Array.from({ length: 7 }, (_, weekday) => (
           <AppText
             key={weekday}
@@ -39,8 +40,8 @@ export function LoginBonusCalendar({ stamps, today }: Props) {
             {translateWeekday(weekday, settings?.language ?? "ja")}
           </AppText>
         ))}
-      </View>
-      <View style={styles.calendarGrid}>
+      </CalendarGrid>
+      <CalendarGrid testID="login-bonus-days">
         {calendarDays.map((stamp, index) => {
           if (!stamp) return <View key={`blank-${index}`} style={styles.dayCell} />;
           const weekday = new Date(`${stamp.date}T12:00:00`).getDay();
@@ -69,7 +70,7 @@ export function LoginBonusCalendar({ stamps, today }: Props) {
             </View>
           );
         })}
-      </View>
+      </CalendarGrid>
     </View>
   );
 }
@@ -77,17 +78,13 @@ export function LoginBonusCalendar({ stamps, today }: Props) {
 const styles = StyleSheet.create({
   calendar: { backgroundColor: "#fff", borderRadius: 4, padding: 12, gap: 10 },
   monthTitle: { color: "#111", textAlign: "center" },
-  weekRow: { flexDirection: "row" },
   weekDay: {
-    width: `${100 / 7}%`,
     color: "#111",
     textAlign: "center",
     fontSize: 12,
     fontWeight: "800",
   },
-  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: {
-    width: `${100 / 7}%`,
     height: 66,
     alignItems: "center",
     justifyContent: "center",

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLoopPlayback } from "./loopPlayback";
-import { createLoopMediaControls, installLoopMediaSessionActions, type LoopMediaStatus } from "./loopMediaControls";
+import { createLoopMediaControls, type LoopMediaStatus } from "./loopMediaControls";
 
 function deferred() {
   let resolve!: () => void;
@@ -32,7 +32,7 @@ function makePlayer() {
   return player;
 }
 
-function setup() {
+function setup(browser = false) {
   const players = [makePlayer(), makePlayer()];
   const playback = createLoopPlayback(players);
   const setMode = vi.fn(async (_mode: "mixWithOthers" | "doNotMix") => {});
@@ -41,15 +41,17 @@ function setup() {
   const onError = vi.fn();
   const cleanupActions = vi.fn();
   const installStopActions = vi.fn((_stop: () => void) => cleanupActions);
+  const updateMetadata = vi.fn();
   const controls = createLoopMediaControls(players, {
-    setMode, onExternalStop, onStartFailure, onError, installStopActions,
+    setMode, onExternalStop, onStartFailure, onError,
+    mediaSession: browser ? { activate: (_metadata, stop) => installStopActions(stop), updateMetadata } : undefined,
     onUnexpectedPlayback: (player) => playback.stop(player),
   });
   players.forEach((player) => { player.changed = () => controls.checkPlayer(player); });
   controls.initialize();
   const start = (index: number) => controls.start(players[index], () => playback.play(players[index], 0.4));
   const stop = (index?: number) => { controls.stop(index === undefined ? undefined : players[index]); playback.stop(index === undefined ? undefined : players[index]); };
-  return { players, playback, controls, setMode, onExternalStop, onStartFailure, onError, installStopActions, cleanupActions, start, stop };
+  return { players, playback, controls, setMode, onExternalStop, onStartFailure, onError, installStopActions, cleanupActions, updateMetadata, start, stop };
 }
 
 describe("manual loop system media controls", () => {
@@ -65,7 +67,7 @@ describe("manual loop system media controls", () => {
     await flush();
     expect(fixture.players[0].playing).toBe(true);
     expect(fixture.players[0].setActiveForLockScreen).toHaveBeenCalledExactlyOnceWith(true,
-      { title: "ループ音声", artist: "Nino Room" }, { showSeekForward: false, showSeekBackward: false, isLiveStream: true });
+      { title: "ループ音声", artist: "" }, { showSeekForward: false, showSeekBackward: false, isLiveStream: true });
     fixture.start(1);
     await flush();
     expect(fixture.players[1].playing).toBe(true);
@@ -118,7 +120,6 @@ describe("manual loop system media controls", () => {
     fixture.players.forEach((player) => expect(player.playing).toBe(false));
     expect(fixture.players[1].play).not.toHaveBeenCalled();
     expect(fixture.players[0].setActiveForLockScreen).toHaveBeenLastCalledWith(false);
-    expect(fixture.cleanupActions).toHaveBeenCalledTimes(1);
     expect(fixture.controls.hasRequests()).toBe(false);
   });
 
@@ -131,10 +132,7 @@ describe("manual loop system media controls", () => {
     expect(fixture.players[1].playing).toBe(true);
     expect(fixture.players[0].setActiveForLockScreen).toHaveBeenLastCalledWith(false);
     expect(fixture.players[1].setActiveForLockScreen).toHaveBeenLastCalledWith(true, expect.anything(), expect.anything());
-    const oldAction = fixture.installStopActions.mock.calls[0][0];
-    oldAction();
-    expect(fixture.players[1].playing).toBe(true);
-    fixture.installStopActions.mock.calls[1][0]();
+    fixture.players[1].pause();
     expect(fixture.onExternalStop).toHaveBeenCalledTimes(1);
     expect(fixture.players[1].playing).toBe(false);
   });
@@ -227,7 +225,7 @@ describe("manual loop system media controls", () => {
     fixture.start(0);
     await flush();
     fixture.controls.updateTitle("Loop audio");
-    expect(fixture.players[0].updateLockScreenMetadata).toHaveBeenCalledWith({ title: "Loop audio", artist: "Nino Room" });
+    expect(fixture.players[0].updateLockScreenMetadata).toHaveBeenCalledWith({ title: "Loop audio", artist: "" });
     expect(fixture.players[0].setActiveForLockScreen).toHaveBeenCalledTimes(1);
   });
 
@@ -309,32 +307,28 @@ describe("manual loop system media controls", () => {
     mode.resolve();
     await flush();
     expect(fixture.players[1].play).not.toHaveBeenCalled();
-    expect(fixture.cleanupActions).toHaveBeenCalledTimes(1);
+    expect(fixture.players[0].setActiveForLockScreen).toHaveBeenLastCalledWith(false);
     expect(fixture.setMode).toHaveBeenLastCalledWith("mixWithOthers");
   });
 });
 
-describe("browser media actions", () => {
-  it("routes pause and stop to the whole mix and invalidates handlers on cleanup", () => {
-    const actions = new Map<MediaSessionAction, MediaSessionActionHandler | null>();
-    const session = { setActionHandler: vi.fn((action: MediaSessionAction, handler: MediaSessionActionHandler | null) => { actions.set(action, handler); }) };
-    const stop = vi.fn();
-    const remove = installLoopMediaSessionActions(session, stop);
-    const pause = actions.get("pause")!;
-    const stopAction = actions.get("stop")!;
-    pause({ action: "pause" }); stopAction({ action: "stop" });
-    expect(stop).toHaveBeenCalledTimes(2);
-    expect(actions.get("play")).toBeNull();
-    remove();
-    pause({ action: "pause" }); stopAction({ action: "stop" });
-    expect(stop).toHaveBeenCalledTimes(2);
-    expect(actions.get("pause")).toBeNull();
-    expect(actions.get("stop")).toBeNull();
-  });
-
-  it("tolerates missing browser support and unsupported individual actions", () => {
-    expect(() => installLoopMediaSessionActions(undefined, vi.fn())()).not.toThrow();
-    const session = { setActionHandler: vi.fn(() => { throw new Error("unsupported"); }) };
-    expect(() => installLoopMediaSessionActions(session, vi.fn())()).not.toThrow();
+describe("browser session ownership", () => {
+  it("keeps Expo's finite clip metadata inactive, updates names, and invalidates a replaced representative's callback", async () => {
+    const fixture = setup(true);
+    fixture.start(0); fixture.start(1);
+    await flush();
+    fixture.players.forEach((player) => expect(player.setActiveForLockScreen).not.toHaveBeenCalled());
+    fixture.controls.updateTitle("First / Second");
+    expect(fixture.updateMetadata).toHaveBeenLastCalledWith({ title: "First / Second", artist: "" });
+    const oldAction = fixture.installStopActions.mock.calls[0][0];
+    fixture.stop(0);
+    expect(fixture.cleanupActions).toHaveBeenCalledTimes(1);
+    oldAction();
+    expect(fixture.players[1].playing).toBe(true);
+    fixture.installStopActions.mock.calls[1][0]();
+    expect(fixture.onExternalStop).toHaveBeenCalledTimes(1);
+    expect(fixture.players[1].playing).toBe(false);
+    expect(fixture.cleanupActions).toHaveBeenCalledTimes(2);
+    fixture.players.forEach((player) => expect(player.setActiveForLockScreen).not.toHaveBeenCalled());
   });
 });

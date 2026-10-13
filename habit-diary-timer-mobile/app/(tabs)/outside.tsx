@@ -1860,8 +1860,8 @@ export default function OutsideScreen() {
               <View testID="outside-battle-audio-modal" style={[styles.crystalModal, styles.questModal]}>
                 <ScrollView contentContainerStyle={styles.crystalModalContent}>
                   <AppText variant="subtitle">再生中の音声と停止タイマー</AppText>
-                  <AppText variant="muted">ループ音声の停止・停止タイマーを操作できます。BGMは対象外です。</AppText>
-                  <LoopAudioControls />
+                  <AppText variant="muted">ループ音声の再生・停止・停止タイマーを操作できます。BGMは対象外です。</AppText>
+                  <LoopAudioControls canStart={slaveContractSigned} />
                   <View testID="outside-battle-audio-close">
                     <PrimaryButton title="閉じる" onPress={() => setBattleAudioOpen(false)} />
                   </View>
@@ -2070,7 +2070,7 @@ export default function OutsideScreen() {
             <ScrollView contentContainerStyle={styles.crystalModalContent} showsVerticalScrollIndicator={false}>
               <AppText style={styles.questModalTitle}>クエスト</AppText>
               <AppText style={styles.questModalHelp}>{questTab === "audio"
-                ? "ループ音声の停止・停止タイマーを操作できます。BGMは対象外です。"
+                ? "ループ音声の再生・停止・停止タイマーを操作できます。BGMは対象外です。"
                 : "条件を達成して報酬を受け取ってください。"}</AppText>
               <View style={styles.questTabs} accessibilityRole="tablist">
                 {([
@@ -2107,7 +2107,7 @@ export default function OutsideScreen() {
                 ))}
               </View> : null}
 
-              {questTab === "audio" ? <LoopAudioControls /> : null}
+              {questTab === "audio" ? <LoopAudioControls canStart={slaveContractSigned} /> : null}
 
               {questTab === "daily" || questTab === "story" ? <View style={[styles.questSection, questTab === "story" && styles.storyQuestSection]}>
                 <AppText style={styles.questSectionTitle}>{questTab === "daily" ? "デイリークエスト" : "クエスト"}</AppText>

@@ -3,6 +3,13 @@
   "version": "1.2.1",
   "private": true,
   "main": "expo-router/entry",
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-audio"]
+      }
+    }
+  },
   "scripts": {
     "i18n:audit": "node scripts/audit-i18n.mjs",
     "start": "expo start",

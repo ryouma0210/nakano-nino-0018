@@ -1,3 +1,5 @@
+import type { LoopMediaSession } from "./loopMediaSession";
+
 export type LoopMediaStatus = {
   playing: boolean;
   isLoaded: boolean;
@@ -25,7 +27,7 @@ type Options<Player> = {
   onUnexpectedPlayback: (player: Player) => void;
   onStartFailure: (player: Player) => void;
   onError: (error: unknown) => void;
-  installStopActions?: (stop: () => void) => () => void;
+  mediaSession?: LoopMediaSession;
 };
 
 /** Only manual loop players are owned here; room sounds keep their own lifecycle. */
@@ -33,9 +35,9 @@ export function createLoopMediaControls<Player extends LoopMediaPlayer>(players:
   const requested = new Map<Player, Request>();
   const loadErrors = new Map<Player, string>();
   let representative: Player | null = null;
-  let removeStopActions: (() => void) | undefined;
+  let deactivateControls: (() => void) | undefined;
   let disposed = false;
-  let metadata = { title: "ループ音声", artist: "Nino Room" };
+  let metadata = { title: "ループ音声", artist: "" };
   let mode: Mode | null = null;
   let modeQueue: Promise<void> = Promise.resolve();
 
@@ -51,13 +53,9 @@ export function createLoopMediaControls<Player extends LoopMediaPlayer>(players:
   }
 
   function clearControls() {
-    const previous = representative;
     representative = null;
-    removeStopActions?.();
-    removeStopActions = undefined;
-    if (previous) {
-      try { previous.setActiveForLockScreen(false); } catch (error) { options.onError(error); }
-    }
+    try { deactivateControls?.(); } catch (error) { options.onError(error); }
+    deactivateControls = undefined;
   }
 
   function syncRepresentative() {
@@ -67,10 +65,14 @@ export function createLoopMediaControls<Player extends LoopMediaPlayer>(players:
     if (!next || disposed) return;
     representative = next;
     try {
-      next.setActiveForLockScreen(true, metadata, { showSeekForward: false, showSeekBackward: false, isLiveStream: true });
-      removeStopActions = options.installStopActions?.(() => {
-        if (representative === next && !disposed) requestExternalStop();
-      });
+      if (options.mediaSession) {
+        deactivateControls = options.mediaSession.activate(metadata, () => {
+          if (representative === next && !disposed) requestExternalStop();
+        });
+      } else {
+        next.setActiveForLockScreen(true, metadata, { showSeekForward: false, showSeekBackward: false, isLiveStream: true });
+        deactivateControls = () => next.setActiveForLockScreen(false);
+      }
     } catch (error) { options.onError(error); }
   }
 
@@ -150,9 +152,12 @@ export function createLoopMediaControls<Player extends LoopMediaPlayer>(players:
     check() { players.forEach((player) => checkPlayer(player)); },
     hasRequests() { return requested.size > 0; },
     updateTitle(title: string) {
-      metadata = { title, artist: "Nino Room" };
+      metadata = { title, artist: "" };
       if (representative) {
-        try { representative.updateLockScreenMetadata(metadata); } catch (error) { options.onError(error); }
+        try {
+          if (options.mediaSession) options.mediaSession.updateMetadata(metadata);
+          else representative.updateLockScreenMetadata(metadata);
+        } catch (error) { options.onError(error); }
       }
     },
     dispose() {
@@ -161,24 +166,5 @@ export function createLoopMediaControls<Player extends LoopMediaPlayer>(players:
       clearControls();
       void setMode("mixWithOthers").catch(options.onError);
     },
-  };
-}
-
-/** Expo supplies metadata and playback state; these actions stop the whole mix. */
-export function installLoopMediaSessionActions(session: Pick<MediaSession, "setActionHandler"> | undefined, stop: () => void) {
-  if (!session) return () => {};
-  const set = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
-    try { session.setActionHandler(action, handler); } catch { /* Some browsers do not support every action. */ }
-  };
-  let active = true;
-  const stopAll = () => { if (active) stop(); };
-  set("pause", stopAll);
-  set("stop", stopAll);
-  set("play", null);
-  set("seekto", null);
-  return () => {
-    active = false;
-    set("pause", null);
-    set("stop", null);
   };
 }

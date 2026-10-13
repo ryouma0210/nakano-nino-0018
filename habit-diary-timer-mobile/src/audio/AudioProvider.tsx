@@ -9,6 +9,7 @@ import { RoomAudioPlayback } from "./RoomAudioPlayback";
 import { useLoopSleepTimer } from "./useLoopSleepTimer";
 import { useLoopMediaControls } from "./useLoopMediaControls";
 import { translateText } from "@/i18n";
+import { loopMediaTitle } from "./loopAudioLabels";
 
 export type { RoomAudioScene } from "./roomAudio";
 
@@ -150,7 +151,7 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   const loopMediaControls = useLoopMediaControls(
     manualLoopPlayers,
     loopAudioNames.length > 0,
-    translateText("ループ音声", settings?.language ?? "ja"),
+    loopMediaTitle(loopAudioNames, (text) => translateText(text, settings?.language ?? "ja")),
     () => stopLoopAudioRef.current(),
     (player) => loopPlayback.stop(player),
     (player) => {
