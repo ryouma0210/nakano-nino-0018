@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { useEventListener } from "expo";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { lightTheme } from "@/constants/theme";
@@ -118,7 +119,7 @@ export function TrainingVideo({
   const storedMode = slides.length > 0;
   const currentStoredFile = slides[slideIndex % Math.max(1, slides.length)];
   const showingStoredVideo = storedMode && isStoredVideo(currentStoredFile);
-  const player = useVideoPlayer(defaultVideos[0], (instance) => {
+  const player = useAppVideoPlayer(defaultVideos[0], (instance) => {
     instance.loop = false;
     instance.muted = true;
     instance.volume = 0;

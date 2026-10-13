@@ -30,6 +30,7 @@ type AudioContextValue = {
   setLoopSleepMinutes: (minutes: number | null) => void;
   setSessionAudioActive: (active: boolean) => void;
   setRoomAudioScene: (scene: RoomAudioScene | null) => void;
+  shouldMixVideoAudio: boolean;
 };
 
 const AudioContext = createContext<AudioContextValue>({
@@ -46,6 +47,7 @@ const AudioContext = createContext<AudioContextValue>({
   setLoopSleepMinutes: () => {},
   setSessionAudioActive: () => {},
   setRoomAudioScene: () => {},
+  shouldMixVideoAudio: false,
 });
 
 const bgmSource = require("../../assets/audio/kyouhunomori.m4a");
@@ -90,6 +92,7 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     setLoopSleepMinutes: () => {},
     setSessionAudioActive: () => {},
     setRoomAudioScene: () => {},
+    shouldMixVideoAudio: false,
   }), [bgmMode, settings, updateAudioSettings]);
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
@@ -102,8 +105,11 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [loopAudioNames, setLoopAudioNames] = useState<LoopAudioName[]>([]);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
-  const roomAudioTracks = getRoomAudioTracks(roomAudioScene, settings, appIsActive);
+  const roomAudioTracks = getRoomAudioTracks(roomAudioScene, settings, appIsActive, loopAudioNames);
   const roomAudioActive = roomAudioTracks.length > 0;
+  // Keep videos from reclaiming audio focus while room audio still needs it,
+  // including when the last manual loop stops and its room copy takes over.
+  const shouldMixVideoAudio = loopAudioNames.length > 0 || sessionAudioActive || roomAudioActive;
   const bgm = useAudioPlayer(bgmSource);
   const outsideBrightBgm = useAudioPlayer(outsideBrightBgmSource);
   const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
@@ -296,8 +302,9 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       setLoopSleepMinutes,
       setSessionAudioActive,
       setRoomAudioScene,
+      shouldMixVideoAudio,
     }),
-    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, shouldMixVideoAudio, stopEffect, stopLoopAudio, updateAudioSettings],
   );
   return (
     <AudioContext.Provider value={value}>

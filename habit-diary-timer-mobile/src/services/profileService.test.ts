@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultProfile, profileService, type ProfileSettings } from "./profileService";
 
 const storage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }));
+const files = vi.hoisted(() => ({ list: vi.fn(), remove: vi.fn(), pickImageAndStore: vi.fn(), withExclusiveFiles: vi.fn() }));
+vi.mock("./fileStorageService", () => ({ fileStorageService: files }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: storage }));
 vi.mock("@/schemas/storage", () => import("../schemas/storage"));
 vi.mock("@/utils/storageValidation", () => import("../utils/storageValidation"));
 
 const profileKey = "nino-room:profile";
 const existingProfile: ProfileSettings = {
+  ...defaultProfile,
   sexualExperience: "yes", romanceExperience: "no", analExperience: "no",
   nippleExperience: "yes", exposureExperience: "no", specialFetish: "yes",
   erectionLengthCm: "15", masturbationPerWeek: "3", masturbationMinutes: "10",
@@ -31,6 +34,9 @@ beforeEach(() => {
   storage.getItem.mockImplementation(async () => storedProfile);
   storage.setItem.mockImplementation(async (_key: string, value: string) => { storedProfile = value; });
   storage.removeItem.mockImplementation(async () => { storedProfile = null; });
+  files.list.mockResolvedValue([]);
+  files.remove.mockResolvedValue(undefined);
+  files.withExclusiveFiles.mockImplementation((operation) => operation());
 });
 
 describe("saving profile weaknesses", () => {
@@ -173,5 +179,103 @@ describe("saving profile weaknesses", () => {
       ...existingProfile, weaknesses: ["selected"], ninoOutfit: "changed",
     });
     expect(storage.removeItem).toHaveBeenCalledExactlyOnceWith(profileKey);
+  });
+});
+
+describe("profile rankings and concurrent changes", () => {
+  it("removes deselected weaknesses from rankings without limiting the full selection", async () => {
+    const weaknesses = ["a", "b", "c", "d", "e", "f", "g"];
+    await profileService.patch({ weaknesses, topWeaknesses: ["b", "a", "c", "d", "e"] });
+    await profileService.saveWeaknesses(weaknesses.filter((item) => item !== "b"));
+    expect(await profileService.load()).toMatchObject({
+      weaknesses: ["a", "c", "d", "e", "f", "g"], topWeaknesses: ["a", "c", "d", "e"],
+    });
+  });
+
+  it("merges only edited fields against the latest data rather than restoring a stale form", async () => {
+    const baseline = await profileService.load();
+    const draft = { ...baseline, tissueCount: "8" };
+    await profileService.patch({ photoFileName: "new.png", favoriteIds: ["one", "two", "three", "four"], topFavoriteIds: ["four", "one"] });
+    await profileService.saveWeaknesses(["new weakness"]);
+    const saved = await profileService.save(draft, baseline);
+    expect(saved).toMatchObject({
+      tissueCount: "8", weaknesses: ["new weakness"], photoFileName: "new.png",
+      favoriteIds: ["one", "two", "three", "four"], topFavoriteIds: ["four", "one"],
+    });
+    expect(await profileService.patch({ ninoOutfit: "updated" })).toMatchObject({ ...saved, ninoOutfit: "updated" });
+  });
+
+  it("snapshots queued ranked arrays and prunes only removed favorite IDs", async () => {
+    const favoriteIds = ["a", "b", "c", "d"];
+    const topFavoriteIds = ["d", "c", "a"];
+    const saving = profileService.patch({ favoriteIds, topFavoriteIds });
+    favoriteIds.push("late"); topFavoriteIds.reverse();
+    expect(await saving).toMatchObject({ favoriteIds: ["a", "b", "c", "d"], topFavoriteIds: ["d", "c", "a"] });
+    expect(await profileService.patch({ favoriteIds: ["a", "b", "d"] })).toMatchObject({ topFavoriteIds: ["d", "a"] });
+  });
+});
+
+describe("profile photo ownership", () => {
+  const previous = { name: "old.png", purpose: "profile" as const, uri: "file:///old.png", size: 8 };
+  const next = { name: "new.png", purpose: "profile" as const, uri: "file:///new.png", size: 8 };
+
+  beforeEach(() => {
+    storedProfile = JSON.stringify({ ...existingProfile, photoFileName: previous.name });
+    files.list.mockResolvedValue([previous]);
+  });
+
+  it("keeps the old attachment on chooser cancel and on profile write failure", async () => {
+    files.pickImageAndStore.mockResolvedValueOnce(null);
+    expect(await profileService.pickPhoto()).toBeNull();
+    expect(await profileService.loadPhoto()).toEqual(previous);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    files.pickImageAndStore.mockImplementationOnce(async (_purpose, commit) => commit(next));
+    storage.setItem.mockRejectedValueOnce(new Error("storage full"));
+    await expect(profileService.pickPhoto()).rejects.toThrow("storage full");
+    expect(await profileService.loadPhoto()).toEqual(previous);
+    expect(files.remove).not.toHaveBeenCalled();
+  });
+
+  it("commits the new stable reference before removing the old image and re-resolves its URI", async () => {
+    files.list.mockResolvedValue([previous, next]);
+    files.pickImageAndStore.mockImplementationOnce(async (_purpose, commit) => commit(next));
+    files.remove.mockImplementationOnce(async () => {
+      expect(JSON.parse(storedProfile!).photoFileName).toBe(next.name);
+    });
+    expect(await profileService.pickPhoto()).toEqual(next);
+    expect(files.pickImageAndStore).toHaveBeenCalledWith("profile", expect.any(Function));
+    expect(files.remove).toHaveBeenCalledExactlyOnceWith(previous);
+    files.list.mockResolvedValue([{ ...next, uri: "blob:after-restart" }]);
+    expect(await profileService.loadPhoto()).toEqual({ ...next, uri: "blob:after-restart" });
+    expect(await profileService.load()).toMatchObject({ ...existingProfile, photoFileName: next.name });
+  });
+
+  it("does not delete the old image if clearing its reference fails", async () => {
+    storage.setItem.mockRejectedValueOnce(new Error("storage full"));
+    await expect(profileService.removePhoto()).rejects.toThrow("storage full");
+    expect(files.remove).not.toHaveBeenCalled();
+    expect(await profileService.loadPhoto()).toEqual(previous);
+    await profileService.removePhoto();
+    expect(files.remove).toHaveBeenCalledExactlyOnceWith(previous);
+    expect((await profileService.load()).photoFileName).toBeNull();
+  });
+
+  it("does not undo committed metadata if old-photo cleanup fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      files.list.mockResolvedValue([previous, next]);
+      files.remove.mockRejectedValueOnce(new Error("cleanup failed"));
+      files.pickImageAndStore.mockImplementationOnce(async (_purpose, commit) => commit(next));
+      expect(await profileService.pickPhoto()).toEqual(next);
+      expect((await profileService.load()).photoFileName).toBe(next.name);
+      expect(warn).toHaveBeenCalledOnce();
+    } finally { warn.mockRestore(); }
+  });
+
+  it("returns null for a missing save-only backup attachment without modifying its stable reference", async () => {
+    files.list.mockResolvedValue([]);
+    expect(await profileService.loadPhoto()).toBeNull();
+    expect((await profileService.load()).photoFileName).toBe(previous.name);
+    expect(storage.setItem).not.toHaveBeenCalled();
   });
 });

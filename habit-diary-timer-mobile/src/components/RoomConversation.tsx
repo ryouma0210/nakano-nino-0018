@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { Image, Platform, type ImageSourcePropType, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { AppText } from "@/components/AppText";
 import { lightTheme } from "@/constants/theme";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -180,7 +181,7 @@ function RoomConversationVideo({
   source: number;
   contentFit: "contain" | "cover";
 }) {
-  const player = useVideoPlayer(source, (instance) => {
+  const player = useAppVideoPlayer(source, (instance) => {
     instance.loop = true;
     instance.muted = true;
     instance.volume = 0;

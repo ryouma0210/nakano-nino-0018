@@ -7,9 +7,34 @@ const settings = {
   backgroundMusicEnabled: true,
   musicVolume: 0.35,
 };
-const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation", "endurance", "endurance-recovery"];
+const scenes: RoomAudioScene[] = ["preparation", "sugoroku", "sugoroku-zone", "sugoroku-penalty", "othello-temptation", "endurance", "endurance-recovery", "punishment"];
 
 describe("room audio", () => {
+  it("owns the three punishment voices separately from the manual mix", () => {
+    expect(getRoomAudioTracks("punishment", settings, true)).toEqual([
+      { name: "nippleScratch", volume: 0.7 },
+      { name: "sineW", volume: 0.7 },
+      { name: "ikunaSine", volume: 0.7 },
+    ]);
+  });
+
+  it("leaves a manually playing voice alone and restores only its room copy when manual playback stops", () => {
+    expect(getRoomAudioTracks("punishment", settings, true, ["nippleScratch", "sineW", "ikunaSine", "dase"])).toEqual([]);
+    expect(getRoomAudioTracks("punishment", settings, true, ["nippleScratch", "ikunaSine", "dase"])).toEqual([
+      { name: "sineW", volume: 0.7 },
+    ]);
+    expect(getRoomAudioTracks(null, settings, true, ["nippleScratch", "ikunaSine", "dase"])).toEqual([]);
+  });
+
+  it("avoids duplicate manual voices in other rooms without removing their own music", () => {
+    expect(getRoomAudioTracks("preparation", settings, true, ["bokkisiro"])).toEqual([
+      { name: "preparation", volume: 0.7 },
+    ]);
+    expect(getRoomAudioTracks("othello-temptation", settings, true, ["earLick", "sikosiko"])).toEqual([
+      { name: "penaltyBgm", volume: 0.35 },
+    ]);
+  });
+
   it("plays the two endurance voices together", () => {
     expect(getRoomAudioTracks("endurance", settings, true)).toEqual([
       { name: "earLick", volume: 0.7 },
@@ -58,7 +83,7 @@ describe("room audio", () => {
   it("disables voices independently while retaining enabled penalty music", () => {
     const mutedVoices = { ...settings, soundEnabled: false };
     expect(scenes.map((scene) => getRoomAudioTracks(scene, mutedVoices, true))).toEqual([
-      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }], [], [],
+      [], [], [], [{ name: "penaltyBgm", volume: 0.35 }], [{ name: "penaltyBgm", volume: 0.35 }], [], [], [],
     ]);
   });
 

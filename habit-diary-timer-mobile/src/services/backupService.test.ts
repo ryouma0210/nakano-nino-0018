@@ -126,6 +126,50 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
+  it.each(["android", "web"])("round-trips profile rankings and its private image in complete backups on %s", async (platform) => {
+    mocks.platform.OS = platform;
+    const saved = JSON.stringify({ weaknesses: ["a", "b", "c", "d", "e", "f"], topWeaknesses: ["f", "a"],
+      favoriteIds: ["one", "two", "three", "four"], topFavoriteIds: ["four", "one"], photoFileName: "profile.png" });
+    mocks.storage.set("nino-room:profile", saved);
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    const photo = { name: "profile.png", purpose: "profile", size: png.length, uri: "file:///profile.png" };
+    mocks.list.mockResolvedValue([photo]);
+    mocks.sources.set(photo.uri, png);
+    mocks.getBlob.mockResolvedValue(new Blob([png], { type: "image/png" }));
+    await backupService.export("complete");
+    select(join(mocks.chunks));
+    const picked = (await backupService.pick())!;
+    expect(picked.payload.asyncStorage["nino-room:profile"]).toBe(saved);
+    expect(picked.files).toEqual([expect.objectContaining({ name: "profile.png", purpose: "profile", mimeType: "image/png", size: png.length })]);
+    mocks.storage.delete("nino-room:profile");
+    await backupService.restore(picked);
+    expect(mocks.storage.get("nino-room:profile")).toBe(saved);
+    expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
+  });
+
+  it("keeps older profiles and save-only photo references without replacing local files", async () => {
+    for (const profile of [{ weaknesses: ["legacy"], ninoOutfit: "custom" }, { photoFileName: "local.png", favoriteIds: ["one"] }]) {
+      const saved = JSON.stringify(profile);
+      mocks.storage.set("nino-room:profile", saved);
+      const payload = await savePayload();
+      mocks.storage.delete("nino-room:profile");
+      await backupService.restore(payload);
+      expect(mocks.storage.get("nino-room:profile")).toBe(saved);
+    }
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid profile ranks and unsafe photo references before restoring any data", async () => {
+    for (const profile of [{ topWeaknesses: "invalid" }, { photoFileName: "../photo.png" }, { topFavoriteIds: [42] }]) {
+      const payload = await savePayload();
+      payload.asyncStorage["nino-room:profile"] = JSON.stringify(profile);
+      await expect(backupService.restore(payload)).rejects.toThrow("バックアップ");
+    }
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
   it("exports shared media once and round-trips all usages with its physical identity", async () => {
     const shared = { name: "shared.mp4", purpose: "training", usages: ["training", "punishment", "endurance"], size: 3, uri: "file:///shared.mp4" };
     mocks.list.mockResolvedValue([shared]);

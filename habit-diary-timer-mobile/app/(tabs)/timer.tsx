@@ -97,8 +97,7 @@ export default function TimerScreen() {
   const nextSpeedChangeAt = useRef(0);
   const {
     playEffect,
-    playLoopAudio,
-    stopLoopAudio,
+    setRoomAudioScene,
     setSessionAudioActive,
     settings,
   } = useAppAudio();
@@ -110,12 +109,16 @@ export default function TimerScreen() {
   const unsaved = saveState.pending !== null;
   const exitGuard = usePendingResultGuard(unsaved, resultSave.hasPending, resultSave.discard);
 
-  useEffect(
-    () => () => {
-      stopLoopAudio();
-      setSessionAudioActive(false);
-    },
-    [setSessionAudioActive, stopLoopAudio],
+  useFocusEffect(
+    useCallback(() => {
+      if (!running) return;
+      setSessionAudioActive(true);
+      setRoomAudioScene("punishment");
+      return () => {
+        setRoomAudioScene(null);
+        setSessionAudioActive(false);
+      };
+    }, [running, setRoomAudioScene, setSessionAudioActive]),
   );
   useEffect(() => {
     contractService.load().then((contract) => {
@@ -211,12 +214,10 @@ export default function TimerScreen() {
       elapsedSeconds: totalSeconds,
       status: "completed",
     };
-    stopLoopAudio();
-    setSessionAudioActive(false);
     playEffect("complete");
     setRunning(false);
     sessionRecorded.current = resultSave.submit(result);
-  }, [playEffect, remaining, resultSave, running, setSessionAudioActive, stopLoopAudio, totalSeconds]);
+  }, [playEffect, remaining, resultSave, running, totalSeconds]);
 
   function start() {
     if (resultSave.hasPending()) return;
@@ -248,10 +249,6 @@ export default function TimerScreen() {
     );
     setMarkerOffsets(createRandomMarkerOffsets(markerCount));
     sessionRecorded.current = false;
-    setSessionAudioActive(true);
-    playLoopAudio("nippleScratch");
-    playLoopAudio("sineW");
-    playLoopAudio("ikunaSine");
     setRunning(true);
   }
 
@@ -263,8 +260,6 @@ export default function TimerScreen() {
       elapsedSeconds,
       status: "stopped",
     };
-    stopLoopAudio();
-    setSessionAudioActive(false);
     setRunning(false);
     sessionRecorded.current = resultSave.submit(result);
     if (!sessionRecorded.current) return;

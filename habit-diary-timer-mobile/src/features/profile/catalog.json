@@ -1,0 +1,887 @@
+[
+  {
+    "id": "anime-001",
+    "category": "anime",
+    "name": "中野一花",
+    "work": "五等分の花嫁"
+  },
+  {
+    "id": "anime-002",
+    "category": "anime",
+    "name": "中野二乃",
+    "work": "五等分の花嫁"
+  },
+  {
+    "id": "anime-003",
+    "category": "anime",
+    "name": "中野三玖",
+    "work": "五等分の花嫁"
+  },
+  {
+    "id": "anime-004",
+    "category": "anime",
+    "name": "中野四葉",
+    "work": "五等分の花嫁"
+  },
+  {
+    "id": "anime-005",
+    "category": "anime",
+    "name": "中野五月",
+    "work": "五等分の花嫁"
+  },
+  {
+    "id": "anime-006",
+    "category": "anime",
+    "name": "ナミ",
+    "work": "ONE PIECE"
+  },
+  {
+    "id": "anime-007",
+    "category": "anime",
+    "name": "ニコ・ロビン",
+    "work": "ONE PIECE"
+  },
+  {
+    "id": "anime-008",
+    "category": "anime",
+    "name": "ボア・ハンコック",
+    "work": "ONE PIECE"
+  },
+  {
+    "id": "anime-009",
+    "category": "anime",
+    "name": "ネフェルタリ・ビビ",
+    "work": "ONE PIECE"
+  },
+  {
+    "id": "anime-010",
+    "category": "anime",
+    "name": "ウタ",
+    "work": "ONE PIECE"
+  },
+  {
+    "id": "anime-011",
+    "category": "anime",
+    "name": "ヨル・フォージャー",
+    "work": "SPY×FAMILY"
+  },
+  {
+    "id": "anime-012",
+    "category": "anime",
+    "name": "綱手",
+    "work": "NARUTO"
+  },
+  {
+    "id": "anime-013",
+    "category": "anime",
+    "name": "春野サクラ",
+    "work": "NARUTO"
+  },
+  {
+    "id": "anime-014",
+    "category": "anime",
+    "name": "日向ヒナタ",
+    "work": "NARUTO"
+  },
+  {
+    "id": "anime-015",
+    "category": "anime",
+    "name": "山中いの",
+    "work": "NARUTO"
+  },
+  {
+    "id": "anime-016",
+    "category": "anime",
+    "name": "ブルマ",
+    "work": "ドラゴンボール"
+  },
+  {
+    "id": "anime-017",
+    "category": "anime",
+    "name": "人造人間18号",
+    "work": "ドラゴンボール"
+  },
+  {
+    "id": "anime-018",
+    "category": "anime",
+    "name": "ビーデル",
+    "work": "ドラゴンボール"
+  },
+  {
+    "id": "anime-019",
+    "category": "anime",
+    "name": "朽木ルキア",
+    "work": "BLEACH"
+  },
+  {
+    "id": "anime-020",
+    "category": "anime",
+    "name": "井上織姫",
+    "work": "BLEACH"
+  },
+  {
+    "id": "anime-021",
+    "category": "anime",
+    "name": "松本乱菊",
+    "work": "BLEACH"
+  },
+  {
+    "id": "anime-022",
+    "category": "anime",
+    "name": "四楓院夜一",
+    "work": "BLEACH"
+  },
+  {
+    "id": "anime-023",
+    "category": "anime",
+    "name": "胡蝶しのぶ",
+    "work": "鬼滅の刃"
+  },
+  {
+    "id": "anime-024",
+    "category": "anime",
+    "name": "甘露寺蜜璃",
+    "work": "鬼滅の刃"
+  },
+  {
+    "id": "anime-025",
+    "category": "anime",
+    "name": "竈門禰豆子",
+    "work": "鬼滅の刃"
+  },
+  {
+    "id": "anime-026",
+    "category": "anime",
+    "name": "栗花落カナヲ",
+    "work": "鬼滅の刃"
+  },
+  {
+    "id": "anime-027",
+    "category": "anime",
+    "name": "釘崎野薔薇",
+    "work": "呪術廻戦"
+  },
+  {
+    "id": "anime-028",
+    "category": "anime",
+    "name": "禪院真希",
+    "work": "呪術廻戦"
+  },
+  {
+    "id": "anime-029",
+    "category": "anime",
+    "name": "ミカサ・アッカーマン",
+    "work": "進撃の巨人"
+  },
+  {
+    "id": "anime-030",
+    "category": "anime",
+    "name": "アニ・レオンハート",
+    "work": "進撃の巨人"
+  },
+  {
+    "id": "anime-031",
+    "category": "anime",
+    "name": "ヒストリア・レイス",
+    "work": "進撃の巨人"
+  },
+  {
+    "id": "anime-032",
+    "category": "anime",
+    "name": "マキマ",
+    "work": "チェンソーマン"
+  },
+  {
+    "id": "anime-033",
+    "category": "anime",
+    "name": "パワー",
+    "work": "チェンソーマン"
+  },
+  {
+    "id": "anime-034",
+    "category": "anime",
+    "name": "レゼ",
+    "work": "チェンソーマン"
+  },
+  {
+    "id": "anime-035",
+    "category": "anime",
+    "name": "毛利蘭",
+    "work": "名探偵コナン"
+  },
+  {
+    "id": "anime-036",
+    "category": "anime",
+    "name": "灰原哀",
+    "work": "名探偵コナン"
+  },
+  {
+    "id": "anime-037",
+    "category": "anime",
+    "name": "ベルモット",
+    "work": "名探偵コナン"
+  },
+  {
+    "id": "anime-038",
+    "category": "anime",
+    "name": "峰不二子",
+    "work": "ルパン三世"
+  },
+  {
+    "id": "anime-039",
+    "category": "anime",
+    "name": "フェイ・ヴァレンタイン",
+    "work": "カウボーイビバップ"
+  },
+  {
+    "id": "anime-040",
+    "category": "anime",
+    "name": "ラム",
+    "work": "うる星やつら"
+  },
+  {
+    "id": "anime-041",
+    "category": "anime",
+    "name": "天道あかね",
+    "work": "らんま½"
+  },
+  {
+    "id": "anime-042",
+    "category": "anime",
+    "name": "シャンプー",
+    "work": "らんま½"
+  },
+  {
+    "id": "anime-043",
+    "category": "anime",
+    "name": "月野うさぎ",
+    "work": "美少女戦士セーラームーン"
+  },
+  {
+    "id": "anime-044",
+    "category": "anime",
+    "name": "水野亜美",
+    "work": "美少女戦士セーラームーン"
+  },
+  {
+    "id": "anime-045",
+    "category": "anime",
+    "name": "火野レイ",
+    "work": "美少女戦士セーラームーン"
+  },
+  {
+    "id": "anime-046",
+    "category": "anime",
+    "name": "綾波レイ",
+    "work": "新世紀エヴァンゲリオン"
+  },
+  {
+    "id": "anime-047",
+    "category": "anime",
+    "name": "惣流・アスカ・ラングレー",
+    "work": "新世紀エヴァンゲリオン"
+  },
+  {
+    "id": "anime-048",
+    "category": "anime",
+    "name": "葛城ミサト",
+    "work": "新世紀エヴァンゲリオン"
+  },
+  {
+    "id": "anime-049",
+    "category": "anime",
+    "name": "レム",
+    "work": "Re:ゼロから始める異世界生活"
+  },
+  {
+    "id": "anime-050",
+    "category": "anime",
+    "name": "ラム",
+    "work": "Re:ゼロから始める異世界生活"
+  },
+  {
+    "id": "anime-051",
+    "category": "anime",
+    "name": "エミリア",
+    "work": "Re:ゼロから始める異世界生活"
+  },
+  {
+    "id": "anime-052",
+    "category": "anime",
+    "name": "アスナ",
+    "work": "ソードアート・オンライン"
+  },
+  {
+    "id": "anime-053",
+    "category": "anime",
+    "name": "シノン",
+    "work": "ソードアート・オンライン"
+  },
+  {
+    "id": "anime-054",
+    "category": "anime",
+    "name": "アクア",
+    "work": "この素晴らしい世界に祝福を！"
+  },
+  {
+    "id": "anime-055",
+    "category": "anime",
+    "name": "めぐみん",
+    "work": "この素晴らしい世界に祝福を！"
+  },
+  {
+    "id": "anime-056",
+    "category": "anime",
+    "name": "ダクネス",
+    "work": "この素晴らしい世界に祝福を！"
+  },
+  {
+    "id": "anime-057",
+    "category": "anime",
+    "name": "涼宮ハルヒ",
+    "work": "涼宮ハルヒの憂鬱"
+  },
+  {
+    "id": "anime-058",
+    "category": "anime",
+    "name": "長門有希",
+    "work": "涼宮ハルヒの憂鬱"
+  },
+  {
+    "id": "anime-059",
+    "category": "anime",
+    "name": "御坂美琴",
+    "work": "とある科学の超電磁砲"
+  },
+  {
+    "id": "anime-060",
+    "category": "anime",
+    "name": "食蜂操祈",
+    "work": "とある科学の超電磁砲"
+  },
+  {
+    "id": "anime-061",
+    "category": "anime",
+    "name": "セイバー",
+    "work": "Fate/stay night"
+  },
+  {
+    "id": "anime-062",
+    "category": "anime",
+    "name": "遠坂凛",
+    "work": "Fate/stay night"
+  },
+  {
+    "id": "anime-063",
+    "category": "anime",
+    "name": "ヴァイオレット・エヴァーガーデン",
+    "work": "ヴァイオレット・エヴァーガーデン"
+  },
+  {
+    "id": "anime-064",
+    "category": "anime",
+    "name": "フリーレン",
+    "work": "葬送のフリーレン"
+  },
+  {
+    "id": "anime-065",
+    "category": "anime",
+    "name": "フェルン",
+    "work": "葬送のフリーレン"
+  },
+  {
+    "id": "anime-066",
+    "category": "anime",
+    "name": "猫猫",
+    "work": "薬屋のひとりごと"
+  },
+  {
+    "id": "anime-067",
+    "category": "anime",
+    "name": "玉葉妃",
+    "work": "薬屋のひとりごと"
+  },
+  {
+    "id": "anime-068",
+    "category": "anime",
+    "name": "星野アイ",
+    "work": "【推しの子】"
+  },
+  {
+    "id": "anime-069",
+    "category": "anime",
+    "name": "有馬かな",
+    "work": "【推しの子】"
+  },
+  {
+    "id": "anime-070",
+    "category": "anime",
+    "name": "黒川あかね",
+    "work": "【推しの子】"
+  },
+  {
+    "id": "actress-001",
+    "category": "actress",
+    "name": "橋本環奈"
+  },
+  {
+    "id": "actress-002",
+    "category": "actress",
+    "name": "新垣結衣"
+  },
+  {
+    "id": "actress-003",
+    "category": "actress",
+    "name": "綾瀬はるか"
+  },
+  {
+    "id": "actress-004",
+    "category": "actress",
+    "name": "石原さとみ"
+  },
+  {
+    "id": "actress-005",
+    "category": "actress",
+    "name": "長澤まさみ"
+  },
+  {
+    "id": "actress-006",
+    "category": "actress",
+    "name": "北川景子"
+  },
+  {
+    "id": "actress-007",
+    "category": "actress",
+    "name": "有村架純"
+  },
+  {
+    "id": "actress-008",
+    "category": "actress",
+    "name": "浜辺美波"
+  },
+  {
+    "id": "actress-009",
+    "category": "actress",
+    "name": "広瀬すず"
+  },
+  {
+    "id": "actress-010",
+    "category": "actress",
+    "name": "広瀬アリス"
+  },
+  {
+    "id": "actress-011",
+    "category": "actress",
+    "name": "今田美桜"
+  },
+  {
+    "id": "actress-012",
+    "category": "actress",
+    "name": "川口春奈"
+  },
+  {
+    "id": "actress-013",
+    "category": "actress",
+    "name": "吉岡里帆"
+  },
+  {
+    "id": "actress-014",
+    "category": "actress",
+    "name": "吉高由里子"
+  },
+  {
+    "id": "actress-015",
+    "category": "actress",
+    "name": "戸田恵梨香"
+  },
+  {
+    "id": "actress-016",
+    "category": "actress",
+    "name": "永野芽郁"
+  },
+  {
+    "id": "actress-017",
+    "category": "actress",
+    "name": "杉咲花"
+  },
+  {
+    "id": "actress-018",
+    "category": "actress",
+    "name": "上白石萌音"
+  },
+  {
+    "id": "actress-019",
+    "category": "actress",
+    "name": "上白石萌歌"
+  },
+  {
+    "id": "actress-020",
+    "category": "actress",
+    "name": "福原遥"
+  },
+  {
+    "id": "actress-021",
+    "category": "actress",
+    "name": "小芝風花"
+  },
+  {
+    "id": "actress-022",
+    "category": "actress",
+    "name": "清原果耶"
+  },
+  {
+    "id": "actress-023",
+    "category": "actress",
+    "name": "芳根京子"
+  },
+  {
+    "id": "actress-024",
+    "category": "actress",
+    "name": "桜田ひより"
+  },
+  {
+    "id": "actress-025",
+    "category": "actress",
+    "name": "出口夏希"
+  },
+  {
+    "id": "actress-026",
+    "category": "actress",
+    "name": "森七菜"
+  },
+  {
+    "id": "actress-027",
+    "category": "actress",
+    "name": "白石麻衣"
+  },
+  {
+    "id": "actress-028",
+    "category": "actress",
+    "name": "西野七瀬"
+  },
+  {
+    "id": "actress-029",
+    "category": "actress",
+    "name": "松岡茉優"
+  },
+  {
+    "id": "actress-030",
+    "category": "actress",
+    "name": "二階堂ふみ"
+  },
+  {
+    "id": "actress-031",
+    "category": "actress",
+    "name": "小松菜奈"
+  },
+  {
+    "id": "actress-032",
+    "category": "actress",
+    "name": "池田エライザ"
+  },
+  {
+    "id": "actress-033",
+    "category": "actress",
+    "name": "中条あやみ"
+  },
+  {
+    "id": "actress-034",
+    "category": "actress",
+    "name": "本田翼"
+  },
+  {
+    "id": "actress-035",
+    "category": "actress",
+    "name": "菜々緒"
+  },
+  {
+    "id": "actress-036",
+    "category": "actress",
+    "name": "仲里依紗"
+  },
+  {
+    "id": "actress-037",
+    "category": "actress",
+    "name": "桐谷美玲"
+  },
+  {
+    "id": "actress-038",
+    "category": "actress",
+    "name": "深田恭子"
+  },
+  {
+    "id": "actress-039",
+    "category": "actress",
+    "name": "柴咲コウ"
+  },
+  {
+    "id": "actress-040",
+    "category": "actress",
+    "name": "仲間由紀恵"
+  },
+  {
+    "id": "actress-041",
+    "category": "actress",
+    "name": "米倉涼子"
+  },
+  {
+    "id": "actress-042",
+    "category": "actress",
+    "name": "篠原涼子"
+  },
+  {
+    "id": "actress-043",
+    "category": "actress",
+    "name": "松嶋菜々子"
+  },
+  {
+    "id": "actress-044",
+    "category": "actress",
+    "name": "天海祐希"
+  },
+  {
+    "id": "actress-045",
+    "category": "actress",
+    "name": "石田ゆり子"
+  },
+  {
+    "id": "performer-001",
+    "category": "performer",
+    "name": "三上悠亜"
+  },
+  {
+    "id": "performer-002",
+    "category": "performer",
+    "name": "明日花キララ"
+  },
+  {
+    "id": "performer-003",
+    "category": "performer",
+    "name": "深田えいみ"
+  },
+  {
+    "id": "performer-004",
+    "category": "performer",
+    "name": "大槻ひびき"
+  },
+  {
+    "id": "performer-005",
+    "category": "performer",
+    "name": "桃乃木かな"
+  },
+  {
+    "id": "performer-006",
+    "category": "performer",
+    "name": "小島みなみ"
+  },
+  {
+    "id": "performer-007",
+    "category": "performer",
+    "name": "波多野結衣"
+  },
+  {
+    "id": "performer-008",
+    "category": "performer",
+    "name": "吉沢明歩"
+  },
+  {
+    "id": "performer-009",
+    "category": "performer",
+    "name": "葵つかさ"
+  },
+  {
+    "id": "performer-010",
+    "category": "performer",
+    "name": "天使もえ"
+  },
+  {
+    "id": "performer-011",
+    "category": "performer",
+    "name": "石川澪"
+  },
+  {
+    "id": "performer-012",
+    "category": "performer",
+    "name": "八木奈々"
+  },
+  {
+    "id": "performer-013",
+    "category": "performer",
+    "name": "未歩なな"
+  },
+  {
+    "id": "performer-014",
+    "category": "performer",
+    "name": "七沢みあ"
+  },
+  {
+    "id": "performer-015",
+    "category": "performer",
+    "name": "伊藤舞雪"
+  },
+  {
+    "id": "performer-016",
+    "category": "performer",
+    "name": "楪カレン"
+  },
+  {
+    "id": "performer-017",
+    "category": "performer",
+    "name": "桜空もも"
+  },
+  {
+    "id": "performer-018",
+    "category": "performer",
+    "name": "架乃ゆら"
+  },
+  {
+    "id": "performer-019",
+    "category": "performer",
+    "name": "本郷愛"
+  },
+  {
+    "id": "performer-020",
+    "category": "performer",
+    "name": "うんぱい"
+  },
+  {
+    "id": "performer-021",
+    "category": "performer",
+    "name": "古川いおり"
+  },
+  {
+    "id": "performer-022",
+    "category": "performer",
+    "name": "市川まさみ"
+  },
+  {
+    "id": "performer-023",
+    "category": "performer",
+    "name": "紗倉まな"
+  },
+  {
+    "id": "performer-024",
+    "category": "performer",
+    "name": "小倉由菜"
+  },
+  {
+    "id": "performer-025",
+    "category": "performer",
+    "name": "唯井まひろ"
+  },
+  {
+    "id": "performer-026",
+    "category": "performer",
+    "name": "戸田真琴"
+  },
+  {
+    "id": "performer-027",
+    "category": "performer",
+    "name": "白石茉莉奈"
+  },
+  {
+    "id": "performer-028",
+    "category": "performer",
+    "name": "佐山愛"
+  },
+  {
+    "id": "performer-029",
+    "category": "performer",
+    "name": "篠田ゆう"
+  },
+  {
+    "id": "performer-030",
+    "category": "performer",
+    "name": "Julia"
+  },
+  {
+    "id": "performer-031",
+    "category": "performer",
+    "name": "蓮実クレア"
+  },
+  {
+    "id": "performer-032",
+    "category": "performer",
+    "name": "浜崎真緒"
+  },
+  {
+    "id": "performer-033",
+    "category": "performer",
+    "name": "希島あいり"
+  },
+  {
+    "id": "performer-034",
+    "category": "performer",
+    "name": "友田彩也香"
+  },
+  {
+    "id": "performer-035",
+    "category": "performer",
+    "name": "つぼみ"
+  },
+  {
+    "id": "performer-036",
+    "category": "performer",
+    "name": "あやみ旬果"
+  },
+  {
+    "id": "performer-037",
+    "category": "performer",
+    "name": "上原亜衣"
+  },
+  {
+    "id": "performer-038",
+    "category": "performer",
+    "name": "高橋しょう子"
+  },
+  {
+    "id": "performer-039",
+    "category": "performer",
+    "name": "橋本ありな"
+  },
+  {
+    "id": "performer-040",
+    "category": "performer",
+    "name": "山岸逢花"
+  },
+  {
+    "id": "performer-041",
+    "category": "performer",
+    "name": "相沢みなみ"
+  },
+  {
+    "id": "performer-042",
+    "category": "performer",
+    "name": "松本いちか"
+  },
+  {
+    "id": "performer-043",
+    "category": "performer",
+    "name": "蒼井そら"
+  },
+  {
+    "id": "performer-044",
+    "category": "performer",
+    "name": "麻美ゆま"
+  },
+  {
+    "id": "performer-045",
+    "category": "performer",
+    "name": "Rio"
+  },
+  {
+    "id": "performer-046",
+    "category": "performer",
+    "name": "希崎ジェシカ"
+  },
+  {
+    "id": "performer-047",
+    "category": "performer",
+    "name": "小澤マリア"
+  },
+  {
+    "id": "performer-048",
+    "category": "performer",
+    "name": "成瀬心美"
+  }
+]

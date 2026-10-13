@@ -448,6 +448,105 @@ describe("single daily image imports", () => {
   });
 });
 
+describe("private profile photo storage", () => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+
+  it("stores one web photo across restart and excludes it from every material purpose", async () => {
+    const web = createWebPicker();
+    const pending = fileStorageService.pickImageAndStore("profile", async (file) => file);
+    expect(web.input.click).toHaveBeenCalledOnce();
+    expect(web.input.accept).toBe("image/png,image/jpeg,image/webp,image/gif");
+    expect(web.input.multiple).toBe(false);
+    web.input.files = [new File([png], "photo.png", { type: "image/png" })];
+    await web.emit("change");
+    const stored = (await pending)!;
+    vi.resetModules();
+    ({ fileStorageService } = await import("./fileStorageService"));
+    expect((await fileStorageService.list("profile")).map((file) => file.name)).toEqual([stored.name]);
+    for (const purpose of ["training", "punishment", "endurance", "chastity"] as const) {
+      expect(await fileStorageService.list(purpose)).toEqual([]);
+    }
+    expect(await fileStorageService.list()).toHaveLength(1);
+    expect(new Uint8Array(await (await fileStorageService.getBlob(stored))!.arrayBuffer())).toEqual(png);
+    await expect(fileStorageService.setUsages(stored, ["training"])).rejects.toThrow("用途");
+  });
+
+  it.each([
+    { name: "image.svg", type: "image/svg+xml", bytes: "<svg/>" },
+    { name: "movie.mp4", type: "image/png", bytes: png },
+    { name: "photo.jpg", type: "image/png", bytes: png },
+    { name: "photo.png", type: "image/png", bytes: "<svg/>" },
+    { name: "photo.heic", type: "image/heic", bytes: "heic" },
+  ])("rejects unsupported or mismatched profile images before committing: $name/$type", async ({ name, type, bytes }) => {
+    const web = createWebPicker();
+    const commit = vi.fn();
+    const pending = fileStorageService.pickImageAndStore("profile", commit);
+    const rejected = expect(pending).rejects.toThrow("PNG・JPEG・WebP・GIF");
+    web.input.files = [new File([bytes], name, { type })];
+    await web.emit("change");
+    await rejected;
+    expect(commit).not.toHaveBeenCalled();
+    expect(await fileStorageService.list()).toEqual([]);
+  });
+
+  it("retains an existing photo when a new profile reference cannot be saved", async () => {
+    const web = createWebPicker();
+    await fileStorageService.restoreFromBackup([{ name: "old.png", purpose: "profile", mimeType: "image/png", size: png.length, data: Buffer.from(png).toString("base64") }]);
+    const pending = fileStorageService.pickImageAndStore("profile", async () => { throw new Error("profile full"); });
+    const rejected = expect(pending).rejects.toThrow("profile full");
+    web.input.files = [new File([png], "new.png", { type: "image/png" })];
+    await web.emit("change");
+    await rejected;
+    expect((await fileStorageService.list("profile")).map((file) => file.name)).toEqual(["old.png"]);
+  });
+
+  it("restores a native private photo while keeping its stable filename", async () => {
+    installNativeRestoreFileSystem();
+    const gif = "GIF89a------";
+    await fileStorageService.restoreFromBackup([{ name: "restored.gif", purpose: "profile", mimeType: "image/gif", size: gif.length, data: btoa(gif) }]);
+    const [stored] = await fileStorageService.list("profile");
+    expect(stored).toMatchObject({ name: "restored.gif", purpose: "profile", size: gif.length });
+    expect(stored.uri).toBe(`${nativeDirectory}profile/restored.gif`);
+    expect(await fileStorageService.list("training")).toEqual([]);
+  });
+
+  it("validates native photo headers before copying and preserves the existing file on commit failure", async () => {
+    installNativeRestoreFileSystem();
+    nativeFiles.set("file:///cache/photo.gif", "GIF89a------");
+    nativeFiles.set(`${nativeDirectory}profile/old.gif`, "GIF89a------");
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: "photo.gif", uri: "file:///cache/photo.gif", mimeType: "image/gif" }] });
+    await expect(fileStorageService.pickImageAndStore("profile", async () => { throw new Error("profile full"); })).rejects.toThrow("profile full");
+    expect((await fileStorageService.list("profile")).map((file) => file.name)).toEqual(["old.gif"]);
+    expect(mocks.pick).toHaveBeenCalledWith({ type: ["image/png", "image/jpeg", "image/webp", "image/gif"], copyToCacheDirectory: true, multiple: false });
+    expect(mocks.read).toHaveBeenCalledWith("file:///cache/photo.gif", { encoding: "base64", position: 0, length: 12 });
+  });
+
+  it("attaches and restores native profile photos without a global atob", async () => {
+    installNativeRestoreFileSystem();
+    vi.stubGlobal("atob", undefined);
+    // Native writeAsStringAsync decodes Base64 inside the platform, not via a JS global.
+    mocks.write.mockImplementation(async (uri: string, data: string, options?: { encoding?: string }) => {
+      nativeFiles.set(uri, options?.encoding === "base64" ? Buffer.from(data, "base64").toString("latin1") : data);
+    });
+    const gif = "GIF89a------";
+    nativeFiles.set("file:///cache/photo.gif", gif);
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: "photo.gif", uri: "file:///cache/photo.gif", mimeType: "image/gif" }] });
+    const attached = await fileStorageService.pickImageAndStore("profile", async (file) => file);
+    expect(attached).toMatchObject({ purpose: "profile", size: gif.length });
+    await fileStorageService.restoreFromBackup([{ name: "restored.gif", purpose: "profile", mimeType: "image/gif", size: gif.length, data: Buffer.from(gif).toString("base64") }]);
+    expect((await fileStorageService.list("profile")).map((file) => file.name)).toEqual(["restored.gif"]);
+  });
+
+  it("rejects private-photo usages and disguised bytes before a restore changes live files", async () => {
+    installNativeRestoreFileSystem();
+    const original = [...nativeFiles.entries()];
+    const image = { name: "bad.png", purpose: "profile" as const, mimeType: "image/png", size: 3, data: "b25l" };
+    await expect(fileStorageService.prepareRestore([image])).rejects.toThrow("不正");
+    await expect(fileStorageService.prepareRestore([{ ...image, usages: ["training"] }])).rejects.toThrow("不正");
+    expect([...nativeFiles.entries()]).toEqual(original);
+  });
+});
+
 describe("web file imports", () => {
   it("allows internal restore and listing under maintenance while rejecting competing work and releasing on failure", async () => {
     const web = createWebPicker();
@@ -593,10 +692,10 @@ function installNativeRestoreFileSystem() {
     nativeFiles.set(to, contents);
   });
   mocks.write.mockImplementation(async (uri: string, data: string, options?: { encoding?: string }) => { nativeFiles.set(uri, options?.encoding === "base64" ? atob(data) : data); });
-  mocks.read.mockImplementation(async (uri: string) => {
+  mocks.read.mockImplementation(async (uri: string, options?: { encoding?: string; position?: number; length?: number }) => {
     const data = nativeFiles.get(uri);
     if (data === undefined) throw new Error("Missing file");
-    return data;
+    return options?.encoding === "base64" ? btoa(data.slice(options.position ?? 0, options.length === undefined ? undefined : (options.position ?? 0) + options.length)) : data;
   });
   mocks.remove.mockImplementation(async (uri) => {
     for (const path of directories) if (path === uri || path.startsWith(uri)) directories.delete(path);
