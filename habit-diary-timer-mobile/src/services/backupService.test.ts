@@ -423,9 +423,9 @@ describe("bounded backup export and import", () => {
     expect(mocks.execute.mock.calls.some(([sql]) => sql.includes("INSERT OR IGNORE INTO point_transactions"))).toBe(false);
   });
 
-  it("round-trips a level 120 player without raising a level 100 enemy", async () => {
+  it("round-trips a level 150 player without raising a level 100 enemy", async () => {
     const rows = [
-      { setting_key: "outside_game_level", setting_value: "120", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_level", setting_value: "150", updated_at: "2026-10-06 12:00:00" },
       { setting_key: "outside_game_level_date", setting_value: "2026-10-06", updated_at: "2026-10-06 12:00:00" },
       { setting_key: "outside_game_succubus_absorb_today", setting_value: "100", updated_at: "2026-10-06 12:00:00" },
     ];

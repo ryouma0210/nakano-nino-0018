@@ -6,7 +6,7 @@ export type MapSlime = MapPosition & { id: number; active: boolean };
 
 export const ATTACK_MP_COST = 20;
 export const ESCAPE_MP_COST = 50;
-export const PLAYER_MAX_LEVEL = 120;
+export const PLAYER_MAX_LEVEL = 150;
 export const ENEMY_MAX_LEVEL = 100;
 
 export function clampPlayerLevel(value: number) {

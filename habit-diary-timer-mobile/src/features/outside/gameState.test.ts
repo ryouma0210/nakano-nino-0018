@@ -30,7 +30,7 @@ describe("outside player level persistence", () => {
     expect(database.execute).toHaveBeenCalledTimes(2);
   });
 
-  it.each([100, 101, 110, 119, 120])("retains saved level %i on reload without another daily increase", (level) => {
+  it.each([100, 101, 110, 119, 120, ...Array.from({ length: 30 }, (_, index) => index + 121)])("retains saved level %i on reload without another daily increase", (level) => {
     saveSetting(levelKey, String(level));
     saveSetting(levelDateKey, state.today);
     database.execute.mockClear();
@@ -39,7 +39,7 @@ describe("outside player level persistence", () => {
     expect(database.execute).not.toHaveBeenCalled();
   });
 
-  it.each([[100, 110], [110, 120], [115, 120], [120, 120]])("adds 10 to level %i on the next day, capped at %i", (level, expected) => {
+  it.each([[100, 110], [110, 120], [115, 125], [120, 130], [130, 140], [140, 150], [145, 150], [149, 150], [150, 150]])("adds 10 to level %i on the next day, capped at %i", (level, expected) => {
     saveSetting(levelKey, String(level));
     saveSetting(levelDateKey, "2026-10-05");
     expect(initializeLevel()).toBe(expected);
@@ -48,7 +48,7 @@ describe("outside player level persistence", () => {
     expect(initializeLevel()).toBe(expected);
   });
 
-  it.each([["NaN", 1], ["Infinity", 1], ["-5", 1], ["999", 120]])("normalizes invalid saved level %s before using or saving it", (level, expected) => {
+  it.each([["NaN", 1], ["Infinity", 1], ["-5", 1], ["151", 150], ["999", 150]])("normalizes invalid saved level %s before using or saving it", (level, expected) => {
     state.values.set(levelKey, level);
     state.values.set(levelDateKey, state.today);
     expect(initializeLevel()).toBe(expected);

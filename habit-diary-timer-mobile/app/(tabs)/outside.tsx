@@ -20,6 +20,7 @@ import {
   succubusForLevel, type Direction, type MapArea, type MapPosition, type MapSlime,
   type SuccubusStage,
 } from "@/features/outside/gameLogic";
+import { ENEMY_MAX_HP, getEnemyDamage, getPlayerCombatStats, resolvePlayerAttack } from "@/features/outside/battleRules";
 import {
   dailyPointDateKey, dailyPointKey, deepSuccubusMarkKey, hpKey, initializeDailyOutsidePoints,
   initializeDeepSuccubusMark,
@@ -301,13 +302,6 @@ const defeatMapQuips: Record<SuccubusStage, string> = {
   middle: "「たっぷり吸わせてくれてありがとう♡　その情けない姿で、また私に挑みに来るのかしら？」",
   queen: "「力を捧げてくれたこと、感謝します。弱くなったあなたが再び敗北しに来る日を楽しみにしています」",
 };
-
-const enemyAttackDamage: Record<SuccubusStage, number> = {
-  beginner: 10,
-  middle: 20,
-  queen: 50,
-};
-const enemyMaxHp: Record<SuccubusStage, number> = { beginner: 100, middle: 300, queen: 500 };
 
 const lossLabels: Record<LossEventKind, string> = {
   tail: "尻尾",
@@ -769,7 +763,7 @@ export default function OutsideScreen() {
     const initialBattle = {
       hp: playerHp,
       mp: playerMp,
-      enemyHp: enemyMaxHp[succubus.stage],
+      enemyHp: ENEMY_MAX_HP[succubus.stage],
       lastLossKind: "tail",
     } satisfies BattleStatus;
     setBattle(initialBattle);
@@ -1262,9 +1256,7 @@ export default function OutsideScreen() {
         const normalAttack = shouldUseNormalAttack();
         if (normalAttack) applyEnemyAilment("tail");
         const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-        const damage = normalAttack
-          ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7)
-          : enemyAttackDamage[succubus.stage];
+        const damage = getEnemyDamage(succubus.stage, level, normalAttack ? "normal" : "temptation");
         const nextHp = clamp(battle.hp - damage);
         const nextMp = clamp(battle.mp + (normalAttack ? 0 : -6));
         setBattleEnemyImage(enemyKind);
@@ -1316,7 +1308,7 @@ export default function OutsideScreen() {
       // attack. The separate status-only attack remains available during
       // ordinary enemy turns, but is not used as the response here.
       const enemyKind = randomLossKind();
-      const damage = enemyAttackDamage[succubus.stage];
+      const damage = getEnemyDamage(succubus.stage, level, "temptation");
       const nextHp = clamp(battle.hp - damage);
       const nextMp = clamp(battle.mp - 6);
       setBattleEnemyImage(enemyKind);
@@ -1343,7 +1335,7 @@ export default function OutsideScreen() {
     if (command === "attack" && (charmTurns > 0 || slaveContractSigned)) {
       playEffect("outsideEvade");
       const enemyKind = randomLossKind();
-      const damage = enemyAttackDamage[succubus.stage];
+      const damage = getEnemyDamage(succubus.stage, level, "temptation");
       const nextHp = clamp(battle.hp - damage);
       const nextMp = clamp(battle.mp - ATTACK_MP_COST - 6);
       setBattleEnemyImage(enemyKind);
@@ -1363,7 +1355,7 @@ export default function OutsideScreen() {
       playEffect("outsideEvade");
       if (charmTurns > 0) {
         const enemyKind = randomLossKind();
-        const damage = Math.ceil(enemyAttackDamage[succubus.stage] * 0.5);
+        const damage = getEnemyDamage(succubus.stage, level, "temptation", true);
         const nextHp = clamp(battle.hp - damage);
         const nextMp = clamp(battle.mp + 8);
         const remainingCharm = Math.max(0, charmTurns - 1);
@@ -1390,7 +1382,7 @@ export default function OutsideScreen() {
       const normalAttack = shouldUseNormalAttack();
       if (normalAttack) applyEnemyAilment("tail");
       const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-      const damage = Math.ceil(enemyAttackDamage[succubus.stage] * (normalAttack ? 0.35 : 0.5));
+      const damage = getEnemyDamage(succubus.stage, level, normalAttack ? "normal" : "temptation", true);
       const nextHp = clamp(battle.hp - damage);
       const nextMp = clamp(battle.mp + 8);
       setBattleEnemyImage(enemyKind);
@@ -1421,9 +1413,7 @@ export default function OutsideScreen() {
       setMessage("恐怖で体がすくみ、攻撃できなかった。");
       return;
     }
-    const baseAttackDamage = Math.max(18, 34 - Math.max(0, succubus.level - level) * 0.25);
-    const attackDamage = battleAilments.weakened ? baseAttackDamage * 0.5 : baseAttackDamage;
-    const nextEnemyHp = clamp(battle.enemyHp - attackDamage);
+    const { damage: attackDamage, enemyHp: nextEnemyHp } = resolvePlayerAttack(battle.enemyHp, level, battleAilments.weakened);
     const attackMp = clamp(battle.mp - ATTACK_MP_COST);
     setPendingDamageQueue((items) => [...items, { target: "enemy", amount: Math.round(attackDamage) }]);
     if (nextEnemyHp <= 0) {
@@ -1442,6 +1432,7 @@ export default function OutsideScreen() {
       const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
       const victoryLevel = clampPlayerLevel(level + 20);
       setBattle(nextBattle);
+      setDisplayedBattle(nextBattle);
       if (victoryLevel > level) playEffect("levelUp");
       savePlayerStats(victoryLevel, nextBattle.hp, nextBattle.mp);
       setPhase("result");
@@ -1464,7 +1455,7 @@ export default function OutsideScreen() {
     const normalAttack = shouldUseNormalAttack();
     if (normalAttack) applyEnemyAilment("tail");
     const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-    const damage = normalAttack ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7) : enemyAttackDamage[succubus.stage];
+    const damage = getEnemyDamage(succubus.stage, level, normalAttack ? "normal" : "temptation");
     const nextHp = clamp(battle.hp - damage);
     const nextMp = clamp(attackMp + (normalAttack ? 0 : -6));
     setBattleEnemyImage(enemyKind);
@@ -1557,7 +1548,7 @@ export default function OutsideScreen() {
     setBattle({
       hp: playerHp,
       mp: playerMp,
-      enemyHp: enemyMaxHp[encounterStage],
+      enemyHp: ENEMY_MAX_HP[encounterStage],
       lastLossKind: "tail",
     });
   }, [encounterStage, playerHp, playerMp, returnCharmTurns]);
@@ -1677,7 +1668,7 @@ export default function OutsideScreen() {
               <>
                 <Animated.View style={[styles.enemyOverlay, loopAudioNames.length > 0 && styles.enemyOverlayWithAudio, { transform: [{ translateX: enemyShake }] }]}>
                   <AppText style={[styles.enemyOverlayName, { color: succubus.color }]}>{succubus.title} Lv.{succubus.level}</AppText>
-                  <StatGauge label="HP" value={displayedBattle.enemyHp} max={enemyMaxHp[activeSuccubusStage]} color="#ff4fa3" />
+                  <StatGauge label="HP" value={displayedBattle.enemyHp} max={ENEMY_MAX_HP[activeSuccubusStage]} color="#ff4fa3" />
                 </Animated.View>
                 <View style={styles.enemyLarge}>
                   {battleEnemyImage === "battle" ? (
@@ -2014,6 +2005,8 @@ export default function OutsideScreen() {
               <AppText style={styles.playerStatusModalLevel}>Lv.{level} / {PLAYER_MAX_LEVEL}</AppText>
               <StatGauge label="HP" value={playerHp} max={100} color="#e3364f" />
               <StatGauge label="MP" value={playerMp} max={100} color="#3f8cff" />
+              <AppText style={styles.playerStatusModalText}>攻撃力　{getPlayerCombatStats(level).attack}</AppText>
+              <AppText style={styles.playerStatusModalText}>防御力　{getPlayerCombatStats(level).defense}</AppText>
               <AppText style={styles.playerStatusModalText}>館の外獲得Pt　{dailyOutsidePoints}/100pt</AppText>
               <AppText style={styles.playerStatusModalText}>所持Pt　{availablePoints}pt</AppText>
             </View>
@@ -2332,6 +2325,7 @@ export default function OutsideScreen() {
               <View pointerEvents="none" style={[styles.guideTopBorder, styles.battleGuideTopBorder]} />
               <AppText style={styles.battleGuideTitle}>戦い方</AppText>
               <AppText style={styles.warningBody}>
+                ・レベルが上がると攻撃力・防御力が上がります。{"\n"}
                 ・攻撃：サキュバスのHPを減らし、毎回MPを20消費。魅了中は命中しませんが、MPは消費します。{"\n"}
                 ・防御：被害を抑えてMPを8回復。魅了中は防御するたび解除へ近づきます。{"\n"}
                 ・魅了解除：初級1回／上級2回／女王3回の防御が必要です。{"\n"}

@@ -1,4 +1,7 @@
 {
+  "攻撃力": "Attack",
+  "防御力": "Defense",
+  "・レベルが上がると攻撃力・防御力が上がります。": "・Attack and defense increase as you level up.",
   "オカズ記録": "Favorite records",
   "マゾ証明書_": "Masochist_certificate_",
   "名前未設定": "Name_not_set",
@@ -2633,7 +2636,7 @@
   "マップを移動し、探索や戦闘を行うミニゲームです。": "A mini-game where you move around a map, explore, and battle.",
   "十字キーで移動します。WEB・Windows版では矢印キーも使え、下方向の出口からホームへ戻れます。": "Move with the directional pad. On web and Windows, you can also use the arrow keys. Leave through the southern exit to return Home.",
   "右の草原でスライムに触れるとポイントを獲得し、左の浄化エリアでは状態を回復できます。": "Touch slimes in the meadow on the right to earn points. Recover your condition in the purification area on the left.",
-  "中央の設定ポイントでレベルなどを調整できます。主人公の上限は120、相手の上限は100です。詳しいルールは各エリアの看板で確認できます。": "Adjust levels and other options at the central settings point. The player's level cap is 120 and the opponent's is 100. Check the signs in each area for detailed rules.",
+  "中央の設定ポイントでレベルなどを調整できます。主人公の上限は150、相手の上限は100です。詳しいルールは各エリアの看板で確認できます。": "Adjust levels and other options at the central settings point. The player's level cap is 150 and the opponent's is 100. Check the signs in each area for detailed rules.",
   "すごろくとオセロを選んで遊べます。": "Choose between Sugoroku and Othello.",
   "ホームの「ゲーム部屋」、または部屋一覧から入れます。各ゲーム画面で開始や再開を選びます。": "Enter from “Game Room” on Home or from the room list. Start or resume play on each game's screen.",
   "どちらも進行を自動保存します。終了したゲームは「プレイ履歴を表示する」から確認できます。": "Both games save progress automatically. Check completed games with “Show play history”.",
