@@ -7,26 +7,36 @@ describe("outside game logic", () => {
     expect(ESCAPE_MP_COST).toBe(50);
   });
   it("clamps stats", () => { expect(clamp(-1)).toBe(0); expect(clamp(120)).toBe(100); });
-  it("allows player levels above 100 while keeping the enemy cap at 100", () => {
-    expect(PLAYER_MAX_LEVEL).toBe(150);
-    expect(ENEMY_MAX_LEVEL).toBe(100);
-    for (const value of [101, 110, 119, 120, ...Array.from({ length: 30 }, (_, index) => index + 121)]) {
+  it("allows both player and enemy levels from 1 through 999", () => {
+    expect(PLAYER_MAX_LEVEL).toBe(999);
+    expect(ENEMY_MAX_LEVEL).toBe(999);
+    for (let value = 1; value <= 999; value += 1) {
       expect(clampPlayerLevel(value)).toBe(value);
-      expect(clampEnemyLevel(value)).toBe(100);
+      expect(clampEnemyLevel(value)).toBe(value);
     }
-    expect(clampPlayerLevel(151)).toBe(150);
-    expect(clampPlayerLevel(0)).toBe(1);
-    expect(clampEnemyLevel(0)).toBe(1);
   });
-  it("keeps enemies capped when generated from a level 150 player or a saved enemy level", () => {
-    expect(succubusForLevel(150, 0)).toMatchObject({ level: 100, stage: "queen" });
-    expect(succubusForLevel(150, 150)).toMatchObject({ level: 100, stage: "queen" });
-    expect(succubusForLevel(150, 29)).toMatchObject({ level: 29, stage: "beginner" });
+  it.each([[1000, 999], [9999, 999], [0, 1], [-1, 1], [998.9, 998], [NaN, 1], [Infinity, 1]])("normalizes level %s to %i for both sides", (value, expected) => {
+    expect(clampPlayerLevel(value)).toBe(expected);
+    expect(clampEnemyLevel(value)).toBe(expected);
+  });
+  it("uses the current player level or saved enemy level up to 999", () => {
+    expect(succubusForLevel(999, 0)).toMatchObject({ level: 999, stage: "queen" });
+    expect(succubusForLevel(150, 998)).toMatchObject({ level: 998, stage: "queen" });
+    expect(succubusForLevel(999, 1000)).toMatchObject({ level: 999, stage: "queen" });
+    expect(succubusForLevel(999, 29)).toMatchObject({ level: 29, stage: "beginner" });
   });
   it("selects enemy stages at boundaries", () => {
     expect(succubusForLevel(29, 0).stage).toBe("beginner");
     expect(succubusForLevel(30, 0).stage).toBe("middle");
+    expect(succubusForLevel(79, 0).stage).toBe("middle");
     expect(succubusForLevel(80, 0).stage).toBe("queen");
+    expect(succubusForLevel(999, 0).stage).toBe("queen");
+  });
+  it.each([1, 10, 20, 50, 100])("caps a level increase of %i at 999 without lowering existing levels", (increase) => {
+    expect(clampPlayerLevel(998 + increase)).toBe(999);
+    expect(clampEnemyLevel(998 + increase)).toBe(999);
+    expect(clampPlayerLevel(500 + increase)).toBe(500 + increase);
+    expect(clampEnemyLevel(500 + increase)).toBe(500 + increase);
   });
   it("requires more defenses against stronger charm", () => {
     expect(charmDefenseCount("beginner")).toBe(1);

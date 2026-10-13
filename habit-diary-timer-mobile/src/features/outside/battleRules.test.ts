@@ -1,15 +1,56 @@
 import { describe, expect, it } from "vitest";
 import { ATTACK_MP_COST, charmDefenseCount } from "./gameLogic";
 import {
-  ENEMY_MAX_HP, getEnemyDamage, getPlayerAttackDamage, getPlayerCombatStats, resolvePlayerAttack,
+  ENEMY_BASE_HP, getEnemyCombatStats, getEnemyDamage, getPlayerAttackDamage, getPlayerCombatStats, resolvePlayerAttack,
 } from "./battleRules";
 
 describe("outside battle rules", () => {
   it("keeps each enemy's full HP and the original level-one attack", () => {
-    expect(ENEMY_MAX_HP).toEqual({ beginner: 100, middle: 300, queen: 500 });
+    expect(ENEMY_BASE_HP).toEqual({ beginner: 100, middle: 300, queen: 500 });
     expect(getPlayerCombatStats(1)).toEqual({ attack: 34, defense: 0 });
     expect(getPlayerCombatStats(120)).toEqual({ attack: 153, defense: 36 });
     expect(getPlayerCombatStats(150)).toEqual({ attack: 183, defense: 45 });
+    expect(getPlayerCombatStats(999)).toEqual({ attack: 1032, defense: 299 });
+  });
+
+  it.each([
+    { level: 80, maxHp: 420, attack: 44 },
+    { level: 99, maxHp: 496, attack: 49 },
+    { level: 100, maxHp: 500, attack: 50 },
+    { level: 101, maxHp: 504, attack: 50 },
+    { level: 150, maxHp: 700, attack: 65 },
+    { level: 999, maxHp: 4096, attack: 319 },
+    { level: 1000, maxHp: 4096, attack: 319 },
+    { level: 1, maxHp: 420, attack: 44 },
+    { level: NaN, maxHp: 420, attack: 44 },
+  ])("scales queen level $level to HP $maxHp and attack $attack", ({ level, maxHp, attack }) => {
+    expect(getEnemyCombatStats("queen", level)).toEqual({ maxHp, attack });
+  });
+
+  it("preserves beginner and middle stats independently of their supplied level", () => {
+    for (const level of [1, 29, 30, 79, 100, 999]) {
+      expect(getEnemyCombatStats("beginner", level)).toEqual({ maxHp: 100, attack: 10 });
+      expect(getEnemyCombatStats("middle", level)).toEqual({ maxHp: 300, attack: 20 });
+    }
+  });
+
+  it("increases queen HP with every level while never reducing her attack", () => {
+    for (let level = 81; level <= 999; level += 1) {
+      const previous = getEnemyCombatStats("queen", level - 1);
+      const current = getEnemyCombatStats("queen", level);
+      expect(current.maxHp).toBeGreaterThan(previous.maxHp);
+      expect(current.attack).toBeGreaterThanOrEqual(previous.attack);
+    }
+  });
+
+  it("keeps a level 999 queen dangerous to a level 999 player without an instant kill", () => {
+    const enemy = getEnemyCombatStats("queen", 999);
+    expect(resolvePlayerAttack(enemy.maxHp, 999)).toEqual({ damage: 1032, enemyHp: 3064 });
+    expect(resolvePlayerAttack(enemy.maxHp, 999, true)).toEqual({ damage: 516, enemyHp: 3580 });
+    expect(getEnemyDamage("queen", 999, "normal", false, 999)).toBe(14);
+    expect(getEnemyDamage("queen", 999, "normal", true, 999)).toBe(7);
+    expect(getEnemyDamage("queen", 999, "temptation", false, 999)).toBe(20);
+    expect(getEnemyDamage("queen", 999, "temptation", true, 999)).toBe(10);
   });
 
   it.each([
@@ -54,8 +95,24 @@ describe("outside battle rules", () => {
     }
   });
 
-  it("improves attack and defense without increasing incoming damage across levels 1–150", () => {
-    for (let level = 2; level <= 150; level += 1) {
+  it("keeps the 999 boundary finite and caps overleveled input without negative HP or zero incoming damage", () => {
+    for (const level of [999, 1000, Number.MAX_SAFE_INTEGER]) {
+      expect(getPlayerCombatStats(level)).toEqual({ attack: 1032, defense: 299 });
+      expect(getPlayerAttackDamage(level, true)).toBe(516);
+      for (const weakened of [false, true]) {
+        expect(resolvePlayerAttack(getEnemyCombatStats("queen", 100).maxHp, level, weakened)).toEqual({ damage: 500, enemyHp: 0 });
+      }
+      for (const stage of ["beginner", "middle", "queen"] as const) {
+        for (const kind of ["normal", "temptation"] as const) {
+          expect(getEnemyDamage(stage, level, kind)).toBe(1);
+          expect(getEnemyDamage(stage, level, kind, true)).toBe(1);
+        }
+      }
+    }
+  });
+
+  it("improves attack and defense without increasing incoming damage across levels 1–999", () => {
+    for (let level = 2; level <= 999; level += 1) {
       const previous = getPlayerCombatStats(level - 1);
       const current = getPlayerCombatStats(level);
       expect(current.attack).toBeGreaterThan(previous.attack);
@@ -75,12 +132,14 @@ describe("outside battle rules", () => {
   });
 
   it.each([
-    { level: 120, attacks: 4, remainingHp: 49, remainingMp: 20 },
-    { level: 150, attacks: 3, remainingHp: 83, remainingMp: 40 },
-  ])("can defeat a full-HP queen at level $level after clearing opening charm", ({ level, attacks, remainingHp, remainingMp }) => {
+    { level: 120, enemyLevel: 100, attacks: 4, remainingHp: 49, remainingMp: 20 },
+    { level: 150, enemyLevel: 100, attacks: 3, remainingHp: 83, remainingMp: 40 },
+    { level: 999, enemyLevel: 999, attacks: 4, remainingHp: 28, remainingMp: 20 },
+  ])("can defeat a full-HP level $enemyLevel queen at level $level after clearing opening charm", ({ level, enemyLevel, attacks, remainingHp, remainingMp }) => {
     let hp = 100;
     let mp = 100;
-    let enemyHp = ENEMY_MAX_HP.queen;
+    const enemy = getEnemyCombatStats("queen", enemyLevel);
+    let enemyHp = enemy.maxHp;
     let attackCount = 0;
     let totalDamage = 0;
 
@@ -88,7 +147,7 @@ describe("outside battle rules", () => {
     // then attack while the enemy uses its ordinary counterattack. No healing.
     expect(charmDefenseCount("queen")).toBe(3);
     for (let turn = 0; turn < charmDefenseCount("queen"); turn += 1) {
-      hp -= getEnemyDamage("queen", level, "temptation", true);
+      hp -= getEnemyDamage("queen", level, "temptation", true, enemyLevel);
       mp = Math.min(100, mp + 8);
       expect(hp).toBeGreaterThan(0);
     }
@@ -99,12 +158,12 @@ describe("outside battle rules", () => {
       totalDamage += hit.damage;
       mp -= ATTACK_MP_COST;
       attackCount += 1;
-      if (enemyHp > 0) hp -= getEnemyDamage("queen", level, "normal");
+      if (enemyHp > 0) hp -= getEnemyDamage("queen", level, "normal", false, enemyLevel);
       expect(hp).toBeGreaterThan(0);
     }
 
     expect(enemyHp).toBe(0);
-    expect(totalDamage).toBe(500);
+    expect(totalDamage).toBe(enemy.maxHp);
     expect(attackCount).toBe(attacks);
     expect(hp).toBe(remainingHp);
     expect(mp).toBe(remainingMp);

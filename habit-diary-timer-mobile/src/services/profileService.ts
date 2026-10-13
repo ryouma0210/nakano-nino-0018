@@ -19,8 +19,10 @@ export type ProfileSettings = {
   masturbationMinutes: string;
   tissueCount: string;
   weaknesses: string[];
+  weaknessCandidates: string[];
   topWeaknesses: string[];
   favoriteIds: string[];
+  favoriteCandidateIds: string[];
   topFavoriteIds: string[];
   photoFileName: string | null;
   ninoOutfit: string;
@@ -39,8 +41,10 @@ export const defaultProfile: ProfileSettings = {
   masturbationMinutes: "",
   tissueCount: "",
   weaknesses: [],
+  weaknessCandidates: [],
   topWeaknesses: [],
   favoriteIds: [],
+  favoriteCandidateIds: [],
   topFavoriteIds: [],
   photoFileName: null,
   ninoOutfit: "default",
@@ -72,6 +76,25 @@ function snapshotPatch(value: Partial<ProfileSettings>): Partial<ProfileSettings
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, Array.isArray(item) ? [...item] : item]));
 }
 
+function mergeProfile(current: ProfileSettings, patch: Partial<ProfileSettings>): ProfileSettings {
+  return {
+    ...current,
+    ...patch,
+    // Candidate additions are independent of form selection drafts. A stale save
+    // must not remove entries saved by another screen or an earlier queued add.
+    weaknessCandidates: [...new Set([...current.weaknessCandidates, ...(patch.weaknessCandidates ?? [])])],
+    favoriteCandidateIds: [...new Set([...current.favoriteCandidateIds, ...(patch.favoriteCandidateIds ?? [])])],
+  };
+}
+
+function addCandidate(key: "weaknessCandidates" | "favoriteCandidateIds", value: string): Promise<ProfileSettings> {
+  return queueProfileOperation(async () => {
+    const profile = await readProfile();
+    if (profile[key].includes(value)) return profile;
+    return writeProfile({ ...profile, [key]: [...profile[key], value] });
+  });
+}
+
 async function discardPhotos(files: StoredFile[]) {
   for (const file of files) {
     // The reference is already committed. Cleanup failure must not undo the new photo.
@@ -88,17 +111,26 @@ export const profileService = {
     const snapshot = profileSettingsSchema.parse(value);
     const original = baseline ? profileSettingsSchema.parse(baseline) : undefined;
     return queueProfileOperation(async () => {
-      if (!original) return writeProfile(snapshot);
+      const current = await readProfile();
+      if (!original) return writeProfile(mergeProfile(current, snapshot));
       const changed = Object.fromEntries(Object.entries(snapshot).filter(([key, item]) => (
         JSON.stringify(item) !== JSON.stringify(original[key as keyof ProfileSettings])
       )));
-      return writeProfile({ ...await readProfile(), ...changed });
+      return writeProfile(mergeProfile(current, changed));
     });
   },
 
   async patch(value: Partial<ProfileSettings>): Promise<ProfileSettings> {
     const snapshot = snapshotPatch(value);
-    return queueProfileOperation(async () => writeProfile({ ...await readProfile(), ...snapshot }));
+    return queueProfileOperation(async () => writeProfile(mergeProfile(await readProfile(), snapshot)));
+  },
+
+  addWeaknessCandidate(value: string): Promise<ProfileSettings> {
+    return addCandidate("weaknessCandidates", value);
+  },
+
+  addFavoriteCandidate(id: string): Promise<ProfileSettings> {
+    return addCandidate("favoriteCandidateIds", id);
   },
 
   async saveWeaknesses(weaknesses: string[]): Promise<string[]> {

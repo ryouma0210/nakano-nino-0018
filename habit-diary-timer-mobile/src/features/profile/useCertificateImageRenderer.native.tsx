@@ -93,28 +93,46 @@ export function useCertificateImageRenderer(): { renderImage: NativeCertificateI
               <CertificateText style={styles.detail}>{job.content.nameLabel}</CertificateText>
               <CertificateText style={styles.name}>{job.content.name}</CertificateText>
             </View>
-            <View style={styles.photoFrame}>
-              {job.content.photoDataUrl ? <Image source={{ uri: job.content.photoDataUrl }} style={styles.photo} resizeMode="contain"
-                onLoad={() => job.capture.photoLoaded()} onError={() => job.capture.fail(new Error("画像を読み込めませんでした。"))} />
-                : <CertificateText style={styles.photoPlaceholder}>{job.content.photoLabel}</CertificateText>}
+            <View style={styles.identityExtra}>
+              <CertificateText style={[styles.detail, styles.identityExtraText]}>{job.content.rightHeaderLabel}</CertificateText>
+              <CertificateText style={[styles.name, styles.identityExtraText]}>{job.content.rightHeaderValue}</CertificateText>
             </View>
           </View>
-          <CertificateText style={styles.sectionTitle}>{job.content.favoritesLabel}</CertificateText>
-          {job.content.favorites.length ? job.content.favorites.map((favorite, index) => <View key={index} style={styles.favorite}>
-            <CertificateText style={styles.rank}>{index + 1}</CertificateText>
-            <View style={styles.favoriteText}>
-              <CertificateText style={styles.favoriteName}>{favorite.name}</CertificateText>
-              <CertificateText style={styles.detail}>{favorite.detail}</CertificateText>
+          <View style={styles.photoFrame}>
+            {job.content.photoDataUrl ? <Image source={{ uri: job.content.photoDataUrl }} style={styles.photo} resizeMode="contain"
+              onLoad={() => job.capture.photoLoaded()} onError={() => job.capture.fail(new Error("画像を読み込めませんでした。"))} />
+              : <CertificateText style={styles.photoPlaceholder}>{job.content.photoLabel}</CertificateText>}
+          </View>
+          <View style={styles.rankings}>
+            <View style={styles.rankingColumn}>
+              <CertificateText style={styles.sectionTitle}>{job.content.weaknessesLabel}</CertificateText>
+              {job.content.weaknesses.length ? job.content.weaknesses.map((weakness, index) => <View key={index} style={styles.favorite}>
+                <CertificateText style={styles.rank}>{index + 1}</CertificateText>
+                <View style={styles.favoriteText}>
+                  <CertificateText style={styles.favoriteName}>{weakness}</CertificateText>
+                </View>
+              </View>) : <CertificateText style={styles.detail}>{job.content.emptyWeaknessesLabel}</CertificateText>}
             </View>
-          </View>) : <CertificateText style={styles.detail}>{job.content.emptyFavoritesLabel}</CertificateText>}
+            <View style={styles.rankingColumn}>
+              <CertificateText style={styles.sectionTitle}>{job.content.favoritesLabel}</CertificateText>
+              {job.content.favorites.length ? job.content.favorites.map((favorite, index) => <View key={index} style={styles.favorite}>
+                <CertificateText style={styles.rank}>{index + 1}</CertificateText>
+                <View style={styles.favoriteText}>
+                  <CertificateText style={styles.favoriteName}>{favorite.name}</CertificateText>
+                  <CertificateText style={styles.detail}>{favorite.detail}</CertificateText>
+                </View>
+              </View>) : <CertificateText style={styles.detail}>{job.content.emptyFavoritesLabel}</CertificateText>}
+            </View>
+          </View>
           <View style={styles.metrics}>
-            {job.content.metrics.map((metric) => <View key={metric.label} style={styles.metric}>
-              <View style={styles.metricLabel}><CertificateText>{metric.label}</CertificateText></View>
-              <View style={styles.metricValue}><CertificateText style={styles.metricValueText}>{metric.value}</CertificateText></View>
+            {job.content.metricRows.map((row, index) => <View key={index} style={styles.metricRow}>
+              {row.map((metric) => <View key={metric.label} style={styles.metric}>
+                <View style={styles.metricLabel}><CertificateText>{metric.label}</CertificateText></View>
+                <View style={styles.metricValue}><CertificateText style={styles.metricValueText}>{metric.value}</CertificateText></View>
+              </View>)}
             </View>)}
           </View>
           <CertificateText style={styles.issued}>{`${job.content.issuedLabel}: ${job.content.issuedAt}`}</CertificateText>
-          <CertificateText style={styles.note}>{job.content.note}</CertificateText>
         </View>
       </View>
       <View style={styles.progress} accessibilityViewIsModal>
@@ -132,30 +150,34 @@ function CertificateText({ style, ...props }: TextProps) {
 
 const styles = StyleSheet.create({
   host: { flex: 1, backgroundColor: "#fff" },
-  page: { position: "absolute", top: 0, left: 0, width: 794, minHeight: 1123, padding: 64, backgroundColor: "#fff" },
-  frame: { minHeight: 995, padding: 45, borderWidth: 2, borderColor: "#9d8257" },
+  page: { position: "absolute", top: 0, left: 0, width: 794, minHeight: 1123, padding: 38, backgroundColor: "#fff" },
+  frame: { minHeight: 1047, padding: 30, borderWidth: 2, borderColor: "#7c3aed" },
   text: { color: "#26334b", fontFamily: Platform.OS === "ios" ? "Arial" : "sans-serif", fontSize: 12, lineHeight: 18, includeFontPadding: false },
   brand: { textAlign: "center", color: "#80683f", fontSize: 13, lineHeight: 20, letterSpacing: 3, marginBottom: 8 },
-  title: { textAlign: "center", fontSize: 28, lineHeight: 37, fontWeight: "700", marginBottom: 30 },
-  identity: { flexDirection: "row", alignItems: "center", paddingBottom: 26, borderBottomWidth: 1, borderBottomColor: "#d5c8b3" },
-  identityName: { flex: 1, minWidth: 0, paddingRight: 23 },
+  title: { textAlign: "center", color: "#7c3aed", fontSize: 28, lineHeight: 37, fontWeight: "800", marginBottom: 20 },
+  identity: { flexDirection: "row", alignItems: "flex-start", paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: "#d5c8b3" },
+  identityName: { width: "50%", minWidth: 0, paddingRight: 23 },
+  identityExtra: { width: "50%", minWidth: 0 },
+  identityExtraText: { textAlign: "right" },
   detail: { color: "#5f697a", fontSize: 11, lineHeight: 17 },
   name: { fontSize: 24, lineHeight: 36, fontWeight: "700" },
-  photoFrame: { width: 113, height: 151, flexShrink: 0, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center" },
+  photoFrame: { width: 216, height: 288, marginVertical: 20, alignSelf: "center", flexShrink: 0, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center" },
   photo: { width: "100%", height: "100%" },
   photoPlaceholder: { color: "#6e7582", textAlign: "center" },
-  sectionTitle: { marginTop: 26, marginBottom: 11, fontSize: 16, lineHeight: 24, fontWeight: "700" },
-  favorite: { flexDirection: "row", gap: 15, alignItems: "center", paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: "#ece8e1" },
+  rankings: { flexDirection: "row", gap: 24, alignItems: "flex-start" },
+  rankingColumn: { flex: 1, minWidth: 0 },
+  sectionTitle: { marginBottom: 8, fontSize: 16, lineHeight: 24, fontWeight: "700" },
+  favorite: { flexDirection: "row", gap: 10, alignItems: "flex-start", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#ece8e1" },
   rank: { color: "#80683f", fontSize: 18, lineHeight: 27, minWidth: 19 },
   favoriteText: { flex: 1, minWidth: 0 },
   favoriteName: { fontSize: 15, lineHeight: 23, fontWeight: "700" },
-  metrics: { marginTop: 26 },
-  metric: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#e2e5e9" },
-  metricLabel: { width: "55%", padding: 11, backgroundColor: "#f5f6f8", justifyContent: "center" },
-  metricValue: { flex: 1, minWidth: 0, padding: 11 },
+  metrics: { marginTop: 24 },
+  metricRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#e2e5e9" },
+  metric: { width: "50%", minWidth: 0, flexDirection: "row" },
+  metricLabel: { width: "55%", minWidth: 0, paddingHorizontal: 8, paddingVertical: 11, backgroundColor: "#f5f6f8", justifyContent: "center" },
+  metricValue: { flex: 1, minWidth: 0, paddingHorizontal: 8, paddingVertical: 11, justifyContent: "center" },
   metricValueText: { fontSize: 15, lineHeight: 23, fontWeight: "700", fontVariant: ["tabular-nums"] },
   issued: { marginTop: 26, marginBottom: 8, fontSize: 11, lineHeight: 17 },
-  note: { color: "#5f697a", fontSize: 10, lineHeight: 15 },
   progress: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", gap: 18, backgroundColor: "#fff" },
   progressText: { color: "#26334b", fontSize: 16 },
 });

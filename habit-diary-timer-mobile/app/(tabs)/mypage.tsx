@@ -34,6 +34,7 @@ import {
   exportActivityCertificate,
 } from "@/features/profile/certificateExport";
 import { useCertificateImageRenderer } from "@/features/profile/useCertificateImageRenderer";
+import { readOutsideLevelSnapshot } from "@/features/outside/gameState";
 import { useAppModal } from "@/components/AppModalProvider";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { achievementRepository } from "@/repositories/achievementRepository";
@@ -267,7 +268,6 @@ export default function MyPageScreen() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [weaknessModalVisible, setWeaknessModalVisible] = useState(false);
   const [weaknessDraft, setWeaknessDraft] = useState<string[]>([]);
-  const [addedWeaknessChoices, setAddedWeaknessChoices] = useState<string[]>([]);
   const [topWeaknessDraft, setTopWeaknessDraft] = useState<string[]>([]);
   const [weaknessSaving, setWeaknessSaving] = useState(false);
   const [weaknessError, setWeaknessError] = useState(false);
@@ -332,7 +332,7 @@ export default function MyPageScreen() {
   const weakCount = profile.weaknesses.length;
   const weakRank = weaknessRank(weakCount);
   const weaknessChoices = Array.from(
-    new Set([...weaknessOptions, ...profile.weaknesses, ...addedWeaknessChoices]),
+    new Set([...weaknessOptions, ...profile.weaknessCandidates, ...profile.weaknesses]),
   );
   const language = settings?.language ?? "ja";
   const weaknessSearchTerm = normalizeSearchText(weaknessQuery).trim();
@@ -373,7 +373,6 @@ export default function MyPageScreen() {
     if (!profileReady || savingRef.current) return;
     Keyboard.dismiss();
     setWeaknessDraft([...profile.weaknesses]);
-    setAddedWeaknessChoices([]);
     setTopWeaknessDraft([...profile.topWeaknesses]);
     setWeaknessError(false);
     setWeaknessModalVisible(true);
@@ -383,7 +382,7 @@ export default function MyPageScreen() {
     if (!savingRef.current) setWeaknessModalVisible(false);
   }
 
-  function addWeakness(name: string) {
+  async function addWeakness(name: string) {
     const normalized = normalizeSearchText(name);
     const sameName = (item: string) => (
       normalizeSearchText(item.trim()) === normalized
@@ -392,10 +391,22 @@ export default function MyPageScreen() {
     if (savingRef.current || weaknessDraft.some(sameName)) return { error: "この弱点はすでに選択されています。" };
     const existing = weaknessChoices.find(sameName);
     const item = existing ?? name;
-    if (!existing) setAddedWeaknessChoices((current) => [...current, item]);
-    setWeaknessDraft((current) => current.includes(item) ? current : [...current, item]);
-    setWeaknessQuery("");
-    return { addedName: item };
+    savingRef.current = true;
+    setWeaknessSaving(true);
+    try {
+      const operation = profileService.addWeaknessCandidate(item);
+      saveOperation.current = operation;
+      const { weaknessCandidates } = await operation;
+      setProfile((current) => ({ ...current, weaknessCandidates }));
+      savedProfile.current = { ...savedProfile.current, weaknessCandidates };
+      setWeaknessDraft((current) => current.includes(item) ? current : [...current, item]);
+      setWeaknessQuery("");
+      return { addedName: item };
+    } finally {
+      saveOperation.current = null;
+      savingRef.current = false;
+      setWeaknessSaving(false);
+    }
   }
 
   async function completeWeaknessRecord() {
@@ -454,6 +465,23 @@ export default function MyPageScreen() {
     setTopFavoriteDraft([...profile.topFavoriteIds]);
     setFavoriteError(false);
     setFavoriteModalVisible(true);
+  }
+
+  async function addFavoriteCandidate(id: string) {
+    if (!profileReady || savingRef.current) throw new Error("Profile is busy");
+    savingRef.current = true;
+    setFavoriteSaving(true);
+    try {
+      const operation = profileService.addFavoriteCandidate(id);
+      saveOperation.current = operation;
+      const { favoriteCandidateIds } = await operation;
+      setProfile((current) => ({ ...current, favoriteCandidateIds }));
+      savedProfile.current = { ...savedProfile.current, favoriteCandidateIds };
+    } finally {
+      saveOperation.current = null;
+      savingRef.current = false;
+      setFavoriteSaving(false);
+    }
   }
 
   async function saveFavorites() {
@@ -543,16 +571,20 @@ export default function MyPageScreen() {
           settingsService.load(),
         ]);
         const currentStats = loadProfileStats();
+        const outsideLevels = readOutsideLevelSnapshot();
         const result = await exportActivityCertificate(
           {
             name: storedSettings.playerName,
             photoDataUrl: await activityCertificatePhotoDataUrl(storedPhoto),
+            topWeaknesses: stored.topWeaknesses,
             topFavorites: resolveFavorites(stored.topFavoriteIds),
             favoriteCount: stored.favoriteIds.length,
-            activityCount: currentStats.achievements.trainingCount,
+            weaknessCount: stored.weaknesses.length,
             longestActivitySeconds:
               currentStats.achievements.longestTrainingSeconds,
             totalTimerSeconds: currentStats.achievements.punishmentSeconds,
+            outsidePlayerLevel: outsideLevels.playerLevel,
+            outsideSuccubusLevel: outsideLevels.succubusLevel,
             totalEarnedPoints: currentStats.points.earned,
             currentPoints: currentStats.points.available,
             issuedAt: new Date(),
@@ -605,7 +637,17 @@ export default function MyPageScreen() {
           </View>
         </View>
       </Card>
-
+      <Card style={styles.certificateCard}>
+        <AppText variant="subtitle">活動記録証明書の発行</AppText>
+        <PrimaryButton
+          title={certificateBusy ? "発行中..." : "発行する"}
+          tone="save"
+          disabled={!profileEditable || settings === null}
+          onPress={() => {
+            void issueCertificate();
+          }}
+        />
+      </Card>
       <Card style={styles.nameCard}>
         <AppText variant="subtitle">呼ばれたい名前</AppText>
         <TextField
@@ -629,7 +671,7 @@ export default function MyPageScreen() {
         <View style={styles.photoFrame}>
           {photo ? (
             <Image
-              accessibilityLabel="証明写真"
+              accessibilityLabel={translateText("証明写真", language)}
               source={{ uri: photo.uri }}
               style={styles.photo}
               resizeMode="contain"
@@ -894,31 +936,15 @@ export default function MyPageScreen() {
         tone="secondary"
         onPress={() => router.replace("/(tabs)")}
       />
-      <Card style={styles.certificateCard}>
-        <AppText variant="subtitle">証明書発行</AppText>
-        <PrimaryButton
-          title={certificateBusy ? "発行中..." : "証明書を画像保存"}
-          disabled={!profileEditable || settings === null}
-          onPress={() => {
-            void issueCertificate();
-          }}
-        />
-        <PrimaryButton
-          title={Platform.OS === "web" ? "証明書を印刷" : "証明書を共有"}
-          tone="secondary"
-          disabled={!profileEditable || settings === null}
-          onPress={() => {
-            void issueCertificate(Platform.OS === "web" ? "print" : "share");
-          }}
-        />
-      </Card>
       {certificateImageHost}
       <FavoritePickerModal
         visible={favoriteModalVisible}
         selected={favoriteDraft}
+        candidateIds={profile.favoriteCandidateIds}
         ranked={topFavoriteDraft}
         saving={favoriteSaving}
         error={favoriteError}
+        onAddCandidate={addFavoriteCandidate}
         onSelectedChange={(ids) => {
           if (savingRef.current) return;
           setFavoriteDraft(ids);

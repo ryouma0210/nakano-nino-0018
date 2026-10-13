@@ -14,7 +14,7 @@ const existingProfile: ProfileSettings = {
   sexualExperience: "yes", romanceExperience: "no", analExperience: "no",
   nippleExperience: "yes", exposureExperience: "no", specialFetish: "yes",
   erectionLengthCm: "15", masturbationPerWeek: "3", masturbationMinutes: "10",
-  tissueCount: "2", weaknesses: ["previous"], ninoOutfit: "custom", ninoVoiceStyle: "soft",
+  tissueCount: "2", weaknesses: ["previous"], weaknessCandidates: ["previous"], ninoOutfit: "custom", ninoVoiceStyle: "soft",
 };
 let storedProfile: string | null;
 
@@ -45,7 +45,7 @@ describe("saving profile weaknesses", () => {
 
     expect(storage.getItem).toHaveBeenCalledExactlyOnceWith(profileKey);
     expect(storage.setItem).toHaveBeenCalledExactlyOnceWith(
-      profileKey, JSON.stringify({ ...existingProfile, weaknesses: ["selected"] }),
+      profileKey, JSON.stringify({ ...existingProfile, weaknesses: ["selected"], weaknessCandidates: ["previous", "selected"] }),
     );
   });
 
@@ -122,7 +122,7 @@ describe("saving profile weaknesses", () => {
 
     finish.resolve();
     await saving;
-    expect(await loading).toEqual({ ...existingProfile, weaknesses: ["selected"] });
+    expect(await loading).toEqual({ ...existingProfile, weaknesses: ["selected"], weaknessCandidates: ["previous", "selected"] });
     expect(readsBeforeSaveFinished).toBe(1);
   });
 
@@ -143,7 +143,7 @@ describe("saving profile weaknesses", () => {
     finish.reject(failure);
     await rejected;
     expect(await retrying).toEqual(["selected"]);
-    expect(await loading).toEqual({ ...existingProfile, weaknesses: ["selected"] });
+    expect(await loading).toEqual({ ...existingProfile, weaknesses: ["selected"], weaknessCandidates: ["previous", "selected"] });
     expect(storage.setItem).toHaveBeenCalledTimes(2);
   });
 
@@ -173,12 +173,120 @@ describe("saving profile weaknesses", () => {
     expect(writesBeforeFirstFinished).toBe(1);
     expect(clearsBeforeFirstFinished).toBe(0);
     expect(JSON.parse(storage.setItem.mock.calls[0][1])).toEqual({
-      ...existingProfile, weaknesses: ["draft"], ninoOutfit: "changed",
+      ...existingProfile, weaknesses: ["draft"], weaknessCandidates: ["previous", "draft"], ninoOutfit: "changed",
     });
     expect(JSON.parse(storage.setItem.mock.calls[1][1])).toEqual({
-      ...existingProfile, weaknesses: ["selected"], ninoOutfit: "changed",
+      ...existingProfile, weaknesses: ["selected"], weaknessCandidates: ["previous", "draft", "selected"], ninoOutfit: "changed",
     });
     expect(storage.removeItem).toHaveBeenCalledExactlyOnceWith(profileKey);
+  });
+});
+
+describe("independent profile candidates", () => {
+  const candidateKinds = [
+    { method: "addWeaknessCandidate", key: "weaknessCandidates", value: "manual weakness" },
+    { method: "addFavoriteCandidate", key: "favoriteCandidateIds", value: "manual-v1:Alex" },
+  ] as const;
+
+  it("migrates old selections into candidates and retains them after deselection", async () => {
+    const legacy: Partial<ProfileSettings> = { ...existingProfile, favoriteIds: ["old-id"], topFavoriteIds: ["old-id"] };
+    delete legacy.weaknessCandidates;
+    delete legacy.favoriteCandidateIds;
+    storedProfile = JSON.stringify(legacy);
+
+    expect(await profileService.load()).toMatchObject({ weaknessCandidates: ["previous"], favoriteCandidateIds: ["old-id"] });
+    await profileService.saveWeaknesses([]);
+    await profileService.patch({ favoriteIds: [] });
+    expect(await profileService.load()).toMatchObject({
+      weaknesses: [], topWeaknesses: [], favoriteIds: [], topFavoriteIds: [],
+      weaknessCandidates: ["previous"], favoriteCandidateIds: ["old-id"],
+    });
+  });
+
+  it("adds candidates without selecting or ranking them and treats duplicate additions as no-ops", async () => {
+    await profileService.patch({ topWeaknesses: ["previous"], favoriteIds: ["selected-id"], topFavoriteIds: ["selected-id"] });
+    storage.setItem.mockClear();
+
+    await profileService.addWeaknessCandidate("manual weakness");
+    await profileService.addFavoriteCandidate("manual-v1:Alex");
+    const saved = await profileService.addWeaknessCandidate("manual weakness");
+    await profileService.addFavoriteCandidate("manual-v1:Alex");
+    expect(saved).toMatchObject({
+      ...existingProfile, topWeaknesses: ["previous"], favoriteIds: ["selected-id"], topFavoriteIds: ["selected-id"],
+      weaknessCandidates: ["previous", "manual weakness"], favoriteCandidateIds: ["selected-id", "manual-v1:Alex"],
+    });
+    expect(storage.setItem).toHaveBeenCalledTimes(2);
+    saved.weaknessCandidates.push("local-only");
+    saved.favoriteCandidateIds.length = 0;
+    expect(await profileService.load()).toMatchObject({
+      weaknessCandidates: ["previous", "manual weakness"], favoriteCandidateIds: ["selected-id", "manual-v1:Alex"],
+    });
+  });
+
+  it.each(candidateKinds)("keeps old data and allows retry after $method fails", async ({ method, key, value }) => {
+    const previous = storedProfile;
+    const failure = new Error("storage full");
+    storage.setItem.mockRejectedValueOnce(failure);
+
+    await expect(profileService[method](value)).rejects.toBe(failure);
+    expect(storedProfile).toBe(previous);
+    const saved = await profileService[method](value);
+    expect(saved[key]).toContain(value);
+    expect(saved).toMatchObject({ weaknesses: ["previous"], topWeaknesses: [], favoriteIds: [], topFavoriteIds: [] });
+    expect(storage.setItem).toHaveBeenCalledTimes(2);
+    expect(storage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it.each(candidateKinds)("does not replace existing data when $method cannot read it", async ({ method, value }) => {
+    const failure = new Error("read failed");
+    storage.getItem.mockRejectedValueOnce(failure);
+    await expect(profileService[method](value)).rejects.toBe(failure);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it.each(["save", "baseline", "patch"] as const)("preserves candidates when an older %s draft is saved", async (method) => {
+    const baseline = await profileService.load();
+    const draft = { ...baseline, tissueCount: "8" };
+    await Promise.all([
+      profileService.addWeaknessCandidate("manual weakness"),
+      profileService.addFavoriteCandidate("manual-v1:Alex"),
+    ]);
+
+    const saved = method === "patch" ? await profileService.patch(draft)
+      : await profileService.save(draft, method === "baseline" ? baseline : undefined);
+    expect(saved).toMatchObject({
+      ...existingProfile, tissueCount: "8", weaknessCandidates: ["previous", "manual weakness"], favoriteCandidateIds: ["manual-v1:Alex"],
+    });
+  });
+
+  it("queues candidate additions with snapshotted selection updates and later loads", async () => {
+    const started = deferred();
+    const finish = deferred();
+    storage.setItem.mockImplementationOnce(async (_key: string, value: string) => {
+      started.resolve();
+      await finish.promise;
+      storedProfile = value;
+    });
+    const adding = profileService.addWeaknessCandidate("first");
+    await started.promise;
+    const weaknessCandidates = ["second"];
+    const favoriteCandidateIds = ["manual-v1:Alex"];
+    const saving = profileService.patch({ weaknesses: [], weaknessCandidates, favoriteCandidateIds });
+    weaknessCandidates.push("late");
+    favoriteCandidateIds.length = 0;
+    const addingFavorite = profileService.addFavoriteCandidate("manual-v1:Sam");
+    const loading = profileService.load();
+    await Promise.resolve();
+    expect(storage.getItem).toHaveBeenCalledTimes(1);
+    expect(storage.setItem).toHaveBeenCalledTimes(1);
+
+    finish.resolve();
+    await Promise.all([adding, saving, addingFavorite]);
+    expect(await loading).toMatchObject({
+      ...existingProfile, weaknesses: [], weaknessCandidates: ["previous", "first", "second"],
+      favoriteCandidateIds: ["manual-v1:Alex", "manual-v1:Sam"],
+    });
   });
 });
 

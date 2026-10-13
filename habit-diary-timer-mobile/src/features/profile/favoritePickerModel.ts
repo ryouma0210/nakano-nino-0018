@@ -5,12 +5,12 @@ const fixedCandidateIds = favoriteCatalog.map((candidate) => candidate.id);
 
 export function favoritePickerCandidates(
   selected: readonly string[],
-  sessionCandidates: readonly string[],
+  candidateIds: readonly string[],
   query: string,
   category: FavoriteCategory | "all" = "all",
 ): FavoriteCandidate[] {
   const terms = normalizeSearchText(query).trim().split(/\s+/).filter(Boolean);
-  return resolveFavorites([...fixedCandidateIds, ...sessionCandidates, ...selected]).filter((candidate) => {
+  return resolveFavorites([...fixedCandidateIds, ...candidateIds, ...selected]).filter((candidate) => {
     if (category !== "all" && candidate.category !== category) return false;
     const displayName = normalizeSearchText(favoriteDisplayName(candidate.id));
     return terms.every((term) => displayName.includes(term));
@@ -20,13 +20,13 @@ export function favoritePickerCandidates(
 export type AddManualFavoriteResult = {
   addedName: string;
   selected: string[];
-  sessionCandidates: string[];
+  candidateIds: string[];
 } | { error: string };
 
 export function addManualFavorite(
   input: string,
   selected: readonly string[],
-  sessionCandidates: readonly string[],
+  candidateIds: readonly string[],
 ): AddManualFavoriteResult {
   const name = input.trim();
   if (!name) return { error: "名前を入力してください。" };
@@ -36,14 +36,14 @@ export function addManualFavorite(
   if (selected.some(sameDisplayName)) return { error: "このオカズはすでに選択されています。" };
   let id: string;
   try {
-    // Re-select matching session/fixed suggestions instead of adding an alias of the same display name.
-    id = [...sessionCandidates, ...fixedCandidateIds].find(sameDisplayName) ?? createManualFavoriteId(name);
+    // Re-select matching saved/fixed suggestions instead of adding an alias of the same display name.
+    id = [...candidateIds, ...fixedCandidateIds].find(sameDisplayName) ?? createManualFavoriteId(name);
   } catch {
     return { error: "名前を入力してください。" };
   }
   return {
     addedName: findFavorite(id)?.name ?? name,
     selected: [...selected, id],
-    sessionCandidates: [...new Set([...sessionCandidates, id])],
+    candidateIds: [...new Set([...candidateIds, id])],
   };
 }

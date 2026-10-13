@@ -126,10 +126,12 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
-  it.each(["android", "web"])("round-trips profile rankings and its private image in complete backups on %s", async (platform) => {
+  it.each(["android", "web"])("round-trips profile rankings, unselected candidates and its private image in complete backups on %s", async (platform) => {
     mocks.platform.OS = platform;
     const saved = JSON.stringify({ weaknesses: ["a", "b", "c", "d", "e", "f"], topWeaknesses: ["f", "a"],
-      favoriteIds: ["one", "two", "three", "four"], topFavoriteIds: ["four", "one"], photoFileName: "profile.png" });
+      weaknessCandidates: ["a", "b", "c", "d", "e", "f", "unselected weakness"],
+      favoriteIds: ["one", "two", "three", "four"], favoriteCandidateIds: ["one", "two", "three", "four", "unselected favorite"],
+      topFavoriteIds: ["four", "one"], photoFileName: "profile.png" });
     mocks.storage.set("nino-room:profile", saved);
     const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
     const photo = { name: "profile.png", purpose: "profile", size: png.length, uri: "file:///profile.png" };
@@ -423,11 +425,11 @@ describe("bounded backup export and import", () => {
     expect(mocks.execute.mock.calls.some(([sql]) => sql.includes("INSERT OR IGNORE INTO point_transactions"))).toBe(false);
   });
 
-  it("round-trips a level 150 player without raising a level 100 enemy", async () => {
+  it.each([[150, 100], [999, 999]])("round-trips player level %i and enemy level %i without changing either", async (playerLevel, enemyLevel) => {
     const rows = [
-      { setting_key: "outside_game_level", setting_value: "150", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_level", setting_value: String(playerLevel), updated_at: "2026-10-06 12:00:00" },
       { setting_key: "outside_game_level_date", setting_value: "2026-10-06", updated_at: "2026-10-06 12:00:00" },
-      { setting_key: "outside_game_succubus_absorb_today", setting_value: "100", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_succubus_absorb_today", setting_value: String(enemyLevel), updated_at: "2026-10-06 12:00:00" },
     ];
     mocks.query.mockImplementation((sql: string) => sql === "SELECT * FROM app_settings" ? structuredClone(rows) : []);
     const payload = await savePayload();
