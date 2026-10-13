@@ -5,10 +5,10 @@ import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable
 import { router, useFocusEffect } from "expo-router";
 import {
   createVideoPlayer,
-  useVideoPlayer,
   VideoView,
   type VideoThumbnail as GeneratedVideoThumbnail,
 } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { Image as ExpoImage } from "expo-image";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
@@ -83,7 +83,7 @@ export default function FilesScreen() {
     const startingMaintenance = fileStorageService.getMaintenanceState();
     if (startingMaintenance.active) return;
     const version = ++loadVersionRef.current;
-    const nextFiles = (await fileStorageService.list()).filter((file) => file.purpose !== "chastity");
+    const nextFiles = (await fileStorageService.list()).filter((file) => getFileUsages(file).length > 0);
     const currentMaintenance = fileStorageService.getMaintenanceState();
     if (currentMaintenance.active || currentMaintenance.revision !== startingMaintenance.revision) return;
     if (focusedRef.current && version === loadVersionRef.current) setFiles(nextFiles);
@@ -603,7 +603,7 @@ function VideoThumbnail({
 }
 
 function VideoThumbnailPreview({ uri }: { uri: string }) {
-  const player = useVideoPlayer({ uri }, (instance) => {
+  const player = useAppVideoPlayer({ uri }, (instance) => {
     instance.loop = false;
     instance.muted = true;
     instance.volume = 0;

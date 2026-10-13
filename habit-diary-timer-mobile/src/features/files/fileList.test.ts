@@ -11,10 +11,12 @@ describe("stored file list", () => {
     const shared = { ...file("shared.mp4"), usages: ["punishment", "endurance"] as const };
     const stored: StoredFile = { ...shared, usages: [...shared.usages] };
     const privatePhoto = file("daily.png", "chastity");
+    const profilePhoto = file("profile.png", "profile");
     expect(filterAndSortFiles([stored, privatePhoto], "training", "", "name")).toEqual([]);
     expect(filterAndSortFiles([stored, privatePhoto], "punishment", "", "name")).toEqual([stored]);
     expect(filterAndSortFiles([stored, privatePhoto], "endurance", "", "name")).toEqual([stored]);
-    expect(filterAndSortFiles([stored, privatePhoto], "all", "", "name")).toEqual([stored]);
+    expect(filterAndSortFiles([stored, privatePhoto, profilePhoto], "all", "", "name")).toEqual([stored]);
+    expect(filterAndSortFiles([profilePhoto], "training", "", "name")).toEqual([]);
     expect(storedFileKey(stored)).toBe("training:shared.mp4");
   });
 

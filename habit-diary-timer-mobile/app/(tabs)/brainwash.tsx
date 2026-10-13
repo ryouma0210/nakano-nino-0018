@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
@@ -124,7 +125,7 @@ function BrainwashVideo({
   fullscreen: boolean;
   onOpen: () => void;
 }) {
-  const player = useVideoPlayer(require("../../assets/videos/brainwash_01.mp4"), (instance) => {
+  const player = useAppVideoPlayer(require("../../assets/videos/brainwash_01.mp4"), (instance) => {
     instance.loop = true;
     instance.muted = true;
     instance.volume = 0;
@@ -170,7 +171,7 @@ function BrainwashVideo({
 }
 
 function BrainwashFullscreenVideo() {
-  const player = useVideoPlayer(require("../../assets/videos/brainwash_01.mp4"), (instance) => {
+  const player = useAppVideoPlayer(require("../../assets/videos/brainwash_01.mp4"), (instance) => {
     instance.loop = true;
     instance.muted = true;
     instance.volume = 0;

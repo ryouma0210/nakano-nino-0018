@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
@@ -98,7 +99,7 @@ function DefeatContent({ savedChecks }: { savedChecks: string[] | undefined }) {
   const { showNotice, showError } = useAppModal();
   const { settings, playEffect, stopEffect, setSessionAudioActive } =
     useAppAudio();
-  const defeatPlayer = useVideoPlayer(
+  const defeatPlayer = useAppVideoPlayer(
     require("../../assets/videos/defeat_01.mp4"),
     (player) => {
       player.loop = true;
@@ -300,7 +301,7 @@ function DefeatContent({ savedChecks }: { savedChecks: string[] | undefined }) {
 }
 
 function DefeatFullscreenVideo() {
-  const player = useVideoPlayer(
+  const player = useAppVideoPlayer(
     require("../../assets/videos/defeat_01.mp4"),
     (instance) => {
       instance.loop = true;

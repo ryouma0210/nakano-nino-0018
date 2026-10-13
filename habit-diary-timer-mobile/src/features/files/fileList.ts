@@ -1,5 +1,5 @@
 import type { FilePurpose, StoredFile } from "../../services/fileStorageService";
-import { fileHasPurpose } from "./usages";
+import { fileHasPurpose, getFileUsages } from "./usages";
 import { normalizeSearchText } from "@nino/shared/search";
 
 export type FileSortOrder = "newest" | "oldest" | "name" | "size";
@@ -36,7 +36,7 @@ export function filterAndSortFiles(
   sort: FileSortOrder,
 ) {
   return filterFilesByName(files, search).filter((file) => (
-    file.purpose !== "chastity" && (purpose === "all" || fileHasPurpose(file, purpose))
+    getFileUsages(file).length > 0 && (purpose === "all" || fileHasPurpose(file, purpose))
   )).sort((left, right) => {
     const a = storedNameParts(left.name);
     const b = storedNameParts(right.name);

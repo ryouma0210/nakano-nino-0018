@@ -9,7 +9,7 @@ import { AppText } from "./AppText";
 type Props = {
   label: string;
   value: string;
-  options: readonly { value: string; label: string }[];
+  options: readonly { value: string; label: string; localize?: boolean }[];
   onChange: (value: string) => void;
   disabled?: boolean;
   testID?: string;
@@ -20,17 +20,19 @@ export function SelectField({ label, value, options, onChange, disabled = false,
   const language = settings?.language ?? "ja";
   const [open, setOpen] = useState(false);
   // Keep previously saved values visible even when the available choices change.
-  const display = options.find((option) => option.value === value)?.label ?? value;
+  const selectedOption = options.find((option) => option.value === value);
+  const display = selectedOption?.label ?? value;
+  const localizeDisplay = selectedOption?.localize !== false;
   useEffect(() => { setOpen(false); }, [disabled, value]);
 
   return <View style={styles.wrap}>
     <AppText variant="label">{label}</AppText>
     <Pressable testID={testID} accessibilityRole="button"
-      accessibilityLabel={`${translateText(label, language)} ${translateText(display, language)}`}
+      accessibilityLabel={`${translateText(label, language)} ${localizeDisplay ? translateText(display, language) : display}`}
       accessibilityState={{ expanded: open && !disabled, disabled }} disabled={disabled}
       onPress={() => setOpen((previous) => !previous)} onAccessibilityEscape={() => setOpen(false)}
       style={({ pressed }) => [styles.field, disabled && styles.disabled, pressed && styles.pressed]}>
-      <AppText style={styles.value}>{display}</AppText>
+      <AppText localize={localizeDisplay} style={styles.value}>{display}</AppText>
       <Ionicons name={open && !disabled ? "chevron-up" : "chevron-down"} size={18} color={lightTheme.text} accessible={false} />
     </Pressable>
     {open && !disabled ? <View testID={testID ? `${testID}-options` : undefined}
@@ -38,11 +40,11 @@ export function SelectField({ label, value, options, onChange, disabled = false,
       <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.list}>
         {options.map((option) => <Pressable key={option.value}
           testID={testID ? `${testID}-option-${option.value || "empty"}` : undefined}
-          accessibilityRole="radio" accessibilityLabel={translateText(option.label, language)}
+          accessibilityRole="radio" accessibilityLabel={option.localize === false ? option.label : translateText(option.label, language)}
           accessibilityState={{ checked: option.value === value }}
           onPress={() => { setOpen(false); onChange(option.value); }}
           style={({ pressed }) => [styles.option, option.value === value && styles.selected, pressed && styles.pressed]}>
-          <AppText style={styles.value}>{option.label}</AppText>
+          <AppText localize={option.localize !== false} style={styles.value}>{option.label}</AppText>
           {option.value === value ? <Ionicons name="checkmark" size={18} color={lightTheme.text} accessible={false} /> : null}
         </Pressable>)}
       </ScrollView>
