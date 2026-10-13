@@ -8,20 +8,20 @@ describe("outside game logic", () => {
   });
   it("clamps stats", () => { expect(clamp(-1)).toBe(0); expect(clamp(120)).toBe(100); });
   it("allows player levels above 100 while keeping the enemy cap at 100", () => {
-    expect(PLAYER_MAX_LEVEL).toBe(120);
+    expect(PLAYER_MAX_LEVEL).toBe(150);
     expect(ENEMY_MAX_LEVEL).toBe(100);
-    for (const value of [101, 110, 119, 120]) {
+    for (const value of [101, 110, 119, 120, ...Array.from({ length: 30 }, (_, index) => index + 121)]) {
       expect(clampPlayerLevel(value)).toBe(value);
       expect(clampEnemyLevel(value)).toBe(100);
     }
-    expect(clampPlayerLevel(121)).toBe(120);
+    expect(clampPlayerLevel(151)).toBe(150);
     expect(clampPlayerLevel(0)).toBe(1);
     expect(clampEnemyLevel(0)).toBe(1);
   });
-  it("keeps enemies capped when generated from a level 120 player or a saved enemy level", () => {
-    expect(succubusForLevel(120, 0)).toMatchObject({ level: 100, stage: "queen" });
-    expect(succubusForLevel(120, 120)).toMatchObject({ level: 100, stage: "queen" });
-    expect(succubusForLevel(120, 29)).toMatchObject({ level: 29, stage: "beginner" });
+  it("keeps enemies capped when generated from a level 150 player or a saved enemy level", () => {
+    expect(succubusForLevel(150, 0)).toMatchObject({ level: 100, stage: "queen" });
+    expect(succubusForLevel(150, 150)).toMatchObject({ level: 100, stage: "queen" });
+    expect(succubusForLevel(150, 29)).toMatchObject({ level: 29, stage: "beginner" });
   });
   it("selects enemy stages at boundaries", () => {
     expect(succubusForLevel(29, 0).stage).toBe("beginner");
