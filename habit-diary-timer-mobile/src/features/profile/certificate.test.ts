@@ -3,10 +3,17 @@ import {
   activityCertificateFileName, createActivityCertificateHtml, createActivityCertificatePresentation, formatCertificateDuration,
   validateCertificatePhotoDataUrl, type ActivityCertificateData,
 } from "./certificate";
+import type { FavoriteCandidate } from "./catalog";
 
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lWQAAAAASUVORK5CYII=";
+const favorites: readonly FavoriteCandidate[] = [
+  { id: "fixture-a", name: "Alex", category: "anime", work: "Fixture Story" },
+  { id: "fixture-b", name: "Sam", category: "custom" },
+  { id: "fixture-c", name: "Robin", category: "custom" },
+  { id: "fixture-d", name: "Casey", category: "custom" },
+];
 const data: ActivityCertificateData = {
-  name: "Test User", photoDataUrl: png, topWeaknesses: ["Early mornings", "Cold weather"],
+  name: "Test User", photoDataUrl: png, topFavorites: favorites.slice(0, 3), topWeaknesses: ["Early mornings", "Cold weather"],
   erectionLengthCm: "12.50", masturbationPerWeek: "0",
   favoriteCount: 12, weaknessCount: 17, longestActivitySeconds: 3661, totalTimerSeconds: 100000,
   outsidePlayerLevel: 150, outsideSuccubusLevel: 220,
@@ -18,39 +25,40 @@ describe("activity certificate HTML", () => {
     const input = {
       ...data, privateNotes: "PRIVATE_NOTE", weaknessCandidates: ["PRIVATE_CANDIDATE"],
       favoriteCandidateIds: ["PRIVATE_FAVORITE"], sexualExperience: "PRIVATE_STATUS", weaknesses: ["PRIVATE_UNRANKED"],
-      topFavorites: [{ id: "PRIVATE_ID", name: "PRIVATE_PERSON", category: "custom", work: "PRIVATE_WORK" }],
       rightHeaderLabel: "PRIVATE_HEADER", rightHeaderValue: "PRIVATE_PERSON",
     } as ActivityCertificateData;
     const html = createActivityCertificateHtml(input);
     expect(html).toContain("活動記録証明書");
     expect(html).toContain('class="page activity-certificate"');
     expect(html).toContain(`src="${png}"`);
+    expect(html.indexOf("Alex")).toBeLessThan(html.indexOf("Sam"));
+    expect(html.indexOf("Sam")).toBeLessThan(html.indexOf("Robin"));
+    expect(html).toContain("アニメ / Fixture Story");
     expect(html.indexOf("Early mornings")).toBeLessThan(html.indexOf("Cold weather"));
     expect(html).toContain("01:01:01");
     expect(html).toContain("27:46:40");
     expect(html).toContain("12,000 Pt");
     expect(html).not.toContain("PRIVATE_");
     expect(JSON.stringify(createActivityCertificatePresentation(input))).not.toContain("PRIVATE_");
-    for (const field of ["favorites", "favoritesLabel", "emptyFavoritesLabel", "rightHeaderLabel", "rightHeaderValue"]) {
-      expect(createActivityCertificatePresentation(input)).not.toHaveProperty(field);
-    }
-    expect(html).not.toContain('class="ranking-column favorites"');
   });
 
   it("escapes names, weaknesses and recorded strings without allowing HTML injection", () => {
     const html = createActivityCertificateHtml({ ...data, name: '<img src=x onerror="bad">&\'',
       erectionLengthCm: '<span>12.50 & "value"</span>', masturbationPerWeek: '</td><script>bad()</script>',
+      topFavorites: [{ id: "fixture", name: "<Name & Friend>", work: '</span><script>bad()</script>', category: "anime" }],
       topWeaknesses: ['<script>weakness("x")</script> & \'quoted\''],
     }, "en");
     expect(html).toContain("&lt;img src=x onerror=&quot;bad&quot;&gt;&amp;&#39;");
     expect(html).toContain("&lt;span&gt;12.50 &amp; &quot;value&quot;&lt;/span&gt;");
     expect(html).toContain("&lt;/td&gt;&lt;script&gt;bad()&lt;/script&gt;");
+    expect(html).toContain("&lt;Name &amp; Friend&gt;");
+    expect(html).toContain("&lt;/span&gt;&lt;script&gt;bad()&lt;/script&gt;");
     expect(html).toContain("&lt;script&gt;weakness(&quot;x&quot;)&lt;/script&gt; &amp; &#39;quoted&#39;");
     expect(html).not.toContain("<script>");
   });
 
   it("limits weaknesses to five unique entries and handles missing photo or activity", () => {
-    const html = createActivityCertificateHtml({ ...data, photoDataUrl: null, longestActivitySeconds: null,
+    const html = createActivityCertificateHtml({ ...data, photoDataUrl: null, longestActivitySeconds: null, topFavorites: [],
       topWeaknesses: ["First", "First", "Second", "Third", "Fourth", "Fifth", "Sixth"],
     });
     expect(html.match(/<li>/g)).toHaveLength(5);
@@ -73,11 +81,11 @@ describe("activity certificate HTML", () => {
     expect(activityCertificateFileName(data.issuedAt, data.name)).toBe("活動記録証明書_2026-10-13_TestUser.png");
   });
 
-  it("renders personal weaknesses and five four-cell metric rows in their published order", () => {
+  it("renders both rankings and five four-cell metric rows in their published order", () => {
     const html = createActivityCertificateHtml(data);
     expect(html).toContain("弱点上位5");
-    expect(html).not.toContain("オカズ上位3");
-    expect(html.match(/<ol\b/g)).toHaveLength(1);
+    expect(html).toContain('class="ranking-column favorites"');
+    expect(html.match(/<ol\b/g)).toHaveLength(2);
     const rows = html.match(/<tr>[\s\S]*?<\/tr>/g)!;
     expect(rows).toHaveLength(5);
     for (const row of rows) {
@@ -94,9 +102,12 @@ describe("activity certificate HTML", () => {
 
 describe("shared image certificate content", () => {
   it("gives native and browser renderers the same localized values, with plain proper names", () => {
-    const content = createActivityCertificatePresentation({ ...data, name: "A & B" }, "en");
+    const content = createActivityCertificatePresentation({ ...data, name: "A & B",
+      topFavorites: [favorites[0], favorites[0], ...favorites.slice(1)],
+    }, "en");
     expect(content.name).toBe("A & B");
     expect(content.title).toBe("Activity Record Certificate");
+    expect(content.favorites.map(({ name }) => name)).toEqual(["Alex", "Sam", "Robin"]);
     expect(content.weaknesses).toEqual(["Early mornings", "Cold weather"]);
     expect(content.metrics.map(({ value }) => value)).toEqual(["12.50", "0", "17", "12", "01:01:01", "27:46:40", "150", "220", "12,000 Pt", "450 Pt"]);
     expect(content.metricRows).toEqual([content.metrics.slice(0, 2), content.metrics.slice(2, 4), content.metrics.slice(4, 6), content.metrics.slice(6, 8), content.metrics.slice(8, 10)]);
@@ -126,6 +137,24 @@ describe("shared image certificate content", () => {
   ])("preserves recorded strings $length / $frequency, trimming only surrounding whitespace", ({ length, frequency, expected }) => {
     const content = createActivityCertificatePresentation({ ...data, erectionLengthCm: length, masturbationPerWeek: frequency });
     expect(content.metrics.slice(0, 2).map(({ value }) => value)).toEqual(expected);
+  });
+
+  it.each([
+    { state: "omitted", values: {} },
+    { state: "undefined", values: { erectionLengthCm: undefined, masturbationPerWeek: undefined } },
+    { state: "null", values: { erectionLengthCm: null, masturbationPerWeek: null } },
+    { state: "empty", values: { erectionLengthCm: "", masturbationPerWeek: "" } },
+  ])("renders $state optional records as unset in presentation and HTML", ({ values }) => {
+    const input = { ...data };
+    delete input.erectionLengthCm;
+    delete input.masturbationPerWeek;
+    Object.assign(input, values);
+    const content = createActivityCertificatePresentation(input, "en");
+    expect(content.metrics.slice(0, 2).map(({ value }) => value)).toEqual(["Not set", "Not set"]);
+    expect(content.metricRows).toHaveLength(5);
+    const html = createActivityCertificateHtml(input, "en");
+    const firstRow = html.match(/<tr>[\s\S]*?<\/tr>/)?.[0];
+    expect(firstRow?.match(/<td>Not set<\/td>/g)).toHaveLength(2);
   });
 });
 

@@ -14,8 +14,8 @@ export type ActivityCertificateData = {
   topFavorites: readonly FavoriteCandidate[];
   favoriteCount: number;
   weaknessCount: number;
-  erectionLengthCm: string;
-  masturbationPerWeek: string;
+  erectionLengthCm?: string | null;
+  masturbationPerWeek?: string | null;
   longestActivitySeconds: number | null;
   totalTimerSeconds: number;
   outsidePlayerLevel: number;
@@ -136,8 +136,8 @@ export function createActivityCertificatePresentation(
     ...new Set(data.topWeaknesses.map((name) => name.trim()).filter(Boolean)),
   ].slice(0, 5);
   const values: [string, string][] = [
-    ["長さ（cm）", data.erectionLengthCm.trim() || t("未設定")],
-    ["頻度（回/1週間）", data.masturbationPerWeek.trim() || t("未設定")],
+    ["長さ（cm）", data.erectionLengthCm?.trim() || t("未設定")],
+    ["頻度（回/1週間）", data.masturbationPerWeek?.trim() || t("未設定")],
     ["弱点登録数", number(data.weaknessCount)],
     ["オカズ登録数", number(data.favoriteCount)],
     [

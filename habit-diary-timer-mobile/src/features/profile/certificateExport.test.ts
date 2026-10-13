@@ -24,7 +24,7 @@ vi.mock("./certificateImage", () => ({ downloadCertificatePng: mocks.download, r
 vi.mock("./certificatePrint", () => ({ printCertificateHtml: mocks.webPrint }));
 
 const data: ActivityCertificateData = {
-  name: "Test #User%", favoriteCount: 0, topWeaknesses: ["Cold weather"], weaknessCount: 7, longestActivitySeconds: null,
+  name: "Test #User%", topFavorites: [], favoriteCount: 0, topWeaknesses: ["Cold weather"], weaknessCount: 7, longestActivitySeconds: null,
   erectionLengthCm: "12.50", masturbationPerWeek: "0",
   totalTimerSeconds: 0, totalEarnedPoints: 0, currentPoints: 0, issuedAt: new Date(2026, 9, 13, 0, 3, 4),
   outsidePlayerLevel: 450, outsideSuccubusLevel: 999,
@@ -113,6 +113,30 @@ describe("activity certificate export", () => {
     await expect(exportImage()).rejects.toThrow("image decode failed");
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.copy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { state: "omitted", values: {} },
+    { state: "undefined", values: { erectionLengthCm: undefined, masturbationPerWeek: undefined } },
+    { state: "null", values: { erectionLengthCm: null, masturbationPerWeek: null } },
+    { state: "empty", values: { erectionLengthCm: "", masturbationPerWeek: "" } },
+  ])("exports $state optional records through browser and Android save paths", async ({ values }) => {
+    const input = { ...data };
+    delete input.erectionLengthCm;
+    delete input.masturbationPerWeek;
+    Object.assign(input, values);
+    mocks.platform.OS = "web";
+    await expect(exportActivityCertificate(input, "ja", "save")).resolves.toEqual({ status: "saved", fileName });
+    const firstRow = mocks.renderWeb.mock.calls[0][0].match(/<tr>[\s\S]*?<\/tr>/)?.[0];
+    expect(firstRow?.match(/<td>未設定<\/td>/g)).toHaveLength(2);
+    expect(mocks.download).toHaveBeenCalledWith(png, fileName);
+
+    mocks.platform.OS = "android";
+    await expect(exportActivityCertificate(input, "ja", "save", mocks.renderNative)).resolves.toEqual({
+      status: "saved", fileName, uri: "content://chosen/certificate.png",
+    });
+    expect(mocks.renderNative).toHaveBeenCalledWith(input, "ja");
+    expect(mocks.write).toHaveBeenCalledWith("content://chosen/certificate.png", "iVBORw0KGgo=", { encoding: "base64" });
   });
 
   it("removes temporary and incomplete shared images after share failure", async () => {
