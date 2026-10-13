@@ -89,7 +89,21 @@ jobs:
 
       - name: Install rclone
         shell: pwsh
-        run: choco install rclone -y --no-progress
+        run: |
+          $ErrorActionPreference = "Stop"
+          $rcloneDirectory = Join-Path $env:RUNNER_TEMP "rclone"
+          $rcloneArchive = Join-Path $env:RUNNER_TEMP "rclone-windows-amd64.zip"
+          Invoke-WebRequest -Uri "https://downloads.rclone.org/rclone-current-windows-amd64.zip" `
+            -OutFile $rcloneArchive -MaximumRetryCount 3 -RetryIntervalSec 5
+          Expand-Archive -LiteralPath $rcloneArchive -DestinationPath $rcloneDirectory -Force
+          $rcloneExecutables = @(Get-ChildItem -LiteralPath $rcloneDirectory -Filter "rclone.exe" -File -Recurse)
+          if ($rcloneExecutables.Count -ne 1) {
+            throw "Expected one rclone.exe in the downloaded archive; found $($rcloneExecutables.Count)."
+          }
+          $rcloneExecutable = $rcloneExecutables[0]
+          & $rcloneExecutable.FullName version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $rcloneExecutable.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         working-directory: .
 
       - name: Configure Google Drive upload

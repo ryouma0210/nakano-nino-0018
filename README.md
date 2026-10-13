@@ -909,6 +909,7 @@ Google DriveアップロードにはRepository secret `GDRIVE_RCLONE_CONFIG_BASE
 | APKビルドがJava heap spaceで失敗 | WorkflowのGradleメモリ設定と同時worker数を確認 |
 | Android SDK設定が `Failed to find package 'tools'` で失敗 | `setup-android` の `packages` に `platform-tools` を明示し、取得できない旧 `tools` パッケージを除外する |
 | Google Driveアップロード失敗 | `GDRIVE_RCLONE_CONFIG_BASE64` とrclone remote名 `gdrive` を確認 |
+| Windows版のアップロードで `rclone` が見つからない | 公式Windows ZIPを取得し、実行確認と `GITHUB_PATH` への登録を行うWorkflowに更新。修正を `stg`／`production` に反映してから新しいビルドを実行する。古い失敗ジョブの再実行だけでは修正前のWorkflowが使われる |
 
 ## キャラクター画像
 
