@@ -6,8 +6,8 @@ export type MapSlime = MapPosition & { id: number; active: boolean };
 
 export const ATTACK_MP_COST = 20;
 export const ESCAPE_MP_COST = 50;
-export const PLAYER_MAX_LEVEL = 150;
-export const ENEMY_MAX_LEVEL = 100;
+export const PLAYER_MAX_LEVEL = 999;
+export const ENEMY_MAX_LEVEL = 999;
 
 export function clampPlayerLevel(value: number) {
   return Math.max(1, Math.min(PLAYER_MAX_LEVEL, Number.isFinite(value) ? Math.trunc(value) : 1));
@@ -56,7 +56,7 @@ export function charmDefenseCount(stage: SuccubusStage) {
 }
 export function succubusForLevel(level: number, savedLevel: number) {
   const value = clampEnemyLevel(savedLevel > 0 ? savedLevel : level);
-  if (value < 30) return { stage: "beginner" as const, title: "初級サキュバス", level: value, message: "Lv.1〜30。油断した相手を逆転する小悪魔。", color: "#ff69b4" };
+  if (value < 30) return { stage: "beginner" as const, title: "初級サキュバス", level: value, message: "Lv.1〜29。油断した相手を逆転する小悪魔。", color: "#ff69b4" };
   if (value < 80) return { stage: "middle" as const, title: "上級サキュバス", level: value, message: "Lv.30〜79。駆け引きと選択肢で揺さぶってくる。", color: "#9b5de5" };
-  return { stage: "queen" as const, title: "女王サキュバス", level: value, message: "Lv.80〜。圧倒的な格で、帰宅意思をねじ伏せにくる。", color: "#d9202a" };
+  return { stage: "queen" as const, title: "女王サキュバス", level: value, message: "Lv.80〜999。圧倒的な格で、帰宅意思をねじ伏せにくる。", color: "#d9202a" };
 }

@@ -29,7 +29,7 @@ describe("fixed and manual favorite picker", () => {
     const session = [...selected];
     const id = createManualFavoriteId("Sample Person");
     expect(addManualFavorite(" Sample Person ", selected, session)).toEqual({
-      addedName: "Sample Person", selected: [...selected, id], sessionCandidates: [...session, id],
+      addedName: "Sample Person", selected: [...selected, id], candidateIds: [...session, id],
     });
     expect(selected).toEqual(["actress-001"]);
     expect(session).toEqual(selected);
@@ -47,19 +47,19 @@ describe("fixed and manual favorite picker", () => {
   it("reselects an unchecked matching row without changing its name or ID", () => {
     const id = createManualFavoriteId("Sample Person");
     expect(addManualFavorite("ＳＡＭＰＬＥ ＰＥＲＳＯＮ", [], [id])).toEqual({
-      addedName: "Sample Person", selected: [id], sessionCandidates: [id],
+      addedName: "Sample Person", selected: [id], candidateIds: [id],
     });
     expect(addManualFavorite("橋本環奈", [], ["actress-001"])).toEqual({
-      addedName: "橋本環奈", selected: ["actress-001"], sessionCandidates: ["actress-001"],
+      addedName: "橋本環奈", selected: ["actress-001"], candidateIds: ["actress-001"],
     });
   });
 
   it("selects a matching fixed suggestion by display name even if it has never been registered", () => {
     expect(addManualFavorite("橋本環奈", [], [])).toEqual({
-      addedName: "橋本環奈", selected: ["actress-001"], sessionCandidates: ["actress-001"],
+      addedName: "橋本環奈", selected: ["actress-001"], candidateIds: ["actress-001"],
     });
     expect(addManualFavorite(favoriteDisplayName("anime-002"), [], [])).toEqual({
-      addedName: "中野二乃", selected: ["anime-002"], sessionCandidates: ["anime-002"],
+      addedName: "中野二乃", selected: ["anime-002"], candidateIds: ["anime-002"],
     });
     const manual = createManualFavoriteId("橋本環奈");
     expect(addManualFavorite("橋本環奈", [manual], [manual])).toEqual({ error: "このオカズはすでに選択されています。" });
@@ -74,12 +74,16 @@ describe("fixed and manual favorite picker", () => {
     ]);
   });
 
-  it("retains unchecked rows only within their modal session", () => {
+  it("offers saved manual candidates after deselection and reopening with no active selection", () => {
     const saved = ["actress-001"];
     const added = createManualFavoriteId("Sample Person");
     expect(favoritePickerCandidates(saved, [...saved, added], "").map((candidate) => candidate.id)).toContain(added);
-    // A reopened modal seeds its session from saved selections, discarding unsaved additions.
-    expect(favoritePickerCandidates(saved, saved, "")).toEqual(favoriteCatalog);
+    const persistedCandidates = [added];
+    expect(favoritePickerCandidates([], persistedCandidates, "sample").map((candidate) => candidate.id)).toEqual([added]);
+    expect(addManualFavorite("ＳＡＭＰＬＥ ＰＥＲＳＯＮ", [], persistedCandidates)).toEqual({
+      addedName: "Sample Person", selected: [added], candidateIds: [added],
+    });
+    expect(favoritePickerCandidates([], [], "")).toEqual(favoriteCatalog);
   });
 
   it("returns an input error for empty or malformed Unicode names without throwing", () => {

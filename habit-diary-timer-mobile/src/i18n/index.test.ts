@@ -59,6 +59,19 @@ describe("translateText", () => {
     expect(translateText("  画像\n", "ko")).toBe("  이미지\n");
   });
 
+  it.each([
+    ["ja", (rank: number) => `${rank}位`],
+    ["en", (rank: number) => `#${rank}`],
+    ["ko", (rank: number) => `${rank}위`],
+    ["zh", (rank: number) => `第${rank}位`],
+  ] as const)("renders numeric rank labels through the ranked editor's value API in %s", (language, expected) => {
+    for (const rank of [1, 3, 5]) {
+      expect(translateWithValues("{0}位", [String(rank)], language)).toBe(expected(rank));
+      expect(translateText(`${rank}位`, language)).toBe(expected(rank));
+    }
+    expect(translateText("TEST位", language)).toBe("TEST位");
+  });
+
   it("distinguishes calendar months and weekdays from durations", () => {
     expect(translateText("2026年9月14日（月）", "en")).toBe("September 14, 2026 (Mon)");
     expect(translateText("2026年9月14日（月）", "ko")).toBe("2026년 9월 14일 (월)");
@@ -139,6 +152,23 @@ describe("translateText", () => {
 });
 
 describe("translated text children", () => {
+  it.each([
+    { language: "en", separator: " / ", rules: ["Defend once to break the charm", "Defend twice to break the charm", "Defend three times to break the charm"] },
+    { language: "ko", separator: " / ", rules: ["방어 1회로 매혹 해제", "방어 2회로 매혹 해제", "방어 3회로 매혹 해제"] },
+    { language: "zh", separator: "／", rules: ["防御1次解除魅惑", "防御2次解除魅惑", "防御3次解除魅惑"] },
+  ] as const)("preserves encyclopedia HP values and translates each whole rule in $language", ({ language, separator, rules }) => {
+    const entries = [
+      { hp: 100, rule: "防御1回で魅了解除" },
+      { hp: 300, rule: "防御2回で魅了解除" },
+      { hp: "420〜4096", rule: "防御3回で魅了解除" },
+    ];
+    entries.forEach(({ hp, rule }, index) => {
+      const expected = `HP ${hp}${separator}${rules[index]}`;
+      expect(translateChildren(["HP ", hp, "／", rule], language)).toEqual([expected]);
+      expect(translateText(`HP ${hp}／${rule}`, language)).toBe(expected);
+    });
+  });
+
   it("joins adjacent JSX text and values before translating", () => {
     expect(translateChildren(["契約日から ", 1, "か月後"], "en"))
       .toEqual(["1 month after the contract date"]);

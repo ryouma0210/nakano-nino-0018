@@ -48,7 +48,7 @@ const templates = translationTemplates.map((entry) => {
       slots.push(Number(part.slice(1, -1)));
       const following = parts[index + 1] ?? "";
       const preceding = parts[index - 1] ?? "";
-      if (/^(pt|Pt|回|秒|分|日|か月|個|列|種類|体|枚|倍|レベル|HP|MP)/.test(following) || /(Lv\.|MP|HP|あと)$/.test(preceding)) {
+      if (/^(pt|Pt|回|秒|分|日|か月|個|列|種類|体|枚|倍|位|レベル|HP|MP)/.test(following) || /(Lv\.|MP|HP|あと)$/.test(preceding)) {
         return "\\s*?(-?\\d[\\d,]*(?:\\.\\d+)?)\\s*?";
       }
       return "(.*?)";

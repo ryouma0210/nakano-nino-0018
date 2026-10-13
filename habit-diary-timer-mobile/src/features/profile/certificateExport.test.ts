@@ -24,10 +24,12 @@ vi.mock("./certificateImage", () => ({ downloadCertificatePng: mocks.download, r
 vi.mock("./certificatePrint", () => ({ printCertificateHtml: mocks.webPrint }));
 
 const data: ActivityCertificateData = {
-  name: "Test #User%", topFavorites: [], favoriteCount: 0, activityCount: 0, longestActivitySeconds: null,
+  name: "Test #User%", topFavorites: [], favoriteCount: 0, topWeaknesses: ["Cold weather"], weaknessCount: 7, longestActivitySeconds: null,
+  erectionLengthCm: "12.50", masturbationPerWeek: "0",
   totalTimerSeconds: 0, totalEarnedPoints: 0, currentPoints: 0, issuedAt: new Date(2026, 9, 13, 0, 3, 4),
+  outsidePlayerLevel: 450, outsideSuccubusLevel: 999,
 };
-const fileName = "マゾ証明書_2026-10-13_Test#User%.png";
+const fileName = "活動記録証明書_2026-10-13_Test#User%.png";
 const imageUri = (directory: string, name = fileName) => `${directory}${encodeURIComponent(name)}`;
 const png = { dataUrl: "data:image/png;base64,iVBORw0KGgo=", width: 1588, height: 2238 };
 const exportImage = (action: "save" | "share" | "print" = "save") => exportActivityCertificate(data, "ja", action, mocks.renderNative);
@@ -93,9 +95,14 @@ describe("activity certificate export", () => {
     mocks.platform.OS = "web";
     expect(await exportImage()).toEqual({ status: "saved", fileName });
     expect(mocks.renderWeb).toHaveBeenCalledWith(expect.stringContaining("活動記録証明書"));
+    expect(mocks.renderWeb.mock.calls[0][0]).toContain("Cold weather");
+    expect(mocks.renderWeb.mock.calls[0][0]).toMatch(/長さ（cm）[\s\S]*?<td[^>]*>12\.50<\/td>[\s\S]*?頻度（回\/1週間）[\s\S]*?<td[^>]*>0<\/td>/);
+    expect(mocks.renderWeb.mock.calls[0][0]).toMatch(/弱点登録数[\s\S]*?<td[^>]*>7<\/td>/);
+    expect(mocks.renderWeb.mock.calls[0][0]).toMatch(/あなたLv\(館の外\)[\s\S]*?<td[^>]*>450<\/td>[\s\S]*?サキュバスLv\(館の外\)[\s\S]*?<td[^>]*>999<\/td>/);
     expect(mocks.download).toHaveBeenCalledWith(png, fileName);
     expect(await exportImage("print")).toEqual({ status: "printed", fileName });
     expect(mocks.webPrint).toHaveBeenCalledWith(expect.stringContaining('class="page activity-certificate"'));
+    expect(mocks.webPrint.mock.calls[0][0]).toBe(mocks.renderWeb.mock.calls[0][0]);
     expect(mocks.print).not.toHaveBeenCalled();
     expect(mocks.renderWeb).toHaveBeenCalledTimes(1);
     expect(mocks.renderNative).not.toHaveBeenCalled();
@@ -106,6 +113,30 @@ describe("activity certificate export", () => {
     await expect(exportImage()).rejects.toThrow("image decode failed");
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.copy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { state: "omitted", values: {} },
+    { state: "undefined", values: { erectionLengthCm: undefined, masturbationPerWeek: undefined } },
+    { state: "null", values: { erectionLengthCm: null, masturbationPerWeek: null } },
+    { state: "empty", values: { erectionLengthCm: "", masturbationPerWeek: "" } },
+  ])("exports $state optional records through browser and Android save paths", async ({ values }) => {
+    const input = { ...data };
+    delete input.erectionLengthCm;
+    delete input.masturbationPerWeek;
+    Object.assign(input, values);
+    mocks.platform.OS = "web";
+    await expect(exportActivityCertificate(input, "ja", "save")).resolves.toEqual({ status: "saved", fileName });
+    const firstRow = mocks.renderWeb.mock.calls[0][0].match(/<tr>[\s\S]*?<\/tr>/)?.[0];
+    expect(firstRow?.match(/<td>未設定<\/td>/g)).toHaveLength(2);
+    expect(mocks.download).toHaveBeenCalledWith(png, fileName);
+
+    mocks.platform.OS = "android";
+    await expect(exportActivityCertificate(input, "ja", "save", mocks.renderNative)).resolves.toEqual({
+      status: "saved", fileName, uri: "content://chosen/certificate.png",
+    });
+    expect(mocks.renderNative).toHaveBeenCalledWith(input, "ja");
+    expect(mocks.write).toHaveBeenCalledWith("content://chosen/certificate.png", "iVBORw0KGgo=", { encoding: "base64" });
   });
 
   it("removes temporary and incomplete shared images after share failure", async () => {

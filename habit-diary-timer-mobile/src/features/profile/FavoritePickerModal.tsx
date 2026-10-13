@@ -16,32 +16,34 @@ export { favoriteDisplayName } from "./catalog";
 type Props = {
   visible: boolean;
   selected: readonly string[];
+  candidateIds: readonly string[];
   ranked: readonly string[];
   saving: boolean;
   error: boolean;
   onSelectedChange: (ids: string[]) => void;
+  onAddCandidate: (id: string) => Promise<void>;
   onRankedChange: (ids: string[]) => void;
   onSave: () => void;
   onClose: () => void;
 };
 
 export function FavoritePickerModal(props: Props) {
-  // Each opening starts from its selected registrations. Closing discards local additions and inputs.
+  // Selection drafts and inputs reset on close; persisted candidates survive each session.
   return props.visible ? <FavoritePickerSession {...props} /> : null;
 }
 
-function FavoritePickerSession({ visible, selected, ranked, saving, error, onSelectedChange, onRankedChange, onSave, onClose }: Props) {
+function FavoritePickerSession({ visible, selected, candidateIds, ranked, saving, error, onSelectedChange, onAddCandidate, onRankedChange, onSave, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<FavoriteCategory | "all">("all");
-  const [sessionCandidates, setSessionCandidates] = useState<string[]>(() => [...selected]);
-  const candidates = useMemo(() => favoritePickerCandidates(selected, sessionCandidates, query, category), [category, query, selected, sessionCandidates]);
+  const candidates = useMemo(() => favoritePickerCandidates(selected, candidateIds, query, category), [category, query, selected, candidateIds]);
   const options = selected.map((id) => ({ value: id, label: favoriteDisplayName(id), localize: false }));
 
-  function addFavorite(name: string) {
-    const result = addManualFavorite(name, selected, sessionCandidates);
+  async function addFavorite(name: string) {
+    const result = addManualFavorite(name, selected, candidateIds);
     if ("error" in result) return result;
-    setSessionCandidates(result.sessionCandidates);
+    // Do not change the draft until the separate candidate has been stored successfully.
+    await onAddCandidate(result.selected[result.selected.length - 1]);
     onSelectedChange(result.selected);
     setQuery("");
     setCategory("all");
