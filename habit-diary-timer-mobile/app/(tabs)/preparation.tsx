@@ -3,7 +3,8 @@ import { Modal, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
 import { useEventListener } from "expo";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
@@ -32,7 +33,7 @@ export default function PreparationScreen() {
   const { showError } = useAppModal();
   const { settings, setRoomAudioScene } = useAppAudio();
   const playerName = settings?.playerName.trim() ?? "";
-  const preparationPlayer = useVideoPlayer(
+  const preparationPlayer = useAppVideoPlayer(
     require("../../assets/videos/preparation_1.mp4"),
     (player) => {
       player.loop = true;
@@ -236,7 +237,7 @@ export default function PreparationScreen() {
 }
 
 function PreparationFullscreenVideo() {
-  const player = useVideoPlayer(
+  const player = useAppVideoPlayer(
     require("../../assets/videos/preparation_1.mp4"),
     (instance) => {
       instance.loop = true;

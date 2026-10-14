@@ -15,6 +15,7 @@ import { useAppModal } from "@/components/AppModalProvider";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
+import { CalendarGrid } from "@/components/CalendarGrid";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -211,6 +212,8 @@ export default function DisposalHistoryScreen() {
           lines={roomMessages.disposalHistory.lines}
           contractLines={roomMessages.disposalHistory.contractLines}
         />
+        <RecordFilterFields filters={filters} onChange={recordFilters.update} ready={recordFilters.ready}
+          disabled={busy} error={recordFilters.error} storageError={recordFilters.storageError}>
         <TextField
           testID="disposal-search"
           label="検索"
@@ -220,8 +223,7 @@ export default function DisposalHistoryScreen() {
           onChangeText={(value) => recordFilters.update({ keyword: value })}
           placeholder="内容・日付・回数"
         />
-        <RecordFilterFields filters={filters} onChange={recordFilters.update} ready={recordFilters.ready}
-          disabled={busy} error={recordFilters.error} storageError={recordFilters.storageError} />
+        </RecordFilterFields>
         {searching ? <Card>
           <AppText variant="subtitle">検索結果</AppText>
           {recordFilters.ready && !recordFilters.error && !loading && !loadFailed ? <AppText testID="disposal-search-count">{`検索結果：${displayedRecords.length}件`}</AppText> : null}
@@ -243,14 +245,14 @@ export default function DisposalHistoryScreen() {
               onPress={() => changeMonth(1)}
             />
           </View>
-          <View style={styles.weekRow}>
+          <CalendarGrid testID="disposal-calendar-weekdays">
             {Array.from({ length: 7 }, (_, index) => (
               <AppText key={index} localize={false} style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}>
                 {translateWeekday(index, language)}
               </AppText>
             ))}
-          </View>
-          <View style={styles.calendarGrid}>
+          </CalendarGrid>
+          <CalendarGrid testID="disposal-calendar-days">
             {calendarDays.map((date, index) => {
               if (!date) return <View key={`blank-${index}`} style={styles.dayCell} />;
               const future = date > today;
@@ -281,7 +283,7 @@ export default function DisposalHistoryScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </CalendarGrid>
           <AppText variant="muted" style={styles.calendarHelp}>日付の下の数字は、その日の廃棄回数です。</AppText>
         </Card>}
 
@@ -376,10 +378,8 @@ const styles = StyleSheet.create({
   calendarText: { color: "#111" },
   monthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   monthTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "900" },
-  weekRow: { flexDirection: "row" },
-  weekDay: { width: `${100 / 7}%`, color: "#111", textAlign: "center", fontSize: 12, fontWeight: "800" },
-  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: `${100 / 7}%`, height: 56, paddingHorizontal: 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#d7d7d7", backgroundColor: "#fff" },
+  weekDay: { color: "#111", textAlign: "center", fontSize: 12, fontWeight: "800" },
+  dayCell: { height: 56, paddingHorizontal: 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#d7d7d7", backgroundColor: "#fff" },
   dayText: { color: "#111", fontWeight: "800" },
   dayCount: { color: "#555", fontSize: 12, lineHeight: 18, textAlign: "center", width: "100%" },
   selectedDay: { borderColor: "#1667c7", borderWidth: 3 },

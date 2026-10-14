@@ -5,7 +5,8 @@ import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
 import * as FileSystem from "expo-file-system/legacy";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { useAudioPlayer } from "expo-audio";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
@@ -508,7 +509,7 @@ function CollectionVideoPlayer({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const player = useVideoPlayer(module, (instance) => {
+  const player = useAppVideoPlayer(module, (instance) => {
     instance.loop = true;
     instance.play();
   });

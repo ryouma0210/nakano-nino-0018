@@ -6,6 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
+import { CalendarGrid } from "@/components/CalendarGrid";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -264,6 +265,8 @@ export default function RecordsScreen() {
         contractLines={roomMessages.records.contractLines}
       />
 
+      <RecordFilterFields filters={filters} onChange={(patch) => { setPendingDateDelete(false); recordFilters.update(patch); }}
+        types={journalFilterTypes} supportsTags ready={recordFilters.ready} error={recordFilters.error} storageError={recordFilters.storageError}>
       <TextField
         testID="journal-search"
         label="検索"
@@ -273,8 +276,7 @@ export default function RecordsScreen() {
         onChangeText={changeKeyword}
         placeholder="タイトル・本文・タグ"
       />
-      <RecordFilterFields filters={filters} onChange={(patch) => { setPendingDateDelete(false); recordFilters.update(patch); }}
-        types={journalFilterTypes} supportsTags ready={recordFilters.ready} error={recordFilters.error} storageError={recordFilters.storageError} />
+      </RecordFilterFields>
 
       {searching ? <Card>
         <AppText variant="subtitle">検索結果</AppText>
@@ -311,14 +313,14 @@ export default function RecordsScreen() {
             }
           />
         </View>
-        <View style={styles.weekRow}>
+        <CalendarGrid testID="journal-calendar-weekdays">
           {["日", "月", "火", "水", "木", "金", "土"].map((day, index) => (
             <AppText key={day} localize={false} style={[styles.weekDay, index === 0 && styles.holidayText, index === 6 && styles.saturdayText]}>
               {translateWeekday(index, settings?.language ?? "ja")}
             </AppText>
           ))}
-        </View>
-        <View style={styles.calendarGrid}>
+        </CalendarGrid>
+        <CalendarGrid testID="journal-calendar-days">
           {calendarDays.map((date, index) => {
             if (!date)
               return <View key={`blank-${index}`} style={styles.dayCell} />;
@@ -356,7 +358,7 @@ export default function RecordsScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </CalendarGrid>
         <AppText style={styles.calendarHelp}>
           選択中：{formatDateJa(selectedDate)}{"\n"}
           ●は記録のある日です。
@@ -627,17 +629,13 @@ const styles = StyleSheet.create({
   calendarCard: { backgroundColor: "#fff", borderColor: "#fff" },
   calendarTitle: { color: "#111" },
   calendarText: { color: "#111" },
-  weekRow: { flexDirection: "row" },
   weekDay: {
-    width: `${100 / 7}%`,
     color: "#111",
     textAlign: "center",
     fontSize: 12,
     fontWeight: "800",
   },
-  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: {
-    width: `${100 / 7}%`,
     height: 44,
     alignItems: "center",
     justifyContent: "center",

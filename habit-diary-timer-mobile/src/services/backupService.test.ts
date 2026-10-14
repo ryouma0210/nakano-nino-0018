@@ -126,6 +126,56 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
+  it.each(["android", "web"])("round-trips profile rankings, unselected candidates and its private image in complete backups on %s", async (platform) => {
+    mocks.platform.OS = platform;
+    const saved = JSON.stringify({ weaknesses: ["a", "b", "c", "d", "e", "f"], topWeaknesses: ["f", "a"],
+      weaknessCandidates: ["a", "b", "c", "d", "e", "f", "unselected weakness"],
+      favoriteIds: ["one", "two", "three", "four", "five", "six"], favoriteCandidateIds: ["one", "two", "three", "four", "five", "six", "unselected favorite"],
+      topFavoriteIds: ["six", "four", "one", "five", "two"], photoFileName: "profile.png" });
+    mocks.storage.set("nino-room:profile", saved);
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    const photo = { name: "profile.png", purpose: "profile", size: png.length, uri: "file:///profile.png" };
+    mocks.list.mockResolvedValue([photo]);
+    mocks.sources.set(photo.uri, png);
+    mocks.getBlob.mockResolvedValue(new Blob([png], { type: "image/png" }));
+    await backupService.export("complete");
+    select(join(mocks.chunks));
+    const picked = (await backupService.pick())!;
+    expect(picked.payload.asyncStorage["nino-room:profile"]).toBe(saved);
+    expect(picked.files).toEqual([expect.objectContaining({ name: "profile.png", purpose: "profile", mimeType: "image/png", size: png.length })]);
+    mocks.storage.delete("nino-room:profile");
+    await backupService.restore(picked);
+    expect(mocks.storage.get("nino-room:profile")).toBe(saved);
+    expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
+  });
+
+  it("keeps older profiles and save-only photo references without replacing local files", async () => {
+    for (const profile of [
+      { weaknesses: ["legacy"], ninoOutfit: "custom" },
+      { photoFileName: "local.png", favoriteIds: ["one"] },
+      { favoriteIds: ["one", "two", "three", "four"], topFavoriteIds: ["three", "one", "two"] },
+    ]) {
+      const saved = JSON.stringify(profile);
+      mocks.storage.set("nino-room:profile", saved);
+      const payload = await savePayload();
+      mocks.storage.delete("nino-room:profile");
+      await backupService.restore(payload);
+      expect(mocks.storage.get("nino-room:profile")).toBe(saved);
+    }
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid profile ranks and unsafe photo references before restoring any data", async () => {
+    for (const profile of [{ topWeaknesses: "invalid" }, { photoFileName: "../photo.png" }, { topFavoriteIds: [42] }]) {
+      const payload = await savePayload();
+      payload.asyncStorage["nino-room:profile"] = JSON.stringify(profile);
+      await expect(backupService.restore(payload)).rejects.toThrow("バックアップ");
+    }
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
   it("exports shared media once and round-trips all usages with its physical identity", async () => {
     const shared = { name: "shared.mp4", purpose: "training", usages: ["training", "punishment", "endurance"], size: 3, uri: "file:///shared.mp4" };
     mocks.list.mockResolvedValue([shared]);
@@ -379,11 +429,11 @@ describe("bounded backup export and import", () => {
     expect(mocks.execute.mock.calls.some(([sql]) => sql.includes("INSERT OR IGNORE INTO point_transactions"))).toBe(false);
   });
 
-  it("round-trips a level 120 player without raising a level 100 enemy", async () => {
+  it.each([[150, 100], [999, 999]])("round-trips player level %i and enemy level %i without changing either", async (playerLevel, enemyLevel) => {
     const rows = [
-      { setting_key: "outside_game_level", setting_value: "120", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_level", setting_value: String(playerLevel), updated_at: "2026-10-06 12:00:00" },
       { setting_key: "outside_game_level_date", setting_value: "2026-10-06", updated_at: "2026-10-06 12:00:00" },
-      { setting_key: "outside_game_succubus_absorb_today", setting_value: "100", updated_at: "2026-10-06 12:00:00" },
+      { setting_key: "outside_game_succubus_absorb_today", setting_value: String(enemyLevel), updated_at: "2026-10-06 12:00:00" },
     ];
     mocks.query.mockImplementation((sql: string) => sql === "SELECT * FROM app_settings" ? structuredClone(rows) : []);
     const payload = await savePayload();

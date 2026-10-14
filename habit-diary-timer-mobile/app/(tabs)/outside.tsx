@@ -20,6 +20,7 @@ import {
   succubusForLevel, type Direction, type MapArea, type MapPosition, type MapSlime,
   type SuccubusStage,
 } from "@/features/outside/gameLogic";
+import { getEnemyCombatStats, getEnemyDamage, getPlayerCombatStats, resolvePlayerAttack } from "@/features/outside/battleRules";
 import {
   dailyPointDateKey, dailyPointKey, deepSuccubusMarkKey, hpKey, initializeDailyOutsidePoints,
   initializeDeepSuccubusMark,
@@ -302,13 +303,6 @@ const defeatMapQuips: Record<SuccubusStage, string> = {
   queen: "「力を捧げてくれたこと、感謝します。弱くなったあなたが再び敗北しに来る日を楽しみにしています」",
 };
 
-const enemyAttackDamage: Record<SuccubusStage, number> = {
-  beginner: 10,
-  middle: 20,
-  queen: 50,
-};
-const enemyMaxHp: Record<SuccubusStage, number> = { beginner: 100, middle: 300, queen: 500 };
-
 const lossLabels: Record<LossEventKind, string> = {
   tail: "尻尾",
   chest: "おっぱい",
@@ -450,7 +444,8 @@ export default function OutsideScreen() {
   } | null>(null);
   const [, setTemptationEffect] = useState<TemptationEffect>(null);
   const [battleEnemyImage, setBattleEnemyImage] = useState<BattleEnemyImage>("battle");
-  const [encounterStage, setEncounterStage] = useState<SuccubusStage>("beginner");
+  const [encounterEnemy, setEncounterEnemy] = useState(() => succubusForLevel(1, 1));
+  const encounterStage = encounterEnemy.stage;
   const [lossEventIndex, setLossEventIndex] = useState(0);
   const [isLossReplay, setIsLossReplay] = useState(false);
   const [unlockedLossMemories, setUnlockedLossMemories] = useState<string[]>([]);
@@ -561,8 +556,9 @@ export default function OutsideScreen() {
     () => succubusForLevel(level, succubusAbsorbBonus),
     [level, succubusAbsorbBonus],
   );
-  const activeSuccubusStage =
-    phase === "battle" || phase === "loss" || phase === "result" ? encounterStage : succubus.stage;
+  const activeSuccubus =
+    phase === "battle" || phase === "loss" || phase === "result" ? encounterEnemy : succubus;
+  const activeSuccubusStage = activeSuccubus.stage;
   const crystalSpinScaleX = 0.28 + 0.72 * Math.abs(Math.cos((crystalRotation * Math.PI) / 180));
   const lossEventImages = useMemo(() => {
     return pixelSprites.eventStages[activeSuccubusStage][battle.lastLossKind];
@@ -755,7 +751,7 @@ export default function OutsideScreen() {
 
   function startEncounter(openingMessage?: string, initialCharmTurns?: number) {
     pendingVictoryReward.current = null;
-    setEncounterStage(succubus.stage);
+    setEncounterEnemy(succubus);
     setPhase("battle");
     setBattleMenu("root");
     setBattleAwaitingChoice(false);
@@ -769,7 +765,7 @@ export default function OutsideScreen() {
     const initialBattle = {
       hp: playerHp,
       mp: playerMp,
-      enemyHp: enemyMaxHp[succubus.stage],
+      enemyHp: getEnemyCombatStats(succubus.stage, succubus.level).maxHp,
       lastLossKind: "tail",
     } satisfies BattleStatus;
     setBattle(initialBattle);
@@ -1108,7 +1104,6 @@ export default function OutsideScreen() {
       return next;
     });
     setIsLossReplay(false);
-    setEncounterStage(succubus.stage);
     setLossEventIndex(0);
     setBattleMenu("root");
     setTemptationEffect(null);
@@ -1262,9 +1257,7 @@ export default function OutsideScreen() {
         const normalAttack = shouldUseNormalAttack();
         if (normalAttack) applyEnemyAilment("tail");
         const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-        const damage = normalAttack
-          ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7)
-          : enemyAttackDamage[succubus.stage];
+        const damage = getEnemyDamage(encounterStage, level, normalAttack ? "normal" : "temptation", false, encounterEnemy.level);
         const nextHp = clamp(battle.hp - damage);
         const nextMp = clamp(battle.mp + (normalAttack ? 0 : -6));
         setBattleEnemyImage(enemyKind);
@@ -1316,7 +1309,7 @@ export default function OutsideScreen() {
       // attack. The separate status-only attack remains available during
       // ordinary enemy turns, but is not used as the response here.
       const enemyKind = randomLossKind();
-      const damage = enemyAttackDamage[succubus.stage];
+      const damage = getEnemyDamage(encounterStage, level, "temptation", false, encounterEnemy.level);
       const nextHp = clamp(battle.hp - damage);
       const nextMp = clamp(battle.mp - 6);
       setBattleEnemyImage(enemyKind);
@@ -1343,7 +1336,7 @@ export default function OutsideScreen() {
     if (command === "attack" && (charmTurns > 0 || slaveContractSigned)) {
       playEffect("outsideEvade");
       const enemyKind = randomLossKind();
-      const damage = enemyAttackDamage[succubus.stage];
+      const damage = getEnemyDamage(encounterStage, level, "temptation", false, encounterEnemy.level);
       const nextHp = clamp(battle.hp - damage);
       const nextMp = clamp(battle.mp - ATTACK_MP_COST - 6);
       setBattleEnemyImage(enemyKind);
@@ -1363,7 +1356,7 @@ export default function OutsideScreen() {
       playEffect("outsideEvade");
       if (charmTurns > 0) {
         const enemyKind = randomLossKind();
-        const damage = Math.ceil(enemyAttackDamage[succubus.stage] * 0.5);
+        const damage = getEnemyDamage(encounterStage, level, "temptation", true, encounterEnemy.level);
         const nextHp = clamp(battle.hp - damage);
         const nextMp = clamp(battle.mp + 8);
         const remainingCharm = Math.max(0, charmTurns - 1);
@@ -1390,7 +1383,7 @@ export default function OutsideScreen() {
       const normalAttack = shouldUseNormalAttack();
       if (normalAttack) applyEnemyAilment("tail");
       const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-      const damage = Math.ceil(enemyAttackDamage[succubus.stage] * (normalAttack ? 0.35 : 0.5));
+      const damage = getEnemyDamage(encounterStage, level, normalAttack ? "normal" : "temptation", true, encounterEnemy.level);
       const nextHp = clamp(battle.hp - damage);
       const nextMp = clamp(battle.mp + 8);
       setBattleEnemyImage(enemyKind);
@@ -1421,9 +1414,7 @@ export default function OutsideScreen() {
       setMessage("恐怖で体がすくみ、攻撃できなかった。");
       return;
     }
-    const baseAttackDamage = Math.max(18, 34 - Math.max(0, succubus.level - level) * 0.25);
-    const attackDamage = battleAilments.weakened ? baseAttackDamage * 0.5 : baseAttackDamage;
-    const nextEnemyHp = clamp(battle.enemyHp - attackDamage);
+    const { damage: attackDamage, enemyHp: nextEnemyHp } = resolvePlayerAttack(battle.enemyHp, level, battleAilments.weakened);
     const attackMp = clamp(battle.mp - ATTACK_MP_COST);
     setPendingDamageQueue((items) => [...items, { target: "enemy", amount: Math.round(attackDamage) }]);
     if (nextEnemyHp <= 0) {
@@ -1442,6 +1433,7 @@ export default function OutsideScreen() {
       const nextBattle = { ...battle, mp: attackMp, enemyHp: 0 };
       const victoryLevel = clampPlayerLevel(level + 20);
       setBattle(nextBattle);
+      setDisplayedBattle(nextBattle);
       if (victoryLevel > level) playEffect("levelUp");
       savePlayerStats(victoryLevel, nextBattle.hp, nextBattle.mp);
       setPhase("result");
@@ -1464,7 +1456,7 @@ export default function OutsideScreen() {
     const normalAttack = shouldUseNormalAttack();
     if (normalAttack) applyEnemyAilment("tail");
     const enemyKind: LossEventKind = normalAttack ? "tail" : randomLossKind();
-    const damage = normalAttack ? Math.ceil(enemyAttackDamage[succubus.stage] * 0.7) : enemyAttackDamage[succubus.stage];
+    const damage = getEnemyDamage(encounterStage, level, normalAttack ? "normal" : "temptation", false, encounterEnemy.level);
     const nextHp = clamp(battle.hp - damage);
     const nextMp = clamp(attackMp + (normalAttack ? 0 : -6));
     setBattleEnemyImage(enemyKind);
@@ -1511,7 +1503,8 @@ export default function OutsideScreen() {
   }
 
   function replayLossScene(stage: SuccubusStage, kind: LossMemoryKind) {
-    setEncounterStage(stage);
+    const replayLevel = stage === "queen" ? 80 : stage === "middle" ? 30 : 1;
+    setEncounterEnemy(succubusForLevel(replayLevel, replayLevel));
     setBattle((current) => ({ ...current, lastLossKind: kind }));
     setLossEventIndex(0);
     setIsLossReplay(true);
@@ -1557,10 +1550,10 @@ export default function OutsideScreen() {
     setBattle({
       hp: playerHp,
       mp: playerMp,
-      enemyHp: enemyMaxHp[encounterStage],
+      enemyHp: getEnemyCombatStats(encounterEnemy.stage, encounterEnemy.level).maxHp,
       lastLossKind: "tail",
     });
-  }, [encounterStage, playerHp, playerMp, returnCharmTurns]);
+  }, [encounterEnemy, playerHp, playerMp, returnCharmTurns]);
 
   useEffect(() => {
     if (battleAudioOpen) return undefined;
@@ -1676,8 +1669,8 @@ export default function OutsideScreen() {
             ) : (
               <>
                 <Animated.View style={[styles.enemyOverlay, loopAudioNames.length > 0 && styles.enemyOverlayWithAudio, { transform: [{ translateX: enemyShake }] }]}>
-                  <AppText style={[styles.enemyOverlayName, { color: succubus.color }]}>{succubus.title} Lv.{succubus.level}</AppText>
-                  <StatGauge label="HP" value={displayedBattle.enemyHp} max={enemyMaxHp[activeSuccubusStage]} color="#ff4fa3" />
+                  <AppText style={[styles.enemyOverlayName, { color: activeSuccubus.color }]}>{activeSuccubus.title} Lv.{activeSuccubus.level}</AppText>
+                  <StatGauge label="HP" value={displayedBattle.enemyHp} max={getEnemyCombatStats(activeSuccubus.stage, activeSuccubus.level).maxHp} color="#ff4fa3" />
                 </Animated.View>
                 <View style={styles.enemyLarge}>
                   {battleEnemyImage === "battle" ? (
@@ -1860,8 +1853,8 @@ export default function OutsideScreen() {
               <View testID="outside-battle-audio-modal" style={[styles.crystalModal, styles.questModal]}>
                 <ScrollView contentContainerStyle={styles.crystalModalContent}>
                   <AppText variant="subtitle">再生中の音声と停止タイマー</AppText>
-                  <AppText variant="muted">ループ音声の停止・停止タイマーを操作できます。BGMは対象外です。</AppText>
-                  <LoopAudioControls />
+                  <AppText variant="muted">ループ音声の再生・停止・停止タイマーを操作できます。BGMは対象外です。</AppText>
+                  <LoopAudioControls canStart={slaveContractSigned} />
                   <View testID="outside-battle-audio-close">
                     <PrimaryButton title="閉じる" onPress={() => setBattleAudioOpen(false)} />
                   </View>
@@ -2014,6 +2007,8 @@ export default function OutsideScreen() {
               <AppText style={styles.playerStatusModalLevel}>Lv.{level} / {PLAYER_MAX_LEVEL}</AppText>
               <StatGauge label="HP" value={playerHp} max={100} color="#e3364f" />
               <StatGauge label="MP" value={playerMp} max={100} color="#3f8cff" />
+              <AppText style={styles.playerStatusModalText}>攻撃力　{getPlayerCombatStats(level).attack}</AppText>
+              <AppText style={styles.playerStatusModalText}>防御力　{getPlayerCombatStats(level).defense}</AppText>
               <AppText style={styles.playerStatusModalText}>館の外獲得Pt　{dailyOutsidePoints}/100pt</AppText>
               <AppText style={styles.playerStatusModalText}>所持Pt　{availablePoints}pt</AppText>
             </View>
@@ -2070,7 +2065,7 @@ export default function OutsideScreen() {
             <ScrollView contentContainerStyle={styles.crystalModalContent} showsVerticalScrollIndicator={false}>
               <AppText style={styles.questModalTitle}>クエスト</AppText>
               <AppText style={styles.questModalHelp}>{questTab === "audio"
-                ? "ループ音声の停止・停止タイマーを操作できます。BGMは対象外です。"
+                ? "ループ音声の再生・停止・停止タイマーを操作できます。BGMは対象外です。"
                 : "条件を達成して報酬を受け取ってください。"}</AppText>
               <View style={styles.questTabs} accessibilityRole="tablist">
                 {([
@@ -2107,7 +2102,7 @@ export default function OutsideScreen() {
                 ))}
               </View> : null}
 
-              {questTab === "audio" ? <LoopAudioControls /> : null}
+              {questTab === "audio" ? <LoopAudioControls canStart={slaveContractSigned} /> : null}
 
               {questTab === "daily" || questTab === "story" ? <View style={[styles.questSection, questTab === "story" && styles.storyQuestSection]}>
                 <AppText style={styles.questSectionTitle}>{questTab === "daily" ? "デイリークエスト" : "クエスト"}</AppText>
@@ -2228,7 +2223,7 @@ export default function OutsideScreen() {
               {([
                 ["beginner", "初級サキュバス", 100, "防御1回で魅了解除"],
                 ["middle", "上級サキュバス", 300, "防御2回で魅了解除"],
-                ["queen", "女王サキュバス", 500, "防御3回で魅了解除"],
+                ["queen", "女王サキュバス", `${getEnemyCombatStats("queen", 80).maxHp}〜${getEnemyCombatStats("queen", ENEMY_MAX_LEVEL).maxHp}`, "防御3回で魅了解除"],
               ] as const).map(([stage, name, hp, charmRule]) => (
                 <View key={stage} style={styles.battleEncyclopediaRow}>
                   <Image source={pixelSprites.succubus[stage]} style={styles.battleEncyclopediaImage} contentFit="contain" />
@@ -2324,7 +2319,7 @@ export default function OutsideScreen() {
               <AppText style={styles.succubusGrowthText}>
                 ・Lv.1〜29：小柄な初級段階。誘惑は防御1回で解除。{"\n"}
                 ・Lv.30〜79：成長した上級段階。体格と誘惑が強まり、防御2回で解除。{"\n"}
-                ・Lv.80〜100：完成した女王段階。最も大きく強い姿となり、防御3回で解除。
+                ・Lv.80〜999：完成した女王段階。最も大きく強い姿となり、防御3回で解除。
               </AppText>
             </View>
 
@@ -2332,6 +2327,8 @@ export default function OutsideScreen() {
               <View pointerEvents="none" style={[styles.guideTopBorder, styles.battleGuideTopBorder]} />
               <AppText style={styles.battleGuideTitle}>戦い方</AppText>
               <AppText style={styles.warningBody}>
+                ・レベルが上がると攻撃力・防御力が上がります。{"\n"}
+                ・女王はレベルが上がるとHP・攻撃力が上がります。{"\n"}
                 ・攻撃：サキュバスのHPを減らし、毎回MPを20消費。魅了中は命中しませんが、MPは消費します。{"\n"}
                 ・防御：被害を抑えてMPを8回復。魅了中は防御するたび解除へ近づきます。{"\n"}
                 ・魅了解除：初級1回／上級2回／女王3回の防御が必要です。{"\n"}

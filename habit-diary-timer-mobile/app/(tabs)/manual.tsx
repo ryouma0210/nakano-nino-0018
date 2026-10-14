@@ -10,6 +10,7 @@ import { Screen } from "@/components/Screen";
 import { manualSections } from "@/features/manual/content";
 import { searchManual } from "@/features/manual/search";
 import { TextField } from "@/components/TextField";
+import { Disclosure } from "@/components/Disclosure";
 import { translateText } from "@/i18n";
 
 export default function ManualScreen() {
@@ -28,9 +29,11 @@ export default function ManualScreen() {
       <View style={styles.content}>
         <PageTitle>マニュアル</PageTitle>
         <AppText variant="muted">確認したい項目を選ぶと、使い方を表示します。</AppText>
+        <Disclosure title="検索" active={searching} testID="manual-search-toggle">
         <TextField testID="manual-search" label="マニュアルを検索" value={keyword}
           onChangeText={(value) => { setKeyword(value); setExpandedId(null); }}
           placeholder="機能名・説明文をすべて検索" accessibilityLabel={translateText("マニュアルを検索", settings?.language ?? "ja")} />
+        </Disclosure>
         {searching ? <View style={styles.searchSummary}>
           <AppText accessibilityLiveRegion="polite">{`検索結果：${results.length}件`}</AppText>
           <PrimaryButton title="検索をクリア" tone="secondary" onPress={() => { setKeyword(""); setExpandedId(null); }} />

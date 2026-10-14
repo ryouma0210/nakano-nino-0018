@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { base64ToBlob, webFileStorage } from "./webFileStorage";
 import { fileHasPurpose, fileUsageKey, isFilePurpose, isValidFileUsages, getFileUsages, type FilePurpose, type FileUsage } from "../features/files/usages";
 import { readNativeFileUsages, writeNativeFileUsages } from "./nativeFileUsages";
+import { invalidProfilePhotoMessage, isProfilePhotoMetadata, PROFILE_PHOTO_TYPES, profilePhotoMatchesSignature } from "../features/files/profilePhoto";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
 export type { FilePurpose, FileUsage } from "../features/files/usages";
@@ -108,11 +109,28 @@ function webAvailable() {
   return Platform.OS === "web";
 }
 
-function webPickImage(): Promise<File | null> {
+async function imageHeader(source: { uri: string } | { data: string }) {
+  const base64 = "data" in source ? source.data.slice(0, 16)
+    : await FileSystem.readAsStringAsync(source.uri, { encoding: FileSystem.EncodingType.Base64, position: 0, length: 12 });
+  // Decode only the bounded header; Hermes does not guarantee a global atob.
+  const prefix = base64.slice(0, 16);
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(prefix) || prefix.length % 4 !== 0) throw new Error(invalidProfilePhotoMessage);
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const bytes: number[] = [];
+  for (let index = 0; index < prefix.length; index += 4) {
+    const [a, b, c, d] = [...prefix.slice(index, index + 4)].map((letter) => alphabet.indexOf(letter));
+    bytes.push((a << 2) | (b >> 4));
+    if (c !== -1) bytes.push(((b & 15) << 4) | (c >> 2));
+    if (d !== -1) bytes.push(((c & 3) << 6) | d);
+  }
+  return Uint8Array.from(bytes);
+}
+
+function webPickImage(purpose: FilePurpose): Promise<File | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = purpose === "profile" ? PROFILE_PHOTO_TYPES.join(",") : "image/*";
     input.multiple = false;
     input.style.display = "none";
     document.body.appendChild(input);
@@ -201,6 +219,7 @@ function validateRestoreFiles(files: readonly RestoreStoredFile[]) {
       || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
       || !Number.isSafeInteger(file.size) || file.size < 0
       || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+      || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
       || [typeof file.data === "string", typeof file.uri === "string", typeof Blob !== "undefined" && file.blob instanceof Blob].filter(Boolean).length !== 1
       || (file.blob !== undefined && (!webAvailable() || file.blob.size !== file.size))
       || (typeof file.uri === "string" && !file.uri.startsWith("file://") && !file.uri.startsWith("content://"))) {
@@ -231,6 +250,11 @@ async function cleanupRestoreDirectory(uri: string) {
 
 async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<PreparedFileRestore> {
   validateRestoreFiles(files);
+  for (const file of files.filter((entry) => entry.purpose === "profile")) {
+    const bytes = file.blob ? new Uint8Array(await file.blob.slice(0, 12).arrayBuffer())
+      : await imageHeader(file.data !== undefined ? { data: file.data } : { uri: file.uri! });
+    if (!profilePhotoMatchesSignature(bytes, file.mimeType)) throw new Error(invalidRestoreFilesMessage);
+  }
   if (webAvailable()) {
     const restored = files.map((file) => {
       const blob = file.blob ?? (typeof file.data === "string" ? base64ToBlob(file.data, file.mimeType, file.size) : undefined);
@@ -246,7 +270,7 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
   const previousDirectory = `${FileSystem.documentDirectory}private-room-files-previous-${token}/`;
   try {
     await FileSystem.makeDirectoryAsync(stageDirectory, { intermediates: true });
-    for (const purpose of ["training", "punishment", "endurance", "chastity"] as const) {
+    for (const purpose of ["training", "punishment", "endurance", "chastity", "profile"] as const) {
       await FileSystem.makeDirectoryAsync(`${stageDirectory}${purpose}/`, { intermediates: true });
     }
     for (const file of files) {
@@ -371,15 +395,16 @@ export const fileStorageService = {
     const punishmentFiles = await readFiles(purposeDirectory("punishment"), "punishment");
     const enduranceFiles = await readFiles(purposeDirectory("endurance"), "endurance");
     const chastityFiles = await readFiles(purposeDirectory("chastity"), "chastity");
+    const profileFiles = await readFiles(purposeDirectory("profile"), "profile");
     const usages = await readNativeFileUsages(uploadDirectory);
-    return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...enduranceFiles, ...chastityFiles]
+    return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...enduranceFiles, ...chastityFiles, ...profileFiles]
       .map((file) => usages[fileUsageKey(file)] ? { ...file, usages: usages[fileUsageKey(file)] } : file)
       .filter((file) => !purpose || fileHasPurpose(file, purpose))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 
   async setUsages(file: Pick<StoredFile, "name" | "purpose">, usages: readonly FileUsage[]): Promise<void> {
-    if (file.purpose === "chastity" || !isValidFileUsages(file.purpose, usages)) {
+    if (!isValidFileUsages(file.purpose, usages)) {
       throw new Error("用途を1つ以上選択してください。");
     }
     const next = getFileUsages({ purpose: file.purpose, usages: [...usages] });
@@ -403,22 +428,32 @@ export const fileStorageService = {
       let file: StoredFile | null = null;
       try {
         if (webAvailable()) {
-          const selected = await webPickImage();
+          const selected = await webPickImage(purpose);
           if (!selected) return null;
           const mimeType = selected.type || mimeTypeForName(selected.name);
           if (!mimeType.startsWith("image/")) throw new Error("画像ファイルを選択してください。");
+          if (purpose === "profile" && (!isProfilePhotoMetadata(selected.name, mimeType)
+            || !profilePhotoMatchesSignature(new Uint8Array(await selected.slice(0, 12).arrayBuffer()), mimeType))) {
+            throw new Error(invalidProfilePhotoMessage);
+          }
           const name = storedFileName(selected.name);
           file = { name, purpose, size: selected.size, uri: "" };
           await webFileStorage.put({ name, purpose, size: selected.size, mimeType, blob: selected });
           // Use the storage-owned URL, which is revoked on replacement or deletion.
-          file = (await webFileStorage.list()).find((entry) => entry.purpose === purpose && entry.name === name) ?? null;
-          if (!file) throw new Error("画像を保存できませんでした。");
+          const stored = (await webFileStorage.list()).find((entry) => entry.purpose === purpose && entry.name === name);
+          if (!stored) throw new Error("画像を保存できませんでした。");
+          file = stored;
         } else {
-          const selected = await DocumentPicker.getDocumentAsync({ type: "image/*", copyToCacheDirectory: true, multiple: false });
+          const selected = await DocumentPicker.getDocumentAsync({ type: purpose === "profile" ? [...PROFILE_PHOTO_TYPES] : "image/*", copyToCacheDirectory: true, multiple: false });
           if (selected.canceled) return null;
           const asset = selected.assets[0];
           if (!asset || !(asset.mimeType || mimeTypeForName(asset.name)).startsWith("image/")) {
             throw new Error("画像ファイルを選択してください。");
+          }
+          const mimeType = asset.mimeType || mimeTypeForName(asset.name);
+          if (purpose === "profile" && (!isProfilePhotoMetadata(asset.name, mimeType)
+            || !profilePhotoMatchesSignature(await imageHeader({ uri: asset.uri }), mimeType))) {
+            throw new Error(invalidProfilePhotoMessage);
           }
           await ensurePurposeDirectory(purpose);
           const name = storedFileName(asset.name);
@@ -438,6 +473,8 @@ export const fileStorageService = {
   },
 
   async pickAndStore(purpose: FilePurpose = "training", onProgress?: ProgressHandler): Promise<FileImportResult | null> {
+    // Profile photos must commit their owning reference through pickImageAndStore.
+    if (purpose === "profile") throw new Error("画像ファイルを選択してください。");
     // The import can outlive its screen when the user switches footer sections.
     if (maintenanceState.active) throw new Error(filesBusyMessage);
     if (importState.importing || deleteState.deleting) return null;
@@ -478,7 +515,7 @@ export const fileStorageService = {
       return;
     }
     await FileSystem.deleteAsync(file.uri, { idempotent: true });
-    if (file.purpose !== "chastity") {
+    if (getFileUsages(file).length > 0) {
       try {
         const usages = await readNativeFileUsages(uploadDirectory);
         if (Object.hasOwn(usages, fileUsageKey(file))) {

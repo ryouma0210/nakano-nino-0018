@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { TextField } from "@/components/TextField";
+import { Disclosure } from "@/components/Disclosure";
 import { displayedFileName, filterFilesByName, storedFileKey } from "@/features/files/fileList";
 import { mimeTypeForName, type StoredFile } from "@/services/fileStorageService";
 import { MAX_CUSTOM_MEDIA } from "./game";
@@ -38,7 +39,9 @@ function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, on
     <View style={[styles.dialog, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) }]}>
       <AppText variant="title">ファイル選択</AppText>
       <AppText variant="muted">最大100件まで選択できます。</AppText>
+      <Disclosure title="検索" active={search.trim().length > 0} testID="endurance-file-search-toggle">
       <TextField
+        testID="endurance-file-search"
         label="ファイル名で検索"
         placeholder="名前の一部を入力"
         value={search}
@@ -47,6 +50,7 @@ function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, on
         autoCorrect={false}
         editable={!loading && !loadFailed}
       />
+      </Disclosure>
       <AppText>{`選択中：${selectedKeys.length}件`}</AppText>
       {!loading && !loadFailed ? <AppText variant="muted">{`表示中：${visibleFiles.length}件`}</AppText> : null}
       {loading ? <ActivityIndicator color="#fff" /> : null}

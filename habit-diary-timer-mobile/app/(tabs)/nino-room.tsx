@@ -9,7 +9,8 @@ import {
   View,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -99,12 +100,8 @@ export default function NinoRoomScreen() {
           `${outfit.name}を${outfit.cost}ptで交換しました。`,
         );
       }
-      const next = {
-        ...(profile ?? (await profileService.load())),
-        ninoOutfit: key,
-      };
+      const next = await profileService.patch({ ninoOutfit: key });
       setProfile(next);
-      await profileService.save(next);
       setPanel(null);
       setMediaMode("image");
       setLineIndex(0);
@@ -256,7 +253,7 @@ export default function NinoRoomScreen() {
 }
 
 function NinoOutfitVideo({ source }: { source: number }) {
-  const player = useVideoPlayer(source, (instance) => {
+  const player = useAppVideoPlayer(source, (instance) => {
     instance.loop = true;
     instance.muted = true;
     instance.volume = 0;

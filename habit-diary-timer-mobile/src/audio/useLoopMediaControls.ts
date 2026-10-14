@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { AppState, Platform } from "react-native";
 import { setAudioModeAsync, type AudioPlayer } from "expo-audio";
-import { createLoopMediaControls, installLoopMediaSessionActions } from "./loopMediaControls";
+import { createLoopMediaControls } from "./loopMediaControls";
+import { createBrowserLoopMediaSession } from "./loopMediaSession";
 
 export function useLoopMediaControls(
   players: readonly AudioPlayer[],
@@ -23,8 +24,11 @@ export function useLoopMediaControls(
     onUnexpectedPlayback: (player) => callbacks.current.onUnexpectedPlayback(player),
     onStartFailure: (player) => callbacks.current.onStartFailure(player),
     onError: console.error,
-    installStopActions: Platform.OS === "web"
-      ? (stop) => installLoopMediaSessionActions(typeof navigator === "undefined" ? undefined : navigator.mediaSession, stop)
+    mediaSession: Platform.OS === "web"
+      ? createBrowserLoopMediaSession(
+        typeof navigator === "undefined" ? undefined : navigator.mediaSession,
+        typeof MediaMetadata === "undefined" ? undefined : (metadata) => new MediaMetadata(metadata),
+      )
       : undefined,
   }), [players]);
 
@@ -50,6 +54,6 @@ export function useLoopMediaControls(
     return () => clearInterval(interval);
   }, [active, controls]);
 
-  useEffect(() => { controls.updateTitle(title); }, [controls, title]);
+  useLayoutEffect(() => { controls.updateTitle(title); }, [controls, title]);
   return controls;
 }

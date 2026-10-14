@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Image, Modal, PanResponder, Platform, StyleSheet, View } from "react-native";
-import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
+import { VideoView, type VideoPlayer } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -97,7 +98,7 @@ function EnduranceVideo(props: Omit<Props, "item"> & { item: Extract<EnduranceMe
   const { item, active, onVideoEnd, onVideoProgress, videoRef, onError, loopVideo = false, audioActive = active, initialVideoProgress, initialVideoComplete = false } = props;
   const source = item.source;
   const { settings } = useAppAudio();
-  const player = useVideoPlayer(source);
+  const player = useAppVideoPlayer(source);
   const callbacks = useRef({ onVideoEnd, onVideoProgress, onError });
   const activeRef = useRef(active);
   const lastProgress = useRef<EnduranceVideoProgress>(initialVideoProgress ?? { positionMs: 0, durationMs: null });

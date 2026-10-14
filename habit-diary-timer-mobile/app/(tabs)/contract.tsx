@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
 import { Card } from "@/components/Card";
@@ -48,7 +49,7 @@ export default function ContractScreen() {
   const [checked, setChecked] = useState(() => new Set<string>());
   const [signature, setSignature] = useState("");
   const [contractConfirmation, setContractConfirmation] = useState(false);
-  const player = useVideoPlayer(
+  const player = useAppVideoPlayer(
     require("../../assets/videos/contract_1.mp4"),
     (instance) => {
       instance.loop = true;

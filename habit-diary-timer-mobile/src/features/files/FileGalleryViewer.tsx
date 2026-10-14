@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Image, Modal, PanResponder, Platform, StyleSheet, View } from "react-native";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { AppText } from "@/components/AppText";
@@ -137,7 +138,7 @@ export function FileGalleryViewer({ files, selectedKey, onSelect, onClose }: Pro
 
 function GalleryVideo({ uri }: { uri: string }) {
   // Only the selected file has a player. Native useVideoPlayer releases it on unmount.
-  const player = useVideoPlayer({ uri });
+  const player = useAppVideoPlayer({ uri });
   useLayoutEffect(() => {
     // Restore the source if React re-runs effects after a development cleanup.
     if (Platform.OS === "web") player.replace({ uri });

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Platform, StyleSheet, View } from "react-native";
 import { useEventListener } from "expo";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { VideoView } from "expo-video";
+import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { AppText } from "@/components/AppText";
 import type { StoredFile } from "@/services/fileStorageService";
 
@@ -33,7 +34,7 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   const handledStoredVideoEndUri = useRef<string | null>(null);
   const currentFile = files[fileIndex % Math.max(1, files.length)];
   const showingStoredVideo = useStored && isVideo(currentFile);
-  const player = useVideoPlayer(defaultVideos[defaultIndex], (instance) => {
+  const player = useAppVideoPlayer(defaultVideos[defaultIndex], (instance) => {
     instance.loop = false;
     instance.muted = true;
     instance.volume = 0;

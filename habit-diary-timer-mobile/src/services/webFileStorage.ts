@@ -1,5 +1,6 @@
 import type { FilePurpose, PreparedFileRestore, StoredFile } from "./fileStorageService";
 import { fileUsageKey, isFilePurpose, isValidFileUsages, type FileUsage } from "../features/files/usages";
+import { isProfilePhotoMetadata } from "../features/files/profilePhoto";
 
 export type WebMediaFile = {
   name: string;
@@ -137,6 +138,7 @@ function validateFile(file: WebMediaFile) {
     || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
     || !Number.isSafeInteger(file.size) || file.size < 0
     || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+    || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
     || !(file.blob instanceof Blob) || file.blob.size !== file.size) {
     throw new Error(invalidFilesMessage);
   }
@@ -338,7 +340,7 @@ export const webFileStorage = {
 
   setUsages: (file: Pick<StoredFile, "name" | "purpose">, usages: FileUsage[]) => serialized(async (): Promise<void> => {
     assertMutable();
-    if (file.purpose === "chastity" || !isValidFileUsages(file.purpose, usages)) throw new Error(invalidFilesMessage);
+    if (!isValidFileUsages(file.purpose, usages)) throw new Error(invalidFilesMessage);
     await ensureMigrated();
     await transaction("readwrite", async (current) => {
       const state = await requireState(current);

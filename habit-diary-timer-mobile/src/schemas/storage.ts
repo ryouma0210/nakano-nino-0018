@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FAVORITE_RANKING_LIMIT } from "../constants/profile";
 
 const profileExperience = z.enum(["unknown", "yes", "no"]);
 export const profileSettingsSchema = z.object({
@@ -13,9 +14,23 @@ export const profileSettingsSchema = z.object({
   masturbationMinutes: z.string().default(""),
   tissueCount: z.string().default(""),
   weaknesses: z.array(z.string()).default([]),
+  weaknessCandidates: z.array(z.string()).default([]),
+  topWeaknesses: z.array(z.string()).default([]),
+  favoriteIds: z.array(z.string()).default([]),
+  favoriteCandidateIds: z.array(z.string()).default([]),
+  topFavoriteIds: z.array(z.string()).default([]),
+  photoFileName: z.string().min(1).refine((name) => name !== "." && name !== ".." && !/[\\/\u0000-\u001f]/.test(name)).nullable().default(null),
   ninoOutfit: z.string().default("default"),
   ninoVoiceStyle: z.string().default("queen"),
-});
+}).transform((profile) => ({
+  ...profile,
+  weaknesses: [...new Set(profile.weaknesses)],
+  weaknessCandidates: [...new Set([...profile.weaknessCandidates, ...profile.weaknesses])],
+  topWeaknesses: [...new Set(profile.topWeaknesses)].filter((item) => profile.weaknesses.includes(item)).slice(0, 5),
+  favoriteIds: [...new Set(profile.favoriteIds)],
+  favoriteCandidateIds: [...new Set([...profile.favoriteCandidateIds, ...profile.favoriteIds])],
+  topFavoriteIds: [...new Set(profile.topFavoriteIds)].filter((id) => profile.favoriteIds.includes(id)).slice(0, FAVORITE_RANKING_LIMIT),
+}));
 
 export const appSettingsSchema = z.object({
   playerName: z.string().default("マゾ"), darkMode: z.boolean().default(false),

@@ -8,6 +8,8 @@ import { SUGOROKU_STORAGE_KEY, parseSugorokuSave } from "../features/sugoroku/st
 import { CHASTITY_STORAGE_KEY, parseChastityHistory } from "./chastityHistoryStorage";
 import { validateCustomCommandSettings } from "./customCommandStorage";
 import { isFilePurpose, isValidFileUsages } from "../features/files/usages";
+import { profileSettingsSchema } from "../schemas/storage";
+import { isProfilePhotoMetadata } from "../features/files/profilePhoto";
 import { validateEnduranceSettings } from "../features/endurance/storage";
 import { validateManagementRouletteSettings } from "./managementRouletteStorage";
 import { validateDailyGameRewardSettings } from "./dailyGameRewardStorage";
@@ -142,6 +144,10 @@ function validatePayload(value: unknown): BackupPayload {
     throw new Error("バックアップデータが不足しています。");
   }
   if (payload.kind === "complete" && !Array.isArray(payload.files)) throw new Error("格納ファイルのデータがありません。");
+  if (Object.hasOwn(payload.asyncStorage, "nino-room:profile")) {
+    try { profileSettingsSchema.parse(JSON.parse(payload.asyncStorage["nino-room:profile"])); }
+    catch { throw new Error(invalidBackupMessage); }
+  }
   if (Object.hasOwn(payload.asyncStorage, OTHELLO_STORAGE_KEY)) {
     parseOthelloHistory(payload.asyncStorage[OTHELLO_STORAGE_KEY]);
   }
@@ -164,7 +170,8 @@ function validatePayload(value: unknown): BackupPayload {
   validateManagementRouletteSettings(payload.database.app_settings);
   validateDailyGameRewardSettings(payload.database.app_settings);
   if (payload.files?.some((file) => !file || typeof file.name !== "string" || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
-    || typeof file.mimeType !== "string" || typeof file.data !== "string" || typeof file.size !== "number")) {
+    || typeof file.mimeType !== "string" || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
+    || typeof file.data !== "string" || typeof file.size !== "number")) {
     throw new Error("格納ファイルのデータが不正です。");
   }
   return payload as BackupPayload;
@@ -177,6 +184,7 @@ function validateArchiveFiles(value: unknown): asserts value is ArchiveFile[] {
     if (!file || typeof file !== "object" || typeof file.name !== "string" || !file.name
       || file.name === "." || file.name === ".." || /[\\/\x00-\x1f\x7f]/.test(file.name)
       || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages) || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+      || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
       || !Number.isSafeInteger(file.size) || file.size < 0 || file.path !== `files/${String(index).padStart(6, "0")}`
       || names.has(`${file.purpose}/${file.name}`)) throw new Error(invalidBackupMessage);
     names.add(`${file.purpose}/${file.name}`);
