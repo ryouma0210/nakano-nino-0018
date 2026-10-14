@@ -1,7 +1,13 @@
 import { normalizeSearchText } from "@nino/shared/search";
 import candidates from "./catalog.json";
 
-export type FavoriteCategory = "anime" | "actress" | "performer";
+export type FavoriteCategory =
+  | "anime"
+  | "game"
+  | "vtuber"
+  | "actress"
+  | "performer";
+
 export type FavoriteCandidate = {
   id: string;
   category: FavoriteCategory | "custom";
@@ -9,8 +15,13 @@ export type FavoriteCandidate = {
   work?: string;
 };
 
-export const favoriteCategories: readonly { value: FavoriteCategory; label: string }[] = [
+export const favoriteCategories: readonly {
+  value: FavoriteCategory;
+  label: string;
+}[] = [
   { value: "anime", label: "アニメ" },
+  { value: "game", label: "ゲーム" },
+  { value: "vtuber", label: "VTuber" },
   { value: "actress", label: "女優" },
   { value: "performer", label: "成人作品出演者" },
 ];

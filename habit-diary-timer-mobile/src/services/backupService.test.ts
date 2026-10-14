@@ -130,8 +130,8 @@ describe("bounded backup export and import", () => {
     mocks.platform.OS = platform;
     const saved = JSON.stringify({ weaknesses: ["a", "b", "c", "d", "e", "f"], topWeaknesses: ["f", "a"],
       weaknessCandidates: ["a", "b", "c", "d", "e", "f", "unselected weakness"],
-      favoriteIds: ["one", "two", "three", "four"], favoriteCandidateIds: ["one", "two", "three", "four", "unselected favorite"],
-      topFavoriteIds: ["four", "one"], photoFileName: "profile.png" });
+      favoriteIds: ["one", "two", "three", "four", "five", "six"], favoriteCandidateIds: ["one", "two", "three", "four", "five", "six", "unselected favorite"],
+      topFavoriteIds: ["six", "four", "one", "five", "two"], photoFileName: "profile.png" });
     mocks.storage.set("nino-room:profile", saved);
     const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
     const photo = { name: "profile.png", purpose: "profile", size: png.length, uri: "file:///profile.png" };
@@ -150,7 +150,11 @@ describe("bounded backup export and import", () => {
   });
 
   it("keeps older profiles and save-only photo references without replacing local files", async () => {
-    for (const profile of [{ weaknesses: ["legacy"], ninoOutfit: "custom" }, { photoFileName: "local.png", favoriteIds: ["one"] }]) {
+    for (const profile of [
+      { weaknesses: ["legacy"], ninoOutfit: "custom" },
+      { photoFileName: "local.png", favoriteIds: ["one"] },
+      { favoriteIds: ["one", "two", "three", "four"], topFavoriteIds: ["three", "one", "two"] },
+    ]) {
       const saved = JSON.stringify(profile);
       mocks.storage.set("nino-room:profile", saved);
       const payload = await savePayload();

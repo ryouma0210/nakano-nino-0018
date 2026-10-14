@@ -1,4 +1,5 @@
 import { translateText, type AppLanguage } from "../../i18n";
+import { FAVORITE_RANKING_LIMIT } from "../../constants/profile";
 import { toDateKey } from "../../utils/date";
 import {
   invalidProfilePhotoMessage,
@@ -14,8 +15,8 @@ export type ActivityCertificateData = {
   topFavorites: readonly FavoriteCandidate[];
   favoriteCount: number;
   weaknessCount: number;
-  erectionLengthCm?: string | null;
-  masturbationPerWeek?: string | null;
+  erectionLengthCm: string | null;
+  masturbationPerWeek: string | null;
   longestActivitySeconds: number | null;
   totalTimerSeconds: number;
   outsidePlayerLevel: number;
@@ -131,7 +132,7 @@ export function createActivityCertificatePresentation(
       seen.add(candidate.id);
       return true;
     })
-    .slice(0, 3);
+    .slice(0, FAVORITE_RANKING_LIMIT);
   const weaknesses = [
     ...new Set(data.topWeaknesses.map((name) => name.trim()).filter(Boolean)),
   ].slice(0, 5);
@@ -139,7 +140,7 @@ export function createActivityCertificatePresentation(
     ["長さ（cm）", data.erectionLengthCm?.trim() || t("未設定")],
     ["頻度（回/1週間）", data.masturbationPerWeek?.trim() || t("未設定")],
     ["弱点登録数", number(data.weaknessCount)],
-    ["オカズ登録数", number(data.favoriteCount)],
+    ["推し登録数", number(data.favoriteCount)],
     [
       "調教最長",
       data.longestActivitySeconds === null
@@ -158,13 +159,13 @@ export function createActivityCertificatePresentation(
     nameLabel: t("氏名"),
     name: data.name,
     rightHeaderLabel: t("御主人様"),
-    rightHeaderValue: t("中野ニ乃"),
+    rightHeaderValue: t("中野二乃"),
     photoLabel: t("証明写真"),
     photoDataUrl: photo,
     weaknessesLabel: t("弱点上位5"),
     emptyWeaknessesLabel: t("未登録"),
     weaknesses: weaknesses.map(t),
-    favoritesLabel: t("オカズ上位3"),
+    favoritesLabel: t("推し上位5"),
     emptyFavoritesLabel: t("未登録"),
     favorites: favorites.map((candidate) => ({
       name: candidate.name,

@@ -291,6 +291,22 @@ describe("independent profile candidates", () => {
 });
 
 describe("profile rankings and concurrent changes", () => {
+  it("persists five distinct registered favorites in order through save and reload", async () => {
+    const favoriteIds = ["a", "b", "c", "d", "e", "f"];
+    const saved = await profileService.save({
+      ...existingProfile, favoriteIds, topFavoriteIds: ["f", "missing", "e", "f", "d", "c", "b", "a"],
+    });
+    expect(saved.topFavoriteIds).toEqual(["f", "e", "d", "c", "b"]);
+    expect(JSON.parse(storedProfile!).topFavoriteIds).toEqual(["f", "e", "d", "c", "b"]);
+    expect((await profileService.load()).topFavoriteIds).toEqual(["f", "e", "d", "c", "b"]);
+  });
+
+  it("keeps legacy three-favorite ranks when unrelated profile settings are saved", async () => {
+    storedProfile = JSON.stringify({ ...existingProfile, favoriteIds: ["a", "b", "c", "d"], topFavoriteIds: ["c", "a", "b"] });
+    expect((await profileService.load()).topFavoriteIds).toEqual(["c", "a", "b"]);
+    expect((await profileService.patch({ tissueCount: "7" })).topFavoriteIds).toEqual(["c", "a", "b"]);
+  });
+
   it("removes deselected weaknesses from rankings without limiting the full selection", async () => {
     const weaknesses = ["a", "b", "c", "d", "e", "f", "g"];
     await profileService.patch({ weaknesses, topWeaknesses: ["b", "a", "c", "d", "e"] });
@@ -314,12 +330,12 @@ describe("profile rankings and concurrent changes", () => {
   });
 
   it("snapshots queued ranked arrays and prunes only removed favorite IDs", async () => {
-    const favoriteIds = ["a", "b", "c", "d"];
-    const topFavoriteIds = ["d", "c", "a"];
+    const favoriteIds = ["a", "b", "c", "d", "e", "f"];
+    const topFavoriteIds = ["f", "e", "d", "c", "a"];
     const saving = profileService.patch({ favoriteIds, topFavoriteIds });
     favoriteIds.push("late"); topFavoriteIds.reverse();
-    expect(await saving).toMatchObject({ favoriteIds: ["a", "b", "c", "d"], topFavoriteIds: ["d", "c", "a"] });
-    expect(await profileService.patch({ favoriteIds: ["a", "b", "d"] })).toMatchObject({ topFavoriteIds: ["d", "a"] });
+    expect(await saving).toMatchObject({ favoriteIds: ["a", "b", "c", "d", "e", "f"], topFavoriteIds: ["f", "e", "d", "c", "a"] });
+    expect(await profileService.patch({ favoriteIds: ["a", "b", "d", "e", "f"] })).toMatchObject({ topFavoriteIds: ["f", "e", "d", "a"] });
   });
 });
 

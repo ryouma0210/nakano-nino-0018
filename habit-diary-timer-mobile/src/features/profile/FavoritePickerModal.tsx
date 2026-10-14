@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
-import { FlatList, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Platform, Pressable, SectionList, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { Disclosure } from "@/components/Disclosure";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SelectField } from "@/components/SelectField";
 import { TextField } from "@/components/TextField";
+import { FAVORITE_RANKING_LIMIT } from "@/constants/profile";
 import { favoriteCategories, favoriteCategoryLabel, favoriteDisplayName, type FavoriteCategory } from "./catalog";
-import { addManualFavorite, favoritePickerCandidates } from "./favoritePickerModel";
+import { addManualFavorite, favoritePickerCandidates, favoritePickerSections } from "./favoritePickerModel";
 import { ManualEntryField } from "./ManualEntryField";
 import { RankedSelectionEditor } from "./RankedSelectionEditor";
 
@@ -36,7 +37,7 @@ function FavoritePickerSession({ visible, selected, candidateIds, ranked, saving
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<FavoriteCategory | "all">("all");
-  const candidates = useMemo(() => favoritePickerCandidates(selected, candidateIds, query, category), [category, query, selected, candidateIds]);
+  const sections = useMemo(() => favoritePickerSections(favoritePickerCandidates(selected, candidateIds, query, category)), [category, query, selected, candidateIds]);
   const options = selected.map((id) => ({ value: id, label: favoriteDisplayName(id), localize: false }));
 
   async function addFavorite(name: string) {
@@ -56,25 +57,29 @@ function FavoritePickerSession({ visible, selected, candidateIds, ranked, saving
       paddingLeft: Math.max(16, insets.left + 12), paddingRight: Math.max(16, insets.right + 12),
     }]}>
       <View style={styles.modal} accessibilityViewIsModal>
-        <AppText variant="subtitle">オカズ記録</AppText>
-        <FlatList style={styles.list} contentContainerStyle={styles.content} data={candidates} keyExtractor={(item) => item.id}
-          numColumns={2} columnWrapperStyle={styles.columns}
+        <AppText variant="subtitle">推し記録</AppText>
+        <SectionList style={styles.list} contentContainerStyle={styles.content} sections={sections} keyExtractor={(row) => row[0].id}
+          stickySectionHeadersEnabled={false}
           keyboardShouldPersistTaps="handled" initialNumToRender={10} maxToRenderPerBatch={12} windowSize={5}
           extraData={selected} ListHeaderComponent={<View style={styles.header}>
-            <ManualEntryField title="オカズを手入力で追加" label="追加する名前" emptyMessage="名前を入力してください。"
-              successMessage="オカズを追加しました。" onAdd={addFavorite} disabled={saving} testID="favorite-add" />
-            <RankedSelectionEditor title="オカズ上位3名" options={options} value={ranked} onChange={onRankedChange} limit={3} disabled={saving} testID="favorite-ranking" />
+            <ManualEntryField title="推しを手入力で追加" label="追加する名前" emptyMessage="名前を入力してください。"
+              successMessage="推しを追加しました。" onAdd={addFavorite} disabled={saving} testID="favorite-add" />
+            <RankedSelectionEditor title="推し上位5名" options={options} value={ranked} onChange={onRankedChange} limit={FAVORITE_RANKING_LIMIT} disabled={saving} testID="favorite-ranking" />
             <Disclosure title="検索" active={query.trim().length > 0 || category !== "all"} testID="favorite-search-toggle">
               <TextField label="名前・作品名で検索" value={query} onChangeText={setQuery} placeholder="名前・作品名を入力" editable={!saving} testID="favorite-search" />
               <SelectField label="分類" value={category} onChange={(value) => setCategory(value as FavoriteCategory | "all")}
                 options={[{ value: "all", label: "すべて" }, ...favoriteCategories]} disabled={saving} testID="favorite-category" />
             </Disclosure>
-            <AppText variant="muted">固定候補を選ぶか名前を手入力で追加し、上位3名を設定できます。</AppText>
+            <AppText variant="muted">固定候補を選ぶか名前を手入力で追加し、上位5名を設定できます。</AppText>
           </View>}
           ListEmptyComponent={<AppText variant="muted">条件に一致する候補はありません。</AppText>}
-          renderItem={({ item }) => {
+          renderSectionHeader={({ section }) => <View style={styles.sectionHeader} testID={`favorite-section-${section.key}`}>
+            <AppText accessibilityRole="header" style={styles.sectionTitle}>{section.title}</AppText>
+            <View style={styles.sectionDivider} />
+          </View>}
+          renderItem={({ item: row }) => <View style={styles.columns}>{row.map((item) => {
             const checked = selected.includes(item.id);
-            return <Pressable testID={`favorite-option-${item.id}`} accessibilityRole="checkbox" accessibilityLabel={favoriteDisplayName(item.id)}
+            return <Pressable key={item.id} testID={`favorite-option-${item.id}`} accessibilityRole="checkbox" accessibilityLabel={favoriteDisplayName(item.id)}
               accessibilityState={{ checked, disabled: saving }} disabled={saving}
               onPress={() => onSelectedChange(checked ? selected.filter((id) => id !== item.id) : [...selected, item.id])}
               style={[styles.option, checked && styles.selected]}>
@@ -84,9 +89,9 @@ function FavoritePickerSession({ visible, selected, candidateIds, ranked, saving
                 {item.work ? <AppText localize={false} variant="muted" textBreakStrategy="simple" style={styles.detail}>{item.work}</AppText> : favoriteCategoryLabel(item.category) ? <AppText variant="muted" style={styles.detail}>{favoriteCategoryLabel(item.category)}</AppText> : null}
               </View>
             </Pressable>;
-          }} />
-        <View style={styles.count}><AppText variant="muted">オカズ登録数</AppText><AppText localize={false}>{selected.length}</AppText></View>
-        {error ? <AppText style={styles.error}>オカズを保存できませんでした。再保存できます。</AppText> : null}
+          })}</View>} />
+        <View style={styles.count}><AppText variant="muted">推し登録数</AppText><AppText localize={false}>{selected.length}</AppText></View>
+        {error ? <AppText style={styles.error}>推しを保存できませんでした。再保存できます。</AppText> : null}
         <View style={styles.actions}>
           <View style={styles.action}><PrimaryButton title="キャンセル" tone="secondary" disabled={saving} onPress={onClose} /></View>
           <View style={styles.action}><PrimaryButton title={saving ? "保存中..." : error ? "再保存" : "完了"} disabled={saving} onPress={onSave} /></View>
@@ -102,7 +107,10 @@ const styles = StyleSheet.create({
   list: { flex: 1, minHeight: 0 },
   content: { gap: 8, paddingBottom: 8, paddingRight: Platform.OS === "web" ? 16 : 0 },
   header: { gap: 16, paddingBottom: 10 },
-  columns: { justifyContent: "space-between", gap: 8 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8, minHeight: 32 },
+  sectionTitle: { color: "#b7d7ff", fontSize: 14, fontWeight: "800" },
+  sectionDivider: { flex: 1, height: 1, backgroundColor: "#555" },
+  columns: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
   option: { width: "48%", minWidth: 0, minHeight: 44, flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "#555", backgroundColor: "#050505" },
   selected: { borderColor: "#9bcbff", backgroundColor: "#142b45" },
   check: { width: 20, flexShrink: 0, textAlign: "center", color: "#fff", fontSize: 13, fontWeight: "900", lineHeight: 20 },

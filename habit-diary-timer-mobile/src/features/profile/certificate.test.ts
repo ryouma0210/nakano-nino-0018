@@ -11,6 +11,8 @@ const favorites: readonly FavoriteCandidate[] = [
   { id: "fixture-b", name: "Sam", category: "custom" },
   { id: "fixture-c", name: "Robin", category: "custom" },
   { id: "fixture-d", name: "Casey", category: "custom" },
+  { id: "fixture-e", name: "Morgan", category: "custom" },
+  { id: "fixture-f", name: "Taylor", category: "custom" },
 ];
 const data: ActivityCertificateData = {
   name: "Test User", photoDataUrl: png, topFavorites: favorites.slice(0, 3), topWeaknesses: ["Early mornings", "Cold weather"],
@@ -93,7 +95,7 @@ describe("activity certificate HTML", () => {
       expect(row.match(/<td\b/g)).toHaveLength(2);
     }
     expect(rows[0]).toMatch(/長さ（cm）[\s\S]*?<td[^>]*>12\.50<\/td>[\s\S]*?頻度（回\/1週間）[\s\S]*?<td[^>]*>0<\/td>/);
-    expect(rows[1]).toMatch(/弱点登録数[\s\S]*?<td[^>]*>17<\/td>[\s\S]*?オカズ登録数[\s\S]*?<td[^>]*>12<\/td>/);
+    expect(rows[1]).toMatch(/弱点登録数[\s\S]*?<td[^>]*>17<\/td>[\s\S]*?推し登録数[\s\S]*?<td[^>]*>12<\/td>/);
     expect(rows[2]).toMatch(/調教最長[\s\S]*?01:01:01[\s\S]*?お仕置き総計[\s\S]*?27:46:40/);
     expect(rows[3]).toMatch(/あなたLv\(館の外\)[\s\S]*?<td[^>]*>150<\/td>[\s\S]*?サキュバスLv\(館の外\)[\s\S]*?<td[^>]*>220<\/td>/);
     expect(rows[4]).toMatch(/累計獲得Pt[\s\S]*?12,000 Pt[\s\S]*?所持Pt[\s\S]*?450 Pt/);
@@ -107,7 +109,12 @@ describe("shared image certificate content", () => {
     }, "en");
     expect(content.name).toBe("A & B");
     expect(content.title).toBe("Activity Record Certificate");
-    expect(content.favorites.map(({ name }) => name)).toEqual(["Alex", "Sam", "Robin"]);
+    expect(content.favorites.map(({ name }) => name)).toEqual(["Alex", "Sam", "Robin", "Casey", "Morgan"]);
+    expect(content.favoritesLabel).toBe("Top 5 favorites");
+    const html = createActivityCertificateHtml({ ...data, topFavorites: favorites, topWeaknesses: [] });
+    expect(html.match(/<li>/g)).toHaveLength(5);
+    expect(html).toContain("Morgan");
+    expect(html).not.toContain("Taylor");
     expect(content.weaknesses).toEqual(["Early mornings", "Cold weather"]);
     expect(content.metrics.map(({ value }) => value)).toEqual(["12.50", "0", "17", "12", "01:01:01", "27:46:40", "150", "220", "12,000 Pt", "450 Pt"]);
     expect(content.metricRows).toEqual([content.metrics.slice(0, 2), content.metrics.slice(2, 4), content.metrics.slice(4, 6), content.metrics.slice(6, 8), content.metrics.slice(8, 10)]);
@@ -121,7 +128,7 @@ describe("shared image certificate content", () => {
     expect(content.weaknessesLabel).toBe("弱点上位5");
     expect(content.metrics).toEqual([
       { label: "長さ（cm）", value: "12.50" }, { label: "頻度（回/1週間）", value: "0" },
-      { label: "弱点登録数", value: "17" }, { label: "オカズ登録数", value: "12" },
+      { label: "弱点登録数", value: "17" }, { label: "推し登録数", value: "12" },
       { label: "調教最長", value: "01:01:01" }, { label: "お仕置き総計", value: "27:46:40" },
       { label: "あなたLv(館の外)", value: "150" }, { label: "サキュバスLv(館の外)", value: "220" },
       { label: "累計獲得Pt", value: "12,000 Pt" }, { label: "所持Pt", value: "450 Pt" },
@@ -145,14 +152,14 @@ describe("shared image certificate content", () => {
     { state: "null", values: { erectionLengthCm: null, masturbationPerWeek: null } },
     { state: "empty", values: { erectionLengthCm: "", masturbationPerWeek: "" } },
   ])("renders $state optional records as unset in presentation and HTML", ({ values }) => {
-    const input = { ...data };
+    const input: Partial<ActivityCertificateData> = { ...data };
     delete input.erectionLengthCm;
     delete input.masturbationPerWeek;
     Object.assign(input, values);
-    const content = createActivityCertificatePresentation(input, "en");
+    const content = createActivityCertificatePresentation(input as ActivityCertificateData, "en");
     expect(content.metrics.slice(0, 2).map(({ value }) => value)).toEqual(["Not set", "Not set"]);
     expect(content.metricRows).toHaveLength(5);
-    const html = createActivityCertificateHtml(input, "en");
+    const html = createActivityCertificateHtml(input as ActivityCertificateData, "en");
     const firstRow = html.match(/<tr>[\s\S]*?<\/tr>/)?.[0];
     expect(firstRow?.match(/<td>Not set<\/td>/g)).toHaveLength(2);
   });
