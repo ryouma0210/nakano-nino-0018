@@ -16,9 +16,13 @@ describe("persisted data schemas", () => {
     const choices = ["a", "b", "c", "d", "e", "f", "g"];
     expect(profileSettingsSchema.parse({
       weaknesses: choices, topWeaknesses: ["missing", "b", "b", "a", "c", "d", "e", "f"],
-      favoriteIds: choices, topFavoriteIds: ["g", "missing", "g", "f", "e", "d"], photoFileName: "stored_photo.png",
+      favoriteIds: choices, topFavoriteIds: ["g", "missing", "g", "f", "e", "d", "c", "b"], photoFileName: "stored_photo.png",
     })).toMatchObject({ weaknesses: choices, topWeaknesses: ["b", "a", "c", "d", "e"],
-      favoriteIds: choices, topFavoriteIds: ["g", "f", "e"], photoFileName: "stored_photo.png" });
+      favoriteIds: choices, topFavoriteIds: ["g", "f", "e", "d", "c"], photoFileName: "stored_photo.png" });
+  });
+  it("preserves an existing three-favorite ranking without filling empty ranks", () => {
+    expect(profileSettingsSchema.parse({ favoriteIds: ["a", "b", "c", "d"], topFavoriteIds: ["c", "a", "b"] }))
+      .toMatchObject({ favoriteIds: ["a", "b", "c", "d"], topFavoriteIds: ["c", "a", "b"] });
   });
   it("rejects a photo path or URL in place of a stable filename", () => {
     for (const photoFileName of ["../photo.png", "https://example.test/photo.png", "..", "folder\\photo.png"]) {

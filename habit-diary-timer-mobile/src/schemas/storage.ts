@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FAVORITE_RANKING_LIMIT } from "../constants/profile";
 
 const profileExperience = z.enum(["unknown", "yes", "no"]);
 export const profileSettingsSchema = z.object({
@@ -28,7 +29,7 @@ export const profileSettingsSchema = z.object({
   topWeaknesses: [...new Set(profile.topWeaknesses)].filter((item) => profile.weaknesses.includes(item)).slice(0, 5),
   favoriteIds: [...new Set(profile.favoriteIds)],
   favoriteCandidateIds: [...new Set([...profile.favoriteCandidateIds, ...profile.favoriteIds])],
-  topFavoriteIds: [...new Set(profile.topFavoriteIds)].filter((id) => profile.favoriteIds.includes(id)).slice(0, 3),
+  topFavoriteIds: [...new Set(profile.topFavoriteIds)].filter((id) => profile.favoriteIds.includes(id)).slice(0, FAVORITE_RANKING_LIMIT),
 }));
 
 export const appSettingsSchema = z.object({

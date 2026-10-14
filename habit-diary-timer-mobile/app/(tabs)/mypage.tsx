@@ -580,6 +580,8 @@ export default function MyPageScreen() {
             topFavorites: resolveFavorites(stored.topFavoriteIds),
             favoriteCount: stored.favoriteIds.length,
             weaknessCount: stored.weaknesses.length,
+            erectionLengthCm: stored.erectionLengthCm,
+            masturbationPerWeek: stored.masturbationPerWeek,
             longestActivitySeconds:
               currentStats.achievements.longestTrainingSeconds,
             totalTimerSeconds: currentStats.achievements.punishmentSeconds,
@@ -859,17 +861,17 @@ export default function MyPageScreen() {
       </Card>
 
       <Card style={styles.favoriteCard}>
-        <AppText variant="subtitle">オカズ</AppText>
+        <AppText variant="subtitle">推し</AppText>
         <PrimaryButton
-          title="オカズ記録"
+          title="推し記録"
           tone="save"
           disabled={!profileEditable}
           onPress={openFavorites}
         />
-        <AppText variant="label">オカズ上位3名</AppText>
+        <AppText variant="label">推し上位5名</AppText>
         <RankedSummary values={profile.topFavoriteIds.map(favoriteDisplayName)} />
         {profile.favoriteIds.length > 0 ? (
-          <Disclosure title="登録したオカズ" testID="registered-favorites-toggle">
+          <Disclosure title="登録した推し" testID="registered-favorites-toggle">
             <View style={styles.weaknessGrid}>
               {profile.favoriteIds.map((id) => (
                 <View key={id} style={styles.weaknessChip}>
@@ -880,9 +882,9 @@ export default function MyPageScreen() {
               ))}
             </View>
           </Disclosure>
-        ) : <AppText variant="muted">オカズはまだ登録されていません。</AppText>}
+        ) : <AppText variant="muted">推しはまだ登録されていません。</AppText>}
         <View style={styles.weaknessSummary} testID="favorite-summary">
-          <Metric label="オカズ登録数" value={String(profile.favoriteIds.length)} />
+          <Metric label="推し登録数" value={String(profile.favoriteIds.length)} />
         </View>
       </Card>
 

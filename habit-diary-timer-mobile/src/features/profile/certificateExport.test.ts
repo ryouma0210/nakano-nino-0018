@@ -121,18 +121,18 @@ describe("activity certificate export", () => {
     { state: "null", values: { erectionLengthCm: null, masturbationPerWeek: null } },
     { state: "empty", values: { erectionLengthCm: "", masturbationPerWeek: "" } },
   ])("exports $state optional records through browser and Android save paths", async ({ values }) => {
-    const input = { ...data };
+    const input: Partial<ActivityCertificateData> = { ...data };
     delete input.erectionLengthCm;
     delete input.masturbationPerWeek;
     Object.assign(input, values);
     mocks.platform.OS = "web";
-    await expect(exportActivityCertificate(input, "ja", "save")).resolves.toEqual({ status: "saved", fileName });
+    await expect(exportActivityCertificate(input as ActivityCertificateData, "ja", "save")).resolves.toEqual({ status: "saved", fileName });
     const firstRow = mocks.renderWeb.mock.calls[0][0].match(/<tr>[\s\S]*?<\/tr>/)?.[0];
     expect(firstRow?.match(/<td>未設定<\/td>/g)).toHaveLength(2);
     expect(mocks.download).toHaveBeenCalledWith(png, fileName);
 
     mocks.platform.OS = "android";
-    await expect(exportActivityCertificate(input, "ja", "save", mocks.renderNative)).resolves.toEqual({
+    await expect(exportActivityCertificate(input as ActivityCertificateData, "ja", "save", mocks.renderNative)).resolves.toEqual({
       status: "saved", fileName, uri: "content://chosen/certificate.png",
     });
     expect(mocks.renderNative).toHaveBeenCalledWith(input, "ja");

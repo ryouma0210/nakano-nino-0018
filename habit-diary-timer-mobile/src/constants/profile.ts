@@ -1,0 +1,1 @@
+export const FAVORITE_RANKING_LIMIT = 5;
