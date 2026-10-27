@@ -25,6 +25,7 @@ const managementSettingItems = [
   ["ループ音声", "/(tabs)/loop-audio"],
   ["命令追加", "/(tabs)/custom-orders"],
   ["ファイル格納", "/(tabs)/files"],
+  ["ボイス格納", "/(tabs)/voices"],
   ["マイページ", "/(tabs)/mypage"],
   ["マニュアル", "/(tabs)/manual"],
   ["外部リンク", "/(tabs)/external-links"],
@@ -38,7 +39,7 @@ function menuTone(title: MenuTitle) {
   if (title === "アプリ設定" || title === "マニュアル" || title === "外部リンク") return "secondary";
   if (title === "ご褒美") return "defeat";
   if (title === "マイページ") return "record";
-  if (title === "ファイル格納" || title === "命令追加") return "preparation";
+  if (title === "ファイル格納" || title === "ボイス格納" || title === "命令追加") return "preparation";
   if (title === "貞操帯管理記録") return "training";
   if (title === "お貢ぎ履歴" || title === "ゴミ汁廃棄履歴") return "tribute";
   if (title === "ループ音声" || title === "コレクション") return "collection";

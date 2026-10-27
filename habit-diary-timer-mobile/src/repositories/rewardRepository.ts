@@ -1,6 +1,7 @@
 import { execute, query, queryOne, transaction } from "@/database/client";
 import { toDateTimeKey } from "@/utils/date";
 import { DAILY_ROOM_POINTS } from "../constants/roomPoints";
+import { appendGamePassword } from "@nino/shared/gamePassword";
 import {
   rewardBrutalOrderMessages,
   rewardInsultMessages,
@@ -38,7 +39,7 @@ export const rewardCatalog = {
     key: "secret",
     name: "秘密♡交換時のお楽しみ♡",
     cost: 10000,
-    contents: rewardSecretMessages.map((message) => message.text),
+    contents: rewardSecretMessages.map((message) => appendGamePassword(message.text)),
   },
   outfit: { key: "outfit", name: "二ノ様の衣装交換♡", cost: 300 },
 } as const;
@@ -250,15 +251,21 @@ export const rewardRepository = {
 
   redeemSecret() {
     const reward = rewardCatalog.secret;
-    if (this.balance().available < reward.cost) return null;
+    // Reconcile old awards before entering the redemption transaction.
+    const balance = this.balance();
+    if (balance.available < reward.cost) return null;
     let redeemed = false;
     transaction(() => {
+      const earned = queryOne<{ total: number }>("SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions")?.total ?? 0;
+      const spent = queryOne<{ total: number }>("SELECT COALESCE(SUM(points_spent), 0) AS total FROM reward_redemptions")?.total ?? 0;
+      if (earned + balance.stgBonus - spent < reward.cost) return;
       execute(
         "INSERT INTO reward_redemptions(reward_key, reward_name, points_spent, reward_content, redeemed_at) VALUES('secret', ?, ?, ?, ?)",
         [reward.name, reward.cost, reward.contents[0], toDateTimeKey()],
       );
       redeemed = true;
     });
+    if (redeemed) pointRepository.notifyChanged();
     return redeemed ? reward.contents[0] : null;
   },
 

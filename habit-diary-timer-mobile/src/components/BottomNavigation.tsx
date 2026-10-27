@@ -10,6 +10,7 @@ import { translateText } from "@/i18n";
 import { useDesktopLayout } from "@/hooks/useDesktopLayout";
 import { DESKTOP_SIDEBAR_WIDTH } from "@/utils/desktopLayout";
 import { LoopAudioMiniPlayer } from "./LoopAudioMiniPlayer";
+import { VoiceMiniPlayer } from "./VoiceMiniPlayer";
 
 type Destination = "home" | "tasks" | "rooms" | "nino-room" | "outside" | "record" | "management" | "mypage";
 
@@ -26,7 +27,7 @@ const destinations = [
 
 const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello", "endurance"]);
 const recordScreens = new Set(["records", "tribute", "disposal-history", "chastity-history", "rewards", "collection", "today", "report", "report-details"]);
-const managementScreens = new Set(["loop-audio", "files", "settings", "custom-orders", "manual", "external-links", "slave-contract"]);
+const managementScreens = new Set(["loop-audio", "files", "voices", "settings", "custom-orders", "manual", "external-links", "slave-contract"]);
 const BottomNavigationVisibleContext = createContext(false);
 
 export function useHasBottomNavigation() {
@@ -95,6 +96,7 @@ export function BottomNavigationLayout({ children }: PropsWithChildren) {
         <View style={styles.content}>
           {children}
           {!isOutside ? <LoopAudioMiniPlayer bottomInset={!showNavigation || isDesktop} /> : null}
+          <VoiceMiniPlayer bottomInset={!showNavigation || isDesktop} />
         </View>
         {showNavigation ? <BottomNavigation sidebar={isDesktop} /> : null}
       </View>

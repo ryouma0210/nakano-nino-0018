@@ -17,6 +17,8 @@ import { RoomConversation } from "@/components/RoomConversation";
 import { Screen } from "@/components/Screen";
 import { useAppModal } from "@/components/AppModalProvider";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { stripGamePassword } from "@nino/shared/gamePassword";
+import { GamePasswordReward } from "@/components/GamePasswordReward";
 import {
   achievementMessages,
   findRewardMessage,
@@ -258,6 +260,7 @@ function RewardText({ item, playerName }: { item: RewardRedemption; playerName: 
       <AppText>{isOutsideMemory
         ? getOutsideLossMemoryLabel(item.reward_content)
         : formatRewardText(item, playerName)}</AppText>
+      {item.reward_key === "secret" ? <GamePasswordReward /> : null}
       <RewardMetadata item={item} />
     </View>
   );
@@ -429,7 +432,7 @@ function CollectionVoice({ item }: { item: RewardRedemption }) {
 }
 
 function formatRewardText(item: RewardRedemption, playerName: string) {
-  const text = item.reward_content ?? "";
+  const text = item.reward_key === "secret" ? stripGamePassword(item.reward_content ?? "") : item.reward_content ?? "";
   const message = findRewardMessage(item.reward_key, text);
   return message ? formatConfiguredMessage(message, playerName) : text;
 }

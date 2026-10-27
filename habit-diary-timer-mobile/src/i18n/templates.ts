@@ -3,6 +3,11 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["{0}ptで交換", "Redeem for {0} pt", "{0}pt로 교환", "花费{0}pt兑换"],
+  ["{0}ptを消費します。\n\nゲーム⑤・⑥の解除PWも含まれます。交換後はコレクション部屋で確認できます。\n\nポイントがあれば何度でも交換できます。",
+    "Spend {0} pt.\n\nIncludes the password to unlock games 5 and 6. You can view it in the Collection room after redeeming.\n\nYou can redeem this again whenever you have enough points.",
+    "{0}pt를 사용합니다.\n\n게임 ⑤·⑥의 잠금 해제 비밀번호도 포함됩니다. 교환 후 컬렉션 방에서 확인할 수 있습니다.\n\n포인트가 있으면 여러 번 교환할 수 있습니다.",
+    "消耗{0}pt。\n\n还包含游戏⑤・⑥的解锁密码。兑换后可在收藏室查看。\n\n只要积分足够，就可以多次兑换。"],
   ["{0}Ptを受け取る", "Claim {0} Pt", "{0}Pt 받기", "领取{0}Pt"],
   ["{0}の本日初回クリア", "First daily clear: {0}", "오늘 첫 클리어: {0}", "今日首次通关：{0}"],
   ["モード：{0}", "Mode: {0}", "모드: {0}", "模式：{0}"],

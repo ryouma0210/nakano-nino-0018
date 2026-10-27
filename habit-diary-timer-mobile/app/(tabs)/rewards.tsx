@@ -154,13 +154,17 @@ export default function RewardsScreen() {
     const reward = rewardCatalog.secret;
     setConfirmation({
       title: "秘密のご褒美を交換しますか？",
-      message: `${reward.cost}ptを消費します。\n\nポイントがあれば何度でも交換できます。`,
+      message: `${reward.cost}ptを消費します。\n\nゲーム⑤・⑥の解除PWも含まれます。交換後はコレクション部屋で確認できます。\n\nポイントがあれば何度でも交換できます。`,
       onConfirm: () => {
-        const content = rewardRepository.redeemSecret();
-        if (!content)
-          return showNotice("ポイント不足", "所持ポイントが足りません。");
-        reload();
-        showNotice("秘密のご褒美♡", content);
+        try {
+          const content = rewardRepository.redeemSecret();
+          if (!content)
+            return showNotice("ポイント不足", "所持ポイントが足りません。");
+          reload();
+          showNotice("秘密のご褒美♡", content);
+        } catch {
+          showNotice("交換できません", "交換データの保存に失敗しました。もう一度お試しください。");
+        }
       },
     });
   }
@@ -381,13 +385,14 @@ export default function RewardsScreen() {
         <AppText variant="muted">
           消費：10,000pt／ポイントがあれば何度でも交換できます。
         </AppText>
+        <AppText variant="muted">ゲーム⑤・⑥の解除PWも含まれます。交換後はコレクション部屋で確認できます。</AppText>
         <PrimaryButton
           title={
-            balance.available >= 10000
-              ? "10000ptで交換"
-              : `あと${10000 - balance.available}pt`
+            balance.available >= rewardCatalog.secret.cost
+              ? `${rewardCatalog.secret.cost}ptで交換`
+              : `あと${rewardCatalog.secret.cost - balance.available}pt`
           }
-          disabled={balance.available < 10000}
+          disabled={balance.available < rewardCatalog.secret.cost}
           onPress={exchangeSecret}
         />
       </Card>

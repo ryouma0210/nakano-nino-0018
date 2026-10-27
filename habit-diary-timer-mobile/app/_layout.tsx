@@ -9,6 +9,8 @@ import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/AppText";
 import { ErrorDetailsScreen } from "@/components/ErrorDetailsScreen";
 import { AudioProvider } from "@/audio/AudioProvider";
+import { VoiceLibraryProvider } from "@/audio/VoiceLibraryProvider";
+import { VoiceMiniPlayer } from "@/components/VoiceMiniPlayer";
 import { formatError } from "@/utils/error";
 import { AppModalProvider } from "@/components/AppModalProvider";
 import { appendWebErrorLog } from "@/utils/webErrorLog";
@@ -108,11 +110,13 @@ function RootContent() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AudioProvider>
+          <VoiceLibraryProvider>
           <AppModalProvider>
             <StatusBar style="light" />
             <Stack screenOptions={{ headerShown: false }} />
             <NonTabAudioPlayer />
           </AppModalProvider>
+          </VoiceLibraryProvider>
         </AudioProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -121,7 +125,7 @@ function RootContent() {
 
 function NonTabAudioPlayer() {
   const segments = useSegments();
-  return segments[0] === "(tabs)" ? null : <LoopAudioMiniPlayer bottomInset />;
+  return segments[0] === "(tabs)" ? null : <><LoopAudioMiniPlayer bottomInset /><VoiceMiniPlayer bottomInset /></>;
 }
 
 class AppErrorBoundary extends Component<PropsWithChildren, { details: string | null }> {
