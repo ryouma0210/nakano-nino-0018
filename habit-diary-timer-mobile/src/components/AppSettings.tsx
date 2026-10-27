@@ -21,6 +21,7 @@ import { notificationService } from "@/services/notificationService";
 import { defaultSettings, settingsService } from "@/services/settingsService";
 import { slaveContractService } from "@/services/slaveContractService";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
 import { contractService, dailyOrderService } from "@/services/gameRoomService";
 import { useAppModal } from "@/components/AppModalProvider";
 import { toDateTimeKey } from "@/utils/date";
@@ -31,7 +32,8 @@ type PartialResetKey =
   | "points"
   | "contract"
   | "settings"
-  | "files";
+  | "files"
+  | "voices";
 
 const partialResetItems: {
   key: PartialResetKey;
@@ -43,6 +45,7 @@ const partialResetItems: {
   { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・解約日・契約後の追加ルール" },
   { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
   { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画・貞操帯管理の添付画像" },
+  { key: "voices", label: "ボイス格納", description: "格納した音声・表示名・再生順・再生モード" },
 ];
 
 async function disposeBackup(backup: PickedBackup | null) {
@@ -55,6 +58,7 @@ async function disposeBackup(backup: PickedBackup | null) {
 
 export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   const { settings, updateAudioSettings } = useAppAudio();
+  const { clearVoices } = useVoiceLibrary();
   const { showNotice, showError } = useAppModal();
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
@@ -193,6 +197,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   async function executeReset() {
     if (!beginOperation()) return;
     try {
+      await clearVoices();
       await fileStorageService.withExclusiveFiles(async () => {
         execute("DELETE FROM timer_histories");
         execute("DELETE FROM management_daily_tasks");
@@ -243,6 +248,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   async function executePartialReset() {
     if (!beginOperation()) return;
     try {
+      if (partialSelection.includes("voices")) await clearVoices();
       await fileStorageService.withExclusiveFiles(async () => {
         const selected = new Set(partialSelection);
         if (selected.has("records")) {

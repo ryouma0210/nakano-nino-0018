@@ -945,6 +945,7 @@ export default function EnduranceScreen() {
             <AppText>
               パスワードが知りたい場合は、【特別会員室】に入ってください♡
             </AppText>
+            <AppText>ご褒美の10,000pt交換でも入手できます。</AppText>
             <TextField
               label="パスワード"
               secureTextEntry

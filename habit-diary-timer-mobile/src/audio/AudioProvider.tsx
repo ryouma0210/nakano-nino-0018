@@ -25,12 +25,14 @@ type AudioContextValue = {
   setBgmMode: (mode: BgmMode) => void;
   loopAudioNames: readonly LoopAudioName[];
   playLoopAudio: (name: LoopAudioName) => void;
-  stopLoopAudio: (name?: LoopAudioName) => void;
+  stopLoopAudio: (name?: LoopAudioName) => Promise<void>;
   loopSleepDeadline: number | null;
   setLoopSleepMinutes: (minutes: number | null) => void;
   setSessionAudioActive: (active: boolean) => void;
   setRoomAudioScene: (scene: RoomAudioScene | null) => void;
   shouldMixVideoAudio: boolean;
+  setVoiceAudioActive: (active: boolean) => void;
+  registerVoiceAudioStop: (stop: () => void) => () => void;
 };
 
 const AudioContext = createContext<AudioContextValue>({
@@ -42,12 +44,14 @@ const AudioContext = createContext<AudioContextValue>({
   setBgmMode: () => {},
   loopAudioNames: [],
   playLoopAudio: () => {},
-  stopLoopAudio: () => {},
+  stopLoopAudio: async () => {},
   loopSleepDeadline: null,
   setLoopSleepMinutes: () => {},
   setSessionAudioActive: () => {},
   setRoomAudioScene: () => {},
   shouldMixVideoAudio: false,
+  setVoiceAudioActive: () => {},
+  registerVoiceAudioStop: () => () => {},
 });
 
 const bgmSource = require("../../assets/audio/kyouhunomori.m4a");
@@ -87,12 +91,14 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     setBgmMode,
     loopAudioNames: [],
     playLoopAudio: () => {},
-    stopLoopAudio: () => {},
+    stopLoopAudio: async () => {},
     loopSleepDeadline: null,
     setLoopSleepMinutes: () => {},
     setSessionAudioActive: () => {},
     setRoomAudioScene: () => {},
     shouldMixVideoAudio: false,
+    setVoiceAudioActive: () => {},
+    registerVoiceAudioStop: () => () => {},
   }), [bgmMode, settings, updateAudioSettings]);
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
@@ -100,16 +106,22 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
 
 function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [voiceAudioActive, setVoiceAudioActive] = useState(false);
+  const stopVoiceAudio = useRef<(() => void) | null>(null);
+  const registerVoiceAudioStop = useCallback((stop: () => void) => {
+    stopVoiceAudio.current = stop;
+    return () => { if (stopVoiceAudio.current === stop) stopVoiceAudio.current = null; };
+  }, []);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
   const [roomAudioScene, setRoomAudioScene] = useState<RoomAudioScene | null>(null);
   const [loopAudioNames, setLoopAudioNames] = useState<LoopAudioName[]>([]);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
-  const roomAudioTracks = getRoomAudioTracks(roomAudioScene, settings, appIsActive, loopAudioNames);
+  const roomAudioTracks = getRoomAudioTracks(voiceAudioActive ? null : roomAudioScene, settings, appIsActive, loopAudioNames);
   const roomAudioActive = roomAudioTracks.length > 0;
   // Keep videos from reclaiming audio focus while room audio still needs it,
   // including when the last manual loop stops and its room copy takes over.
-  const shouldMixVideoAudio = loopAudioNames.length > 0 || sessionAudioActive || roomAudioActive;
+  const shouldMixVideoAudio = voiceAudioActive || loopAudioNames.length > 0 || sessionAudioActive || roomAudioActive;
   const bgm = useAudioPlayer(bgmSource);
   const outsideBrightBgm = useAudioPlayer(outsideBrightBgmSource);
   const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
@@ -229,10 +241,10 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       player.loop = true;
       player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
     });
-    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && !roomAudioActive && loopAudioNames.length === 0) {
+    if (appIsActive && settings.backgroundMusicEnabled && !voiceAudioActive && !sessionAudioActive && !roomAudioActive && loopAudioNames.length === 0) {
       bgms[bgmMode].play();
     }
-  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, roomAudioActive, sessionAudioActive, settings]);
+  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, roomAudioActive, sessionAudioActive, settings, voiceAudioActive]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
@@ -267,11 +279,13 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     if (!name) loopSleepTimer.cancel();
     loopPlayback.stop(name ? loopPlayers[name] : undefined);
     setLoopAudioNames((current) => name ? current.filter((item) => item !== name) : []);
+    return loopMediaControls.settled();
   }, [loopMediaControls, loopPlayback, loopPlayers, loopSleepTimer]);
   stopLoopAudioRef.current = stopLoopAudio;
 
   const playLoopAudio = useCallback((name: LoopAudioName) => {
     if (!settings?.soundEnabled) return;
+    stopVoiceAudio.current?.();
     setLoopAudioNames((current) => current.includes(name) ? current : [...current, name]);
     loopMediaControls.start(loopPlayers[name], () => loopPlayback.play(loopPlayers[name], settings.soundVolume));
   }, [loopMediaControls, loopPlayback, loopPlayers, settings]);
@@ -303,8 +317,10 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       setSessionAudioActive,
       setRoomAudioScene,
       shouldMixVideoAudio,
+      setVoiceAudioActive,
+      registerVoiceAudioStop,
     }),
-    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, shouldMixVideoAudio, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, shouldMixVideoAudio, stopEffect, stopLoopAudio, updateAudioSettings, registerVoiceAudioStop],
   );
   return (
     <AudioContext.Provider value={value}>
