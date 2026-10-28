@@ -22,14 +22,14 @@ type VoiceLibrary = {
   playing: boolean;
   importVoices(): Promise<ImportResult | null>;
   renameVoice(id: string, name: string): Promise<void>;
-  moveVoice(id: string, direction: -1 | 1): Promise<void>;
+  reorderVoices(orderedIds: string[], scope: VoiceScope): Promise<void>;
   removeVoice(id: string): Promise<void>;
   clearVoices(): Promise<void>;
   selectScope(scope: VoiceScope): Promise<void>;
   createFolder(name: string): Promise<void>;
   renameFolder(id: string, name: string): Promise<void>;
   removeFolder(id: string): Promise<void>;
-  setVoiceFolder(id: string, folderId: string | null): Promise<void>;
+  setVoiceFolders(id: string, folderIds: string[]): Promise<void>;
   setMode(mode: VoicePlaybackMode): Promise<void>;
   play(id: string): void;
   pause(): void;
@@ -169,7 +169,7 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
     voices, visibleVoices: voicesInScope(voices, scope), folders, scope, mode, loading, busy, error, ...playbackState,
     importVoices: () => operate(() => voiceStorageService.importVoices(scopeRef.current === "all" || scopeRef.current === "unfiled" ? null : scopeRef.current)),
     renameVoice: (id, name) => operate(() => voiceStorageService.rename(id, name)),
-    moveVoice: (id, direction) => operate(() => voiceStorageService.move(id, direction, scopeRef.current)),
+    reorderVoices: (orderedIds, scope) => operate(() => voiceStorageService.reorder(orderedIds, scope)),
     removeVoice: (id) => operate(async () => {
       // Release the audio source before storage revokes its URL or deletes it.
       if (playback.getState().currentId === id) playback.stop();
@@ -186,7 +186,7 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
     }),
     renameFolder: (id, name) => operate(() => voiceStorageService.renameFolder(id, name)),
     removeFolder: (id) => operate(() => voiceStorageService.removeFolder(id)),
-    setVoiceFolder: (id, folderId) => operate(() => voiceStorageService.setVoiceFolder(id, folderId)),
+    setVoiceFolders: (id, folderIds) => operate(() => voiceStorageService.setVoiceFolders(id, folderIds)),
     setMode: (next) => operate(() => voiceStorageService.setMode(next)),
     play: (id) => {
       if (loading || operationActive.current) return;

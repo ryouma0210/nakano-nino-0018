@@ -1,4 +1,4 @@
-import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
+import { IDBDatabase as FakeIDBDatabase, IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentPickerAsset } from "expo-document-picker";
 import type { VoiceLibrary } from "../features/voices/library";
@@ -94,6 +94,162 @@ beforeEach(async () => {
   });
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
   ({ voiceStorageService: service } = await import("./voiceStorageService"));
+});
+
+describe.each(["android", "web"])("%s atomic voice ordering", (platform) => {
+  beforeEach(() => { mocks.platform.OS = platform; });
+
+  async function seedLibrary() {
+    const folder = await service.createFolder("Morning");
+    const other = await service.createFolder("Evening");
+    const makeAsset = platform === "web" ? webAsset : asset;
+    select(...["first", "second", "third", "fourth", "fifth"].map((name) => makeAsset(`${name}.mp3`, name)));
+    await service.importVoices();
+    const voices = (await service.load()).voices;
+    await service.setVoiceFolders(voices[0].id, [folder.id, other.id]);
+    await service.setVoiceFolders(voices[2].id, [other.id]);
+    await service.setVoiceFolders(voices[3].id, [folder.id, other.id]);
+    await service.setMode("all");
+    await service.setScope(other.id);
+    return { folder, other, original: await service.load() };
+  }
+
+  it.each(["all", "unfiled", "folder"])("saves %s order in one metadata commit and preserves audio, memberships and outside slots", async (kind) => {
+    const { folder, original } = await seedLibrary();
+    const voices = original.voices;
+    const order = kind === "all" ? [4, 3, 2, 1, 0] : kind === "unfiled" ? [4, 1] : [3, 0];
+    const expected = kind === "all" ? [4, 3, 2, 1, 0] : kind === "unfiled" ? [0, 4, 2, 3, 1] : [3, 1, 2, 0, 4];
+    const scope = kind === "folder" ? folder.id : kind;
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    const add = vi.spyOn(IDBObjectStore.prototype, "add");
+    const transactions = vi.spyOn(FakeIDBDatabase.prototype, "transaction");
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    mocks.write.mockClear();
+    mocks.copy.mockClear();
+    mocks.move.mockClear();
+    vi.mocked(URL.createObjectURL).mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+    await service.reorder(order.map((index) => voices[index].id), scope);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(add).not.toHaveBeenCalled();
+    expect(mocks.copy).not.toHaveBeenCalled();
+    if (platform === "web") {
+      expect(transactions).toHaveBeenCalledExactlyOnceWith(["metadata", "voices"], "readwrite");
+      expect(put).toHaveBeenCalledOnce();
+      expect((put.mock.contexts[0] as IDBObjectStore).name).toBe("metadata");
+      expect(mocks.write).not.toHaveBeenCalled();
+    } else {
+      expect(mocks.write).toHaveBeenCalledOnce();
+      expect(mocks.write.mock.calls[0][0]).toBe(pending);
+      expect(mocks.move.mock.calls.every(([paths]) => paths.from.startsWith(`${directory}.metadata/`) && paths.to.startsWith(`${directory}.metadata/`))).toBe(true);
+      expect(put).not.toHaveBeenCalled();
+    }
+    const expectedVoices = expected.map((index) => voices[index]);
+    expect(await service.load()).toEqual({ ...original, voices: expectedVoices });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    for (const [index, voice] of voices.entries()) {
+      expect(platform === "web" ? await blobs.get(voice.uri)!.text() : nativeFiles.get(voice.uri)).toBe(["first", "second", "third", "fourth", "fifth"][index]);
+    }
+    unsubscribe();
+    vi.resetModules();
+    ({ voiceStorageService: service } = await import("./voiceStorageService"));
+    const reloaded = await service.load();
+    expect({ ...reloaded, voices: reloaded.voices.map((voice) => ({ ...voice, uri: undefined })) })
+      .toEqual({ ...original, voices: expectedVoices.map((voice) => ({ ...voice, uri: undefined })) });
+  });
+
+  it("snapshots the caller order before queued work and applies its explicit scope despite a selection change", async () => {
+    const { folder, other, original } = await seedLibrary();
+    await service.setScope(folder.id);
+    const ids = [original.voices[3].id, original.voices[0].id];
+    const selecting = service.setScope(other.id);
+    const reordering = service.reorder(ids, folder.id);
+    ids.reverse();
+    ids.push("voice-missing");
+    await Promise.all([selecting, reordering]);
+    expect(await service.load()).toEqual({ ...original, voices: [3, 1, 2, 0, 4].map((index) => original.voices[index]) });
+  });
+
+  it("rejects invalid permutations or unknown scopes without any metadata write or notification", async () => {
+    const { folder, original } = await seedLibrary();
+    const [first, outside, , fourth] = original.voices;
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    mocks.write.mockClear();
+    for (const ids of [null, undefined, first.id, [], [first.id], [first.id, first.id], [first.id, outside.id],
+      [first.id, fourth.id, outside.id], [first.id, "voice-missing"], [null, fourth.id], Object.assign(new Array(2), { 0: first.id })]) {
+      await expect(service.reorder(ids as string[], folder.id)).rejects.toThrow("順序変更を開き直して");
+    }
+    await expect(service.reorder([], "folder-missing")).rejects.toThrow("フォルダが見つかりません");
+    expect(await service.load()).toEqual(original);
+    expect(listener).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(mocks.write).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it.each(["membership", "addition", "deletion", "folder"])("rejects a stale order after %s changes without overwriting the latest library", async (change) => {
+    const { folder, other, original } = await seedLibrary();
+    const ids = [original.voices[3].id, original.voices[0].id];
+    if (change === "membership") await service.setVoiceFolders(original.voices[0].id, [other.id]);
+    if (change === "addition") {
+      select(platform === "web" ? webAsset("new.mp3") : asset("new.mp3"));
+      await service.importVoices(folder.id);
+    }
+    if (change === "deletion") await service.remove(original.voices[0].id);
+    if (change === "folder") await service.removeFolder(folder.id);
+    const latest = await service.load();
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    mocks.write.mockClear();
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    await expect(service.reorder(ids, folder.id)).rejects.toThrow(change === "folder" ? "フォルダが見つかりません" : "順序変更を開き直して");
+    expect(await service.load()).toEqual(latest);
+    expect(put).not.toHaveBeenCalled();
+    expect(mocks.write).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("rolls back a failed order commit without changing membership, bytes, playback URLs or selection", async () => {
+    const { folder, original } = await seedLibrary();
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    mocks.copy.mockClear();
+    vi.mocked(URL.createObjectURL).mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+    let restore: (() => void) | undefined;
+    if (platform === "web") {
+      const put = IDBObjectStore.prototype.put;
+      const abort = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+        const request = put.call(this, value, key);
+        request.addEventListener("success", () => this.transaction.abort(), { once: true });
+        return request;
+      });
+      restore = () => abort.mockRestore();
+    } else {
+      const move = mocks.move.getMockImplementation()!;
+      mocks.move.mockImplementationOnce(move).mockRejectedValueOnce(new Error("disk full"));
+    }
+    const ids = [original.voices[3].id, original.voices[0].id];
+    await expect(service.reorder(ids, folder.id)).rejects.toThrow();
+    restore?.();
+    expect(await service.load()).toEqual(original);
+    expect(listener).not.toHaveBeenCalled();
+    expect(mocks.copy).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    for (const [index, voice] of original.voices.entries()) {
+      expect(platform === "web" ? await blobs.get(voice.uri)!.text() : nativeFiles.get(voice.uri)).toBe(["first", "second", "third", "fourth", "fifth"][index]);
+    }
+    await service.reorder(ids, folder.id);
+    expect(await service.load()).toEqual({ ...original, voices: [3, 1, 2, 0, 4].map((index) => original.voices[index]) });
+    expect(listener).toHaveBeenCalledOnce();
+    unsubscribe();
+  });
 });
 
 afterEach(() => {
@@ -434,24 +590,29 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     return platform === "web" ? webAsset(name, data) : asset(name, data);
   }
 
-  it("loads version 1 without writing and persists version 2 only on the next change", async () => {
+  it.each([1, 2])("loads version %i without writing and persists version 3 only on the next change", async (version) => {
     const legacyVoice = { id: "voice-legacy", name: "Original name", originalName: "original.mp3", fileName: "voice-legacy.mp3", size: 5, mimeType: "audio/mpeg" };
-    const legacy = { version: 1, mode: "all", voices: [legacyVoice] };
+    const legacySecond = { ...legacyVoice, id: "voice-second", fileName: "voice-second.mp3", name: "Second", originalName: "second.mp3" };
+    const folders = version === 1 ? [] : [{ id: "folder-existing", name: "Existing" }];
+    const scope = version === 1 ? "all" : "folder-existing";
+    const expectedVoices = [{ ...legacyVoice, folderIds: version === 1 ? [] : ["folder-existing"] }, { ...legacySecond, folderIds: [] }];
+    const legacy = version === 1 ? { version, mode: "all", voices: [legacyVoice, legacySecond] }
+      : { version, mode: "all", folders, scope, voices: [{ ...legacyVoice, folderId: "folder-existing" }, { ...legacySecond, folderId: null }] };
     if (platform === "web") {
       await service.load();
       await webData((transaction) => {
         transaction.objectStore("metadata").put(legacy, "library");
         transaction.objectStore("voices").put(new Blob(["audio"], { type: "audio/mpeg" }), legacyVoice.id);
+        transaction.objectStore("voices").put(new Blob(["other"], { type: "audio/mpeg" }), legacySecond.id);
       }, "readwrite");
     } else {
       nativeFiles.set(current, JSON.stringify(legacy));
       nativeFiles.set(`${directory}${legacyVoice.fileName}`, "audio");
+      nativeFiles.set(`${directory}${legacySecond.fileName}`, "other");
     }
     const put = vi.spyOn(IDBObjectStore.prototype, "put");
     const loaded = await service.load();
-    expect(loaded).toMatchObject({ mode: "all", folders: [], scope: "all", voices: [{
-      id: legacyVoice.id, name: legacyVoice.name, originalName: legacyVoice.originalName, size: 5, folderId: null,
-    }] });
+    expect(loaded).toMatchObject({ mode: "all", folders, scope, voices: expectedVoices.map(({ id, name, originalName, size, folderIds }) => ({ id, name, originalName, size, folderIds })) });
     expect(mocks.write).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
     await service.setScope("unfiled");
@@ -459,12 +620,15 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     if (platform === "web") {
       await webData((transaction) => {
         const get = transaction.objectStore("metadata").get("library");
-        get.onsuccess = () => expect(get.result).toEqual({ version: 2, mode: "all", folders: [], scope: "unfiled", voices: [{ ...legacyVoice, folderId: null }] });
+        get.onsuccess = () => expect(get.result).toEqual({ version: 3, mode: "all", folders, scope: "unfiled", voices: expectedVoices });
       });
     } else {
-      expect(JSON.parse(nativeFiles.get(current)!)).toEqual({ version: 2, mode: "all", folders: [], scope: "unfiled", voices: [{ ...legacyVoice, folderId: null }] });
+      expect(JSON.parse(nativeFiles.get(current)!)).toEqual({ version: 3, mode: "all", folders, scope: "unfiled", voices: expectedVoices });
     }
     expect(mocks.copy).not.toHaveBeenCalled();
+    for (const [index, voice] of loaded.voices.entries()) {
+      expect(platform === "web" ? await blobs.get(voice.uri)!.text() : nativeFiles.get(voice.uri)).toBe(["audio", "other"][index]);
+    }
   });
 
   it("persists folders, memberships, names, repeat and selected scope across restarts", async () => {
@@ -479,6 +643,7 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     select(folderAsset("first.mp3", "original audio"));
     await service.importVoices(folder.id);
     const [voice] = (await service.load()).voices;
+    await service.setVoiceFolders(voice.id, [folder.id, other.id]);
     await service.renameFolder(folder.id, "  Training  ");
     await service.setMode("all");
     await service.setScope(folder.id);
@@ -486,7 +651,7 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     ({ voiceStorageService: service } = await import("./voiceStorageService"));
     const loaded = await service.load();
     expect(loaded).toMatchObject({ mode: "all", scope: folder.id, folders: [{ ...folder, name: "Training" }, other], voices: [{
-      id: voice.id, folderId: folder.id, originalName: "first.mp3", size: "original audio".length,
+      id: voice.id, folderIds: [folder.id, other.id], originalName: "first.mp3", size: "original audio".length,
     }] });
     expect(platform === "web" ? await blobs.get(loaded.voices[0].uri)!.text() : nativeFiles.get(loaded.voices[0].uri)).toBe("original audio");
   });
@@ -512,14 +677,15 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     await service.setScope(folder.id);
     await service.move(first.id, 1, folder.id);
     expect((await service.load()).voices).toEqual([fourth, second, third, first]);
-    await service.setVoiceFolder(third.id, folder.id);
-    await service.setVoiceFolder(second.id, null);
-    expect((await service.load()).voices.map(({ folderId }) => folderId)).toEqual([folder.id, null, folder.id, folder.id]);
+    await service.setVoiceFolders(third.id, [folder.id, other.id]);
+    await service.setVoiceFolders(second.id, []);
+    expect((await service.load()).voices.map(({ folderIds }) => folderIds)).toEqual([[folder.id], [], [folder.id, other.id], [folder.id]]);
     await service.removeFolder(other.id);
     expect((await service.load()).scope).toBe(folder.id);
+    expect((await service.load()).voices.find((voice) => voice.id === third.id)?.folderIds).toEqual([folder.id]);
     await service.removeFolder(folder.id);
     expect(await service.load()).toEqual({ folders: [], scope: "unfiled", mode: "one",
-      voices: [fourth, second, third, first].map((voice) => ({ ...voice, folderId: null })) });
+      voices: [fourth, second, third, first].map((voice) => ({ ...voice, folderIds: [] })) });
     expect(mocks.copy).not.toHaveBeenCalled();
     expect(add).not.toHaveBeenCalled();
     expect(put.mock.contexts.every((store) => (store as IDBObjectStore).name === "metadata")).toBe(true);
@@ -538,13 +704,88 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     select(folderAsset("first.mp3"));
     await service.importVoices();
     const original = await service.load();
-    await expect(service.setVoiceFolder(original.voices[0].id, "folder-missing")).rejects.toThrow("フォルダが見つかりません");
-    await expect(service.setVoiceFolder("voice-missing", null)).rejects.toThrow("ボイスが見つかりません");
+    await expect(service.setVoiceFolders(original.voices[0].id, ["folder-missing"])).rejects.toThrow("フォルダが見つかりません");
+    await expect(service.setVoiceFolders("voice-missing", [])).rejects.toThrow("ボイスが見つかりません");
     await expect(service.setScope("folder-missing")).rejects.toThrow("フォルダが見つかりません");
     await expect(service.renameFolder("folder-missing", "New")).rejects.toThrow("フォルダが見つかりません");
     await expect(service.removeFolder("folder-missing")).rejects.toThrow("フォルダが見つかりません");
     await expect(service.move(original.voices[0].id, 1, "folder-missing")).rejects.toThrow("フォルダが見つかりません");
     expect(await service.load()).toEqual(original);
+  });
+
+  it("takes a membership snapshot before queued work and isolates returned arrays", async () => {
+    const folder = await service.createFolder("Morning");
+    const other = await service.createFolder("Evening");
+    select(folderAsset("first.mp3"));
+    await service.importVoices();
+    const [voice] = (await service.load()).voices;
+    const memberships = [folder.id];
+    const saving = service.setVoiceFolders(voice.id, memberships);
+    memberships.push(other.id);
+    await saving;
+    const loaded = await service.load();
+    expect(loaded.voices[0].folderIds).toEqual([folder.id]);
+    loaded.voices[0].folderIds.push("folder-missing");
+    expect((await service.load()).voices[0]).toEqual({ ...voice, folderIds: [folder.id] });
+    await service.setVoiceFolders(voice.id, [folder.id, other.id]);
+    expect((await service.load()).voices[0]).toEqual({ ...voice, folderIds: [folder.id, other.id] });
+  });
+
+  it("rejects malformed, duplicate and missing memberships atomically without notifying or writing", async () => {
+    const folder = await service.createFolder("Morning");
+    const other = await service.createFolder("Evening");
+    select(folderAsset("first.mp3"));
+    await service.importVoices(folder.id);
+    const original = await service.load();
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    mocks.write.mockClear();
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    for (const memberships of [null, undefined, folder.id, [null], [123], [other.id, other.id], new Array(1)]) {
+      await expect(service.setVoiceFolders(original.voices[0].id, memberships as string[])).rejects.toThrow("保存データが不正");
+    }
+    await expect(service.setVoiceFolders(original.voices[0].id, [other.id, "folder-missing"])).rejects.toThrow("フォルダが見つかりません");
+    expect(await service.load()).toEqual(original);
+    expect(listener).not.toHaveBeenCalled();
+    expect(mocks.write).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("keeps all memberships and audio when a membership write cannot commit", async () => {
+    const folder = await service.createFolder("Morning");
+    const other = await service.createFolder("Evening");
+    select(folderAsset("first.mp3", "original audio"));
+    await service.importVoices(folder.id);
+    await service.setScope(folder.id);
+    const original = await service.load();
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    mocks.copy.mockClear();
+    vi.mocked(URL.createObjectURL).mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+    let restore: (() => void) | undefined;
+    if (platform === "web") {
+      const put = IDBObjectStore.prototype.put;
+      const abort = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+        const request = put.call(this, value, key);
+        request.addEventListener("success", () => this.transaction.abort(), { once: true });
+        return request;
+      });
+      restore = () => abort.mockRestore();
+    } else mocks.write.mockRejectedValueOnce(new Error("disk full"));
+    await expect(service.setVoiceFolders(original.voices[0].id, [folder.id, other.id])).rejects.toThrow();
+    restore?.();
+    expect(await service.load()).toEqual(original);
+    expect(listener).not.toHaveBeenCalled();
+    expect(mocks.copy).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(platform === "web" ? await blobs.get(original.voices[0].uri)!.text() : nativeFiles.get(original.voices[0].uri)).toBe("original audio");
+    await service.setVoiceFolders(original.voices[0].id, [folder.id, other.id]);
+    expect(await service.load()).toEqual({ ...original, voices: [{ ...original.voices[0], folderIds: [folder.id, other.id] }] });
+    expect(listener).toHaveBeenCalledOnce();
+    unsubscribe();
   });
 
   it("keeps the requested destination when the selected scope changes while picking", async () => {
@@ -558,7 +799,7 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     await service.setScope(other.id);
     picked.resolve({ canceled: false, assets: [folderAsset("first.mp3")] });
     expect(await importing).toEqual({ added: 1, failed: 0, canceled: false });
-    expect(await service.load()).toMatchObject({ scope: other.id, voices: [{ folderId: folder.id }] });
+    expect(await service.load()).toMatchObject({ scope: other.id, voices: [{ folderIds: [folder.id] }] });
   });
 
   it("rejects a deleted picker destination before saving any audio and releases the import lock", async () => {
@@ -581,8 +822,10 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
 
   it("rolls back failed folder removal including memberships, selection, URLs and bytes", async () => {
     const folder = await service.createFolder("Morning");
+    const other = await service.createFolder("Evening");
     select(folderAsset("first.mp3", "original audio"));
     await service.importVoices(folder.id);
+    await service.setVoiceFolders((await service.load()).voices[0].id, [folder.id, other.id]);
     await service.setScope(folder.id);
     const original = await service.load();
     vi.mocked(URL.revokeObjectURL).mockClear();
@@ -605,6 +848,6 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
     expect(platform === "web" ? await blobs.get(original.voices[0].uri)!.text() : nativeFiles.get(original.voices[0].uri)).toBe("original audio");
     await service.removeFolder(folder.id);
-    expect(await service.load()).toEqual({ ...original, folders: [], scope: "unfiled", voices: [{ ...original.voices[0], folderId: null }] });
+    expect(await service.load()).toEqual({ ...original, folders: [other], scope: "unfiled", voices: [{ ...original.voices[0], folderIds: [other.id] }] });
   });
 });

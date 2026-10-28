@@ -2,7 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import {
-  audioFileType, emptyVoiceLibrary, invalidVoiceLibraryMessage, moveVoice, normalizedVoiceFolderName, parseVoiceLibrary,
+  audioFileType, emptyVoiceLibrary, invalidVoiceLibraryMessage, invalidVoiceOrderMessage, moveVoice, normalizedVoiceFolderName, parseVoiceLibrary, reorderVoices,
   VOICE_FILE_EXTENSIONS, VOICE_NAME_LIMIT, voiceDisplayName, voiceFolderName,
   type StoredVoice, type VoiceFolder, type VoiceLibrary, type VoiceMetadata, type VoicePlaybackMode, type VoiceScope,
 } from "../features/voices/library";
@@ -178,9 +178,9 @@ function newMetadata(asset: DocumentPicker.DocumentPickerAsset, size: number, fo
   const id = `voice-${Date.now()}-${sequence++}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
   const voice = parseVoiceLibrary({ ...emptyVoiceLibrary(), voices: [{
     id, fileName: `${id}.${type.extension}`, name: voiceDisplayName(asset.name.trim().slice(0, VOICE_NAME_LIMIT)),
-    originalName: asset.name, size, mimeType: type.mimeType, folderId: null,
+    originalName: asset.name, size, mimeType: type.mimeType, folderIds: [],
   }] }).voices[0];
-  return { ...voice, folderId };
+  return { ...voice, folderIds: folderId === null ? [] : [folderId] };
 }
 
 async function storeNativeAsset(asset: DocumentPicker.DocumentPickerAsset, state: VoiceLibrary, folderId: string | null): Promise<VoiceLibrary> {
@@ -218,8 +218,8 @@ export const voiceStorageService = {
     return serialized(async () => {
       if (Platform.OS !== "web") {
         const state = await readNativeLibrary();
-        return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, fileName, folderId }) => ({
-          id, name, originalName, size, folderId, uri: `${nativeDirectory()}${fileName}`,
+        return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, fileName, folderIds }) => ({
+          id, name, originalName, size, folderIds, uri: `${nativeDirectory()}${fileName}`,
         })) };
       }
       const { state, blobs } = await webTransaction("readonly", async (current) => {
@@ -231,10 +231,10 @@ export const voiceStorageService = {
         }));
         return { state, blobs };
       });
-      return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, folderId }, index) => {
+      return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, folderIds }, index) => {
         let uri = objectUrls.get(id);
         if (!uri) { uri = URL.createObjectURL(blobs[index]); objectUrls.set(id, uri); }
-        return { id, name, originalName, size, folderId, uri };
+        return { id, name, originalName, size, folderIds, uri };
       }) };
     });
   },
@@ -291,6 +291,15 @@ export const voiceStorageService = {
     });
   },
 
+  async reorder(orderedIds: string[], scope: VoiceScope = "all"): Promise<void> {
+    if (!Array.isArray(orderedIds)) throw new Error(invalidVoiceOrderMessage);
+    const ids = [...orderedIds];
+    return updateLibrary((state) => {
+      requireScope(state, scope);
+      return { ...state, voices: reorderVoices(state.voices, ids, scope) };
+    });
+  },
+
   async createFolder(input: string): Promise<VoiceFolder> {
     const name = voiceFolderName(input);
     const folder = { id: `folder-${Date.now()}-${sequence++}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`, name };
@@ -314,16 +323,20 @@ export const voiceStorageService = {
     return updateLibrary((state) => {
       requireFolder(state, id);
       return { ...state, folders: state.folders.filter((folder) => folder.id !== id),
-        voices: state.voices.map((voice) => voice.folderId === id ? { ...voice, folderId: null } : voice),
+        voices: state.voices.map((voice) => voice.folderIds.includes(id) ? { ...voice, folderIds: voice.folderIds.filter((folderId) => folderId !== id) } : voice),
         scope: state.scope === id ? "unfiled" : state.scope };
     });
   },
 
-  setVoiceFolder(id: string, folderId: string | null): Promise<void> {
+  async setVoiceFolders(id: string, folderIds: string[]): Promise<void> {
+    if (!Array.isArray(folderIds)) throw new Error(invalidVoiceLibraryMessage);
+    const memberships = [...folderIds];
+    if (memberships.some((folderId) => typeof folderId !== "string")
+      || new Set(memberships).size !== memberships.length) throw new Error(invalidVoiceLibraryMessage);
     return updateLibrary((state) => {
-      requireFolder(state, folderId);
+      for (const folderId of memberships) requireFolder(state, folderId);
       if (!state.voices.some((voice) => voice.id === id)) throw new Error("ボイスが見つかりません。");
-      return { ...state, voices: state.voices.map((voice) => voice.id === id ? { ...voice, folderId } : voice) };
+      return { ...state, voices: state.voices.map((voice) => voice.id === id ? { ...voice, folderIds: memberships } : voice) };
     });
   },
 

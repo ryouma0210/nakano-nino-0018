@@ -4,6 +4,7 @@ const { withDangerousMod } = require("expo/config-plugins");
 
 const supportedVersion = "57.0.4";
 const marker = "// Nino Room: native voice playlist lock-screen controls v1.";
+const navigationMarker = "// Nino Room: native voice playlist previous/next controls v2.";
 const androidRoot = "android/src/main/java/expo/modules/audio/";
 
 function replaceOnce(source, before, after, file) {
@@ -13,10 +14,10 @@ function replaceOnce(source, before, after, file) {
   return source.replace(before, after);
 }
 
-function patch(source, file, transform, required) {
+function patch(source, file, transform, required, phaseMarker = marker) {
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
   const normalized = source.replace(/\r\n/g, "\n");
-  const result = normalized.includes(marker) ? normalized : `${transform(normalized)}\n${marker}\n`;
+  const result = normalized.includes(phaseMarker) ? normalized : `${transform(normalized)}\n${phaseMarker}\n`;
   if (required.some((snippet) => !result.includes(snippet))) {
     throw new Error(`The expo-audio voice playlist patch in ${file} is incomplete; reinstall dependencies and prebuild again.`);
   }
@@ -212,6 +213,221 @@ const iosBridge = `      Function("setActiveForLockScreen") { (playlist: AudioPl
 
 `;
 
+const androidPlaylistNavigation = `  private fun canNavigatePlaylist(): Boolean {
+    val playlist = currentPlayer as? AudioPlaylist ?: return false
+    return playlist.ref.mediaItemCount > 1 && !(currentOptions?.isLiveStream ?: playlist.isLive)
+  }
+
+  private fun navigatePlaylist(direction: Int, playlist: AudioPlaylist? = currentPlayer as? AudioPlaylist) {
+    if (playlist == null || playlist !== currentPlayer || !playlist.isActiveForLockScreen ||
+      !canNavigatePlaylist() || !shouldPlayInSilentMode()) return
+    val count = playlist.ref.mediaItemCount
+    val current = playlist.ref.currentMediaItemIndex.coerceIn(0, count - 1)
+    // Manual navigation wraps the selected queue independently of repeat-one.
+    playlist.ref.seekTo((current + direction + count) % count, 0L)
+    playlist.ref.play()
+  }
+
+  private inner class VoicePlaylistNavigationPlayer(private val playlist: AudioPlaylist) : ForwardingPlayer(playlist.ref) {
+    private val listeners = java.util.IdentityHashMap<Player.Listener, Player.Listener>()
+
+    override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
+
+    override fun getAvailableCommands(): Player.Commands {
+      val commands = super.getAvailableCommands().buildUpon()
+      val navigation = intArrayOf(
+        Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+        Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
+      )
+      for (command in navigation) {
+        if (playlist.ref.mediaItemCount > 1) commands.add(command) else commands.remove(command)
+      }
+      return commands.build()
+    }
+
+    override fun getPreviousMediaItemIndex(): Int = navigationIndex(-1)
+    override fun getNextMediaItemIndex(): Int = navigationIndex(1)
+    override fun hasPreviousMediaItem(): Boolean = playlist.ref.mediaItemCount > 1
+    override fun hasNextMediaItem(): Boolean = playlist.ref.mediaItemCount > 1
+    override fun seekToPrevious() = navigatePlaylist(-1, playlist)
+    override fun seekToPreviousMediaItem() = navigatePlaylist(-1, playlist)
+    override fun seekToNext() = navigatePlaylist(1, playlist)
+    override fun seekToNextMediaItem() = navigatePlaylist(1, playlist)
+
+    private fun navigationIndex(direction: Int): Int {
+      val count = playlist.ref.mediaItemCount
+      if (count < 2) return androidx.media3.common.C.INDEX_UNSET
+      return (playlist.ref.currentMediaItemIndex.coerceIn(0, count - 1) + direction + count) % count
+    }
+
+    override fun addListener(listener: Player.Listener) {
+      val forwarding = listeners.getOrPut(listener) {
+        object : Player.Listener by listener {
+          override fun onAvailableCommandsChanged(commands: Player.Commands) {
+            listener.onAvailableCommandsChanged(this@VoicePlaylistNavigationPlayer.availableCommands)
+          }
+
+          override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            listener.onTimelineChanged(timeline, reason)
+            // Count changes can change our commands even if ExoPlayer's commands stay the same.
+            listener.onAvailableCommandsChanged(this@VoicePlaylistNavigationPlayer.availableCommands)
+          }
+
+          override fun onEvents(player: Player, events: Player.Events) {
+            if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+              val flags = androidx.media3.common.FlagSet.Builder()
+              for (index in 0 until events.size()) flags.add(events.get(index))
+              flags.add(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)
+              listener.onEvents(this@VoicePlaylistNavigationPlayer, Player.Events(flags.build()))
+            } else {
+              listener.onEvents(this@VoicePlaylistNavigationPlayer, events)
+            }
+          }
+        }
+      }
+      super.addListener(forwarding)
+    }
+
+    override fun removeListener(listener: Player.Listener) {
+      super.removeListener(listeners.remove(listener) ?: listener)
+    }
+  }
+
+`;
+
+const iosPlaylistNavigation = `  private func updatePlaylistNavigationCommands() {
+    let enabled = !isLiveStream && (activePlayer as? AudioPlaylist).map { $0.trackCount > 1 } == true
+    remoteCommandCenter.previousTrackCommand.isEnabled = enabled
+    remoteCommandCenter.nextTrackCommand.isEnabled = enabled
+  }
+
+  private func navigatePlaylist(_ direction: Int) -> MPRemoteCommandHandlerStatus {
+    // Remote-command callbacks may arrive away from the AVQueuePlayer's main queue.
+    // Resolve the active queue and native index only once execution reaches main.
+    let navigate = { [weak self] () -> MPRemoteCommandHandlerStatus in
+      guard let self, !self.isLiveStream,
+            let playlist = self.activePlayer as? AudioPlaylist,
+            playlist.isActiveForLockScreen, playlist.trackCount > 1 else {
+        return .commandFailed
+      }
+      let count = playlist.trackCount
+      let index = (playlist.currentTrackIndex + direction + count) % count
+      playlist.skipTo(index: index)
+      playlist.play(at: playlist.currentRate > 0 ? playlist.currentRate : 1.0)
+      return .success
+    }
+    return Thread.isMainThread ? navigate() : DispatchQueue.main.sync(execute: navigate)
+  }
+
+`;
+
+const navigationTransforms = {
+  [`${androidRoot}service/AudioControlsService.kt`]: {
+    required: [androidPlaylistNavigation, "import expo.modules.audio.AudioPlaylist", "ACTION_PREVIOUS -> navigatePlaylist(-1, actionPlayer as? AudioPlaylist)",
+      "ACTION_NEXT -> navigatePlaylist(1, actionPlayer as? AudioPlaylist)", "return VoicePlaylistNavigationPlayer(player)",
+      ".setCallback(AudioMediaSessionCallback(player is AudioPlaylist && !(options?.isLiveStream ?: player.isLive)))",
+      "CommandButton.ICON_PREVIOUS", "CommandButton.ICON_NEXT", "buildActionPendingIntent(ACTION_PREVIOUS)", "buildActionPendingIntent(ACTION_NEXT)"],
+    apply(source, file) {
+      const edit = (before, after) => { source = replaceOnce(source, before, after, file); };
+      edit("import expo.modules.audio.BaseAudioPlayer", "import expo.modules.audio.AudioPlaylist\nimport expo.modules.audio.BaseAudioPlayer");
+      edit("    val currentPlayerRef = currentPlayer?.ref", "    val actionPlayer = currentPlayer\n    val currentPlayerRef = actionPlayer?.ref");
+      edit("        ACTION_PAUSE -> currentPlayerRef.pause()", "        ACTION_PAUSE -> currentPlayerRef.pause()\n        ACTION_PREVIOUS -> navigatePlaylist(-1, actionPlayer as? AudioPlaylist)\n        ACTION_NEXT -> navigatePlaylist(1, actionPlayer as? AudioPlaylist)");
+      edit("      if (currentOptions?.showSeekBackward == true) {", `      if (canNavigatePlaylist()) {
+        builder.addAction(
+          NotificationCompat.Action(
+            androidx.media3.session.R.drawable.media3_icon_previous,
+            "Previous",
+            buildActionPendingIntent(ACTION_PREVIOUS)
+          )
+        )
+        compactViewIndices.add(currentIndex)
+        currentIndex++
+      } else if (currentOptions?.showSeekBackward == true) {`);
+      edit("      if (currentOptions?.showSeekForward == true) {", `      if (canNavigatePlaylist()) {
+        builder.addAction(
+          NotificationCompat.Action(
+            androidx.media3.session.R.drawable.media3_icon_next,
+            "Next",
+            buildActionPendingIntent(ACTION_NEXT)
+          )
+        )
+        compactViewIndices.add(currentIndex)
+      } else if (currentOptions?.showSeekForward == true) {`);
+      edit("    if (currentOptions?.showSeekBackward == true) {", `    if (canNavigatePlaylist()) {
+      mediaButtons.add(
+        CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+          .setDisplayName("Previous")
+          .setEnabled(true)
+          .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+          .setSlots(CommandButton.SLOT_BACK)
+          .build()
+      )
+    } else if (currentOptions?.showSeekBackward == true) {`);
+      edit("    if (currentOptions?.showSeekForward == true) {", `    if (canNavigatePlaylist()) {
+      mediaButtons.add(
+        CommandButton.Builder(CommandButton.ICON_NEXT)
+          .setDisplayName("Next")
+          .setEnabled(true)
+          .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+          .setSlots(CommandButton.SLOT_FORWARD)
+          .build()
+      )
+    } else if (currentOptions?.showSeekForward == true) {`);
+      edit("    val isLive = options?.isLiveStream ?: player.isLive\n", "    val isLive = options?.isLiveStream ?: player.isLive\n    if (!isLive && player is AudioPlaylist) {\n      return VoicePlaylistNavigationPlayer(player)\n    }\n");
+      const callback = ".setCallback(AudioMediaSessionCallback())";
+      if (source.split(callback).length !== 3) throw new Error(`expo-audio ${file} changed; review voice playlist session callbacks.`);
+      source = source.replaceAll(callback, ".setCallback(AudioMediaSessionCallback(player is AudioPlaylist && !(options?.isLiveStream ?: player.isLive)))");
+      edit("  private fun resolveSessionPlayer(", `${androidPlaylistNavigation}  private fun resolveSessionPlayer(`);
+      edit("      override fun onPlaybackStateChanged(playbackState: Int) {", "      override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {\n        updateSessionCustomLayout(player.ref.isPlaying)\n        postOrStartForegroundNotification(startInForeground = false)\n      }\n\n      override fun onPlaybackStateChanged(playbackState: Int) {");
+      edit('    private const val ACTION_TOGGLE = "expo.modules.audio.action.TOGGLE"', '    private const val ACTION_TOGGLE = "expo.modules.audio.action.TOGGLE"\n    private const val ACTION_PREVIOUS = "expo.modules.audio.action.PREVIOUS"\n    private const val ACTION_NEXT = "expo.modules.audio.action.NEXT"');
+      return source;
+    },
+  },
+  [`${androidRoot}service/AudioMediaSessionCallback.kt`]: {
+    required: ["class AudioMediaSessionCallback(private val playlistNavigation: Boolean = false)", "if (playlistNavigation) commands.add(command) else commands.remove(command)"],
+    apply(source, file) {
+      source = replaceOnce(source, "class AudioMediaSessionCallback : MediaSession.Callback", "class AudioMediaSessionCallback(private val playlistNavigation: Boolean = false) : MediaSession.Callback", file);
+      return replaceOnce(source, `            // Remove track navigation commands
+            .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+            .remove(Player.COMMAND_SEEK_TO_NEXT)`, `            // Single/live players retain their original transport commands.
+            .also { commands ->
+              val navigation = intArrayOf(
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_NEXT
+              )
+              for (command in navigation) {
+                if (playlistNavigation) commands.add(command) else commands.remove(command)
+              }
+            }`, file);
+    },
+  },
+  "ios/MediaController.swift": {
+    required: [iosPlaylistNavigation, "remoteCommandCenter.previousTrackCommand.addTarget", "remoteCommandCenter.nextTrackCommand.addTarget",
+      "remoteCommandCenter.previousTrackCommand.removeTarget(nil)", "remoteCommandCenter.nextTrackCommand.removeTarget(nil)",
+      "remoteCommandCenter.previousTrackCommand.isEnabled = false", "remoteCommandCenter.nextTrackCommand.isEnabled = false",
+      "    updatePlaylistNavigationCommands()\n    let nextArtworkItemIdentifier"],
+    apply(source, file) {
+      const edit = (before, after) => { source = replaceOnce(source, before, after, file); };
+      edit("    let nextArtworkItemIdentifier = player.lockScreenPlayer.currentItem", "    updatePlaylistNavigationCommands()\n    let nextArtworkItemIdentifier = player.lockScreenPlayer.currentItem");
+      edit("  private func enableRemoteCommands(options: LockScreenOptions?) {", `${iosPlaylistNavigation}  private func enableRemoteCommands(options: LockScreenOptions?) {`);
+      edit("    disableRemoteCommands()\n    remoteCommandCenter.playCommand.addTarget", `    disableRemoteCommands()
+    remoteCommandCenter.previousTrackCommand.addTarget { [weak self] _ in
+      self?.navigatePlaylist(-1) ?? .commandFailed
+    }
+    remoteCommandCenter.nextTrackCommand.addTarget { [weak self] _ in
+      self?.navigatePlaylist(1) ?? .commandFailed
+    }
+    updatePlaylistNavigationCommands()
+    remoteCommandCenter.playCommand.addTarget`);
+      edit("    remoteCommandCenter.playCommand.isEnabled = false", "    remoteCommandCenter.previousTrackCommand.isEnabled = false\n    remoteCommandCenter.nextTrackCommand.isEnabled = false\n    remoteCommandCenter.playCommand.isEnabled = false");
+      edit("    remoteCommandCenter.playCommand.removeTarget(nil)", "    remoteCommandCenter.previousTrackCommand.removeTarget(nil)\n    remoteCommandCenter.nextTrackCommand.removeTarget(nil)\n    remoteCommandCenter.playCommand.removeTarget(nil)");
+      return source;
+    },
+  },
+};
+
 const transforms = {
   [`${androidRoot}BaseAudioPlayer.kt`]: {
     required: ["private val context: Context", "WeakReference(this)", "protected open fun resolveLockScreenMetadata", "serviceConnection.release()", releaseControls],
@@ -306,22 +522,39 @@ const transforms = {
   },
 };
 
-function patchVoicePlaylistSources(sources, version) {
+function patchVoicePlaylistBaseSources(sources, version) {
   if (version !== supportedVersion) {
     throw new Error(`Review the voice playlist patch before using expo-audio ${version} (expected ${supportedVersion}).`);
   }
   return Object.fromEntries(Object.entries(sources).map(([file, source]) => {
     const transform = transforms[file];
-    if (!transform) throw new Error(`Unknown voice playlist patch target: ${file}`);
+    if (!transform) {
+      if (navigationTransforms[file]) return [file, source];
+      throw new Error(`Unknown voice playlist patch target: ${file}`);
+    }
     return [file, patch(source, file, (input) => transform.apply(input, file), transform.required)];
   }));
 }
+
+function patchVoicePlaylistSources(sources, version) {
+  // Run navigation separately so installations already carrying the v1 marker
+  // receive the upgrade without rerunning (or weakening) the base transforms.
+  const base = patchVoicePlaylistBaseSources(sources, version);
+  return Object.fromEntries(Object.entries(base).map(([file, source]) => {
+    const transform = navigationTransforms[file];
+    return [file, transform
+      ? patch(source, file, (input) => transform.apply(input, file), transform.required, navigationMarker)
+      : source];
+  }));
+}
+
+const patchFiles = [...new Set([...Object.keys(transforms), ...Object.keys(navigationTransforms)])];
 
 function patchPlatform(mod, platform) {
   const packagePath = require.resolve("expo-audio/package.json", { paths: [mod.modRequest.projectRoot] });
   const packageRoot = path.dirname(packagePath);
   const { version } = JSON.parse(fs.readFileSync(packagePath, "utf8"));
-  const files = Object.keys(transforms).filter((file) => file.startsWith(`${platform}/`));
+  const files = patchFiles.filter((file) => file.startsWith(`${platform}/`));
   const original = Object.fromEntries(files.map((file) => [file, fs.readFileSync(path.join(packageRoot, file), "utf8")]));
   // Validate every file before writing any of them, so changed SDKs fail without a partial patch.
   const patched = patchVoicePlaylistSources(original, version);
@@ -336,4 +569,5 @@ module.exports = function withVoicePlaylistControls(config) {
   return withDangerousMod(config, ["ios", async (mod) => patchPlatform(mod, "ios")]);
 };
 module.exports.patchVoicePlaylistSources = patchVoicePlaylistSources;
-module.exports.voicePlaylistPatchFiles = Object.keys(transforms);
+module.exports.patchVoicePlaylistBaseSources = patchVoicePlaylistBaseSources;
+module.exports.voicePlaylistPatchFiles = patchFiles;
