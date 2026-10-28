@@ -9,18 +9,19 @@ export type StoredVoice = {
   uri: string;
   size: number;
   originalName: string;
-  folderId: string | null;
+  folderIds: string[];
 };
 
 export type VoiceMetadata = Omit<StoredVoice, "uri"> & { fileName: string; mimeType: string };
 export type VoiceLibrary = {
-  version: 2;
+  version: 3;
   voices: VoiceMetadata[];
   mode: VoicePlaybackMode;
   folders: VoiceFolder[];
   scope: VoiceScope;
 };
 export const invalidVoiceLibraryMessage = "ボイスの保存データが不正です。";
+export const invalidVoiceOrderMessage = "ボイスの一覧が変更されました。順序変更を開き直してください。";
 export const VOICE_NAME_LIMIT = 100;
 export const VOICE_FOLDER_NAME_LIMIT = 100;
 
@@ -49,7 +50,7 @@ export function voiceDisplayName(input: string): string {
 }
 
 export function emptyVoiceLibrary(): VoiceLibrary {
-  return { version: 2, voices: [], mode: "one", folders: [], scope: "all" };
+  return { version: 3, voices: [], mode: "one", folders: [], scope: "all" };
 }
 
 export function voiceFolderName(input: string): string {
@@ -67,14 +68,14 @@ export function normalizedVoiceFolderName(name: string): string {
 export function parseVoiceLibrary(value: unknown): VoiceLibrary {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(invalidVoiceLibraryMessage);
   const state = value as Record<string, unknown>;
-  if ((state.version !== 1 && state.version !== 2) || (state.mode !== "one" && state.mode !== "all") || !Array.isArray(state.voices)) {
+  if ((state.version !== 1 && state.version !== 2 && state.version !== 3) || (state.mode !== "one" && state.mode !== "all") || !Array.isArray(state.voices)) {
     throw new Error(invalidVoiceLibraryMessage);
   }
   const folders: VoiceFolder[] = [];
   const folderIds = new Set<string>();
   const folderNames = new Set<string>();
   let scope: VoiceScope = "all";
-  if (state.version === 2) {
+  if (state.version !== 1) {
     if (!Array.isArray(state.folders)) throw new Error(invalidVoiceLibraryMessage);
     for (const entry of state.folders) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry) || typeof entry.id !== "string"
@@ -102,22 +103,48 @@ export function parseVoiceLibrary(value: unknown): VoiceLibrary {
       || entry.originalName.length > 1024 || /[\u0000-\u001f\u007f]/.test(entry.originalName)
       || !Number.isSafeInteger(entry.size) || entry.size <= 0 || typeof entry.fileName !== "string"
       || !entry.fileName.startsWith(`${entry.id}.`) || !/^[a-zA-Z0-9_-]+\.[a-z0-9]{1,10}$/.test(entry.fileName)
-      || typeof entry.mimeType !== "string" || !/^audio\/[a-z0-9.+-]+$/.test(entry.mimeType)
-      || (state.version === 2 && entry.folderId !== null && (typeof entry.folderId !== "string" || !folderIds.has(entry.folderId)))) {
+      || typeof entry.mimeType !== "string" || !/^audio\/[a-z0-9.+-]+$/.test(entry.mimeType)) {
       throw new Error(invalidVoiceLibraryMessage);
+    }
+    let memberships: string[] = [];
+    if (state.version === 2) {
+      if (entry.folderId !== null && (typeof entry.folderId !== "string" || !folderIds.has(entry.folderId))) {
+        throw new Error(invalidVoiceLibraryMessage);
+      }
+      memberships = entry.folderId === null ? [] : [entry.folderId];
+    } else if (state.version === 3) {
+      if (!Array.isArray(entry.folderIds)) throw new Error(invalidVoiceLibraryMessage);
+      memberships = [...entry.folderIds];
+      if (memberships.some((id) => typeof id !== "string" || !folderIds.has(id))
+        || new Set(memberships).size !== memberships.length) {
+        throw new Error(invalidVoiceLibraryMessage);
+      }
     }
     seen.add(entry.id);
     return { id: entry.id, name: entry.name, originalName: entry.originalName, size: entry.size,
-      fileName: entry.fileName, mimeType: entry.mimeType, folderId: state.version === 1 ? null : entry.folderId };
+      fileName: entry.fileName, mimeType: entry.mimeType, folderIds: memberships };
   });
-  return { version: 2, mode: state.mode, voices, folders, scope };
+  return { version: 3, mode: state.mode, voices, folders, scope };
 }
 
-export function voicesInScope<T extends { folderId: string | null }>(voices: readonly T[], scope: VoiceScope): T[] {
-  return voices.filter((voice) => scope === "all" || voice.folderId === (scope === "unfiled" ? null : scope));
+export function voicesInScope<T extends { folderIds: readonly string[] }>(voices: readonly T[], scope: VoiceScope): T[] {
+  return voices.filter((voice) => scope === "all" || (scope === "unfiled" ? voice.folderIds.length === 0 : voice.folderIds.includes(scope)));
 }
 
 export const getVoicesInScope = voicesInScope;
+
+export function reorderVoices<T extends { id: string; folderIds: readonly string[] }>(
+  voices: readonly T[], orderedIds: readonly string[], scope: VoiceScope = "all",
+): T[] {
+  if (!Array.isArray(orderedIds)) throw new Error(invalidVoiceOrderMessage);
+  const ids = [...orderedIds];
+  const scoped = voicesInScope(voices, scope);
+  const byId = new Map(scoped.map((voice) => [voice.id, voice]));
+  if (ids.length !== scoped.length || byId.size !== scoped.length || new Set(ids).size !== ids.length
+    || ids.some((id) => typeof id !== "string" || !byId.has(id))) throw new Error(invalidVoiceOrderMessage);
+  let index = 0;
+  return voices.map((voice) => byId.has(voice.id) ? byId.get(ids[index++])! : voice);
+}
 
 export function moveVoice(voices: readonly VoiceMetadata[], id: string, direction: -1 | 1, scope: VoiceScope = "all"): VoiceMetadata[] {
   if (direction !== -1 && direction !== 1) throw new Error(invalidVoiceLibraryMessage);

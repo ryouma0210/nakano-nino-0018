@@ -4,8 +4,9 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { patchVoicePlaylistSources, voicePlaylistPatchFiles } = require("./withVoicePlaylistControls.js") as {
+const { patchVoicePlaylistSources, patchVoicePlaylistBaseSources, voicePlaylistPatchFiles } = require("./withVoicePlaylistControls.js") as {
   patchVoicePlaylistSources: (sources: Record<string, string>, version: string) => Record<string, string>;
+  patchVoicePlaylistBaseSources: (sources: Record<string, string>, version: string) => Record<string, string>;
   voicePlaylistPatchFiles: string[];
 };
 const { patchAudioControlsService } = require("./withLoopAudioNotification.js") as {
@@ -16,6 +17,7 @@ const { version } = JSON.parse(readFileSync(packagePath, "utf8")) as { version: 
 const source = Object.fromEntries(voicePlaylistPatchFiles.map((file) => [file, readFileSync(join(dirname(packagePath), file), "utf8")]));
 const androidRoot = "android/src/main/java/expo/modules/audio/";
 const normalize = (value: string) => value.replace(/\r\n/g, "\n");
+const navigationMarker = "// Nino Room: native voice playlist previous/next controls v2.";
 
 describe("native voice playlist lock-screen controls", () => {
   it("registers the plugin with source compilation and background playback enabled", () => {
@@ -86,6 +88,83 @@ describe("native voice playlist lock-screen controls", () => {
     expect(patchVoicePlaylistSources(crlf, version)).toEqual(Object.fromEntries(Object.entries(patched).map(([file, text]) => [file, text.replace(/\n/g, "\r\n")])));
   });
 
+  it("upgrades an installed v1 patch with a separately validated, idempotent navigation phase", () => {
+    const legacy = patchVoicePlaylistBaseSources(source, version);
+    const upgraded = patchVoicePlaylistSources(legacy, version);
+    const navigationFiles = [
+      `${androidRoot}service/AudioControlsService.kt`,
+      `${androidRoot}service/AudioMediaSessionCallback.kt`,
+      "ios/MediaController.swift",
+    ];
+    for (const file of navigationFiles) {
+      expect(upgraded[file].split(navigationMarker)).toHaveLength(2);
+    }
+    // The older phase must remain valid, rather than being rerun on already moved methods.
+    expect(patchVoicePlaylistBaseSources(upgraded, version)).toEqual(upgraded);
+    expect(patchVoicePlaylistSources(upgraded, version)).toEqual(upgraded);
+    for (const file of voicePlaylistPatchFiles.filter((file) => !navigationFiles.includes(file))) {
+      expect(upgraded[file]).toBe(legacy[file]);
+    }
+  });
+
+  it("wraps Android remote previous/next around the live selected queue independently of repeat mode", () => {
+    const service = normalize(patchVoicePlaylistSources(source, version)[`${androidRoot}service/AudioControlsService.kt`]);
+    const navigation = service.match(/  private fun navigatePlaylist[\s\S]*?(?=  private inner class VoicePlaylistNavigationPlayer)/)?.[0];
+    expect(navigation).toContain("playlist !== currentPlayer");
+    expect(navigation).toContain("!playlist.isActiveForLockScreen");
+    expect(navigation).toContain("!canNavigatePlaylist() || !shouldPlayInSilentMode()");
+    expect(navigation).toContain("val count = playlist.ref.mediaItemCount");
+    expect(navigation).toContain("val current = playlist.ref.currentMediaItemIndex.coerceIn(0, count - 1)");
+    expect(navigation).toContain("playlist.ref.seekTo((current + direction + count) % count, 0L)\n    playlist.ref.play()");
+    expect(navigation).not.toMatch(/repeatMode|loopMode|sources/);
+    expect(service).toContain("playlist.ref.mediaItemCount > 1 && !(currentOptions?.isLiveStream ?: playlist.isLive)");
+    for (const [method, direction] of [["seekToPrevious", -1], ["seekToPreviousMediaItem", -1], ["seekToNext", 1], ["seekToNextMediaItem", 1]]) {
+      expect(service).toContain(`override fun ${method}() = navigatePlaylist(${direction}, playlist)`);
+    }
+    expect(service).toContain("if (playlist.ref.mediaItemCount > 1) commands.add(command) else commands.remove(command)");
+    expect(service).toContain("listener.onAvailableCommandsChanged(this@VoicePlaylistNavigationPlayer.availableCommands)");
+    expect(service).toContain("flags.add(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)");
+    expect(service).toContain("listener.onEvents(this@VoicePlaylistNavigationPlayer, Player.Events(flags.build()))");
+    expect(service).toContain("super.removeListener(listeners.remove(listener) ?: listener)");
+  });
+
+  it("exposes previous/play/next on both older Android notifications and modern Media3 command slots", () => {
+    const patched = patchVoicePlaylistSources(source, version);
+    const service = normalize(patched[`${androidRoot}service/AudioControlsService.kt`]);
+    const callback = normalize(patched[`${androidRoot}service/AudioMediaSessionCallback.kt`]);
+    const notification = service.match(/    \/\/ Older Android system UI[\s\S]*?(?=    builder.setStyle)/)?.[0];
+    expect(notification).toContain("Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2");
+    expect(notification).toMatch(/ACTION_PREVIOUS[\s\S]*ACTION_PAUSE[\s\S]*ACTION_NEXT/);
+    expect(notification).toContain("media3_icon_previous");
+    expect(notification).toContain("media3_icon_next");
+    expect(service).toContain("ACTION_PREVIOUS -> navigatePlaylist(-1, actionPlayer as? AudioPlaylist)");
+    expect(service).toContain("ACTION_NEXT -> navigatePlaylist(1, actionPlayer as? AudioPlaylist)");
+    expect(service).toMatch(/CommandButton\.ICON_PREVIOUS[\s\S]*?\.setPlayerCommand\(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM\)[\s\S]*?\.setSlots\(CommandButton.SLOT_BACK\)/);
+    expect(service).toMatch(/CommandButton\.ICON_NEXT[\s\S]*?\.setPlayerCommand\(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM\)[\s\S]*?\.setSlots\(CommandButton.SLOT_FORWARD\)/);
+    expect(service.split(".setCallback(AudioMediaSessionCallback(player is AudioPlaylist && !(options?.isLiveStream ?: player.isLive)))")).toHaveLength(3);
+    expect(callback).toContain("playlistNavigation: Boolean = false");
+    expect(callback).toContain("if (playlistNavigation) commands.add(command) else commands.remove(command)");
+    expect(service).toContain("if (!isLive && player is AudioPlaylist) {\n      return VoicePlaylistNavigationPlayer(player)\n    }");
+  });
+
+  it("handles iOS previous/next on the main queue, refreshes track-count availability and removes handlers", () => {
+    const controller = normalize(patchVoicePlaylistSources(source, version)["ios/MediaController.swift"]);
+    const navigation = controller.match(/  private func navigatePlaylist[\s\S]*?(?=  private func enableRemoteCommands)/)?.[0];
+    expect(controller).toContain("let enabled = !isLiveStream && (activePlayer as? AudioPlaylist).map { $0.trackCount > 1 } == true");
+    expect(controller).toContain("updatePlaylistNavigationCommands()\n    let nextArtworkItemIdentifier");
+    expect(navigation).toContain("let playlist = self.activePlayer as? AudioPlaylist");
+    expect(navigation).toContain("playlist.isActiveForLockScreen, playlist.trackCount > 1");
+    expect(navigation).toContain("let index = (playlist.currentTrackIndex + direction + count) % count");
+    expect(navigation).toContain("playlist.skipTo(index: index)\n      playlist.play(at: playlist.currentRate > 0 ? playlist.currentRate : 1.0)");
+    expect(navigation).toContain("Thread.isMainThread ? navigate() : DispatchQueue.main.sync(execute: navigate)");
+    expect(navigation).not.toMatch(/loopMode|\.next\(|\.previous\(/);
+    for (const [command, direction] of [["previousTrack", -1], ["nextTrack", 1]]) {
+      expect(controller).toContain(`remoteCommandCenter.${command}Command.addTarget { [weak self] _ in\n      self?.navigatePlaylist(${direction}) ?? .commandFailed`);
+      expect(controller).toContain(`remoteCommandCenter.${command}Command.isEnabled = false`);
+      expect(controller).toContain(`remoteCommandCenter.${command}Command.removeTarget(nil)`);
+    }
+  });
+
   it("renames native queue metadata without replacing audio items and reports iOS decode failures", () => {
     const result = patchVoicePlaylistSources(source, version);
     const androidPlaylist = normalize(result[`${androidRoot}AudioPlaylist.kt`]);
@@ -122,5 +201,16 @@ describe("native voice playlist lock-screen controls", () => {
     expect(() => patchVoicePlaylistSources({ ...patched, [file]: patched[file].replace("serviceConnection.release()", "") }, version)).toThrow("incomplete");
     const swift = "ios/AudioPlaylist.swift";
     expect(() => patchVoicePlaylistSources({ ...patched, [swift]: patched[swift].replace("setActiveForLockScreen(false)", "") }, version)).toThrow("incomplete");
+  });
+
+  it("rejects changed navigation sources and incomplete installed navigation phases", () => {
+    const patched = patchVoicePlaylistSources(source, version);
+    const service = `${androidRoot}service/AudioControlsService.kt`;
+    const callback = `${androidRoot}service/AudioMediaSessionCallback.kt`;
+    expect(() => patchVoicePlaylistSources({ [callback]: "changed SDK source" }, version)).toThrow("changed");
+    expect(() => patchVoicePlaylistSources({ ...patched, [service]: patched[service].replace("playlist.ref.play()", "") }, version)).toThrow("incomplete");
+    expect(() => patchVoicePlaylistSources({ ...patched, [callback]: patched[callback].replace("if (playlistNavigation) commands.add(command) else commands.remove(command)", "") }, version)).toThrow("incomplete");
+    const swift = "ios/MediaController.swift";
+    expect(() => patchVoicePlaylistSources({ ...patched, [swift]: patched[swift].replace("remoteCommandCenter.nextTrackCommand.removeTarget(nil)", "") }, version)).toThrow("incomplete");
   });
 });

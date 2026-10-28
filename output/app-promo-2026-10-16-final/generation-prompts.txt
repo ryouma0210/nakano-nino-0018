@@ -1,0 +1,119 @@
+Nino Room 紹介画像 最終7枚セット
+生成方法: 組み込み image_gen
+サイズ: 各560 x 420 px / PNG
+内容: 全体紹介・記録・ポイント・ミニゲーム・タスク管理・ファイル格納・サキュバスとの対決
+バックアップ紹介はこのセットに含めません。
+原寸画像は masters/ に保存。生成後、4:3を維持して高品質補間で縮小。
+
+=== 01 ===
+Use case: ads-marketing.
+Create ONE complete Japanese app introduction graphic for "Nino Room", part of a four-card matching series.
+Input image 1: the app's actual character identity and default costume reference. Input image 2: the SAME character's face and hair identity plus elegant library mood reference. These are identity/style references, not screenshots.
+CRITICAL: Depict the SAME Nino character in both supplied images. Match the recognizable face, blue eyes, straight short rose-pink bob ending around the jaw, diagonal side fringe, and TWO black ribbon bows at the sides of her head with fine pink edging. Use the exact black tailored long-sleeved suit jacket, wine-red patterned waistcoat, black buttoned shirt, wine-red necktie, rose brooch, and black gloves from image 1. Do not substitute another woman, do not change the hair to brown, do not add a green pendant. Keep her natural poised expression and the reference's anime rendering.
+Fully clothed, NONSEXUAL, family-friendly depiction. Only neutral everyday record keeping and board-game features, no erotic content or suggestive pose.
+Output must be landscape EXACT 4:3. Requested deliverable is 560x420 pixels; if higher native resolution is necessary use the same exact 4:3 composition (e.g. 1120x840 or 1536x1152). Every word must remain readable at 560x420.
+Graphic design: elegant black/charcoal and wine-red mansion atmosphere with restrained brass-gold rules, ivory text, soft warm chandelier lighting. Strong clear Japanese typography, limited text, generous negative space. Fine gold rectangular border within full-bleed artwork, no outside mockup frame, no contact sheet. Left 55% headline/feature graphics, right 45% character from the waist up. Preserve character identity over posing complexity. Brand at top-left is exactly "Nino Room". Small top capsule gives the card number. Small bottom-right note exactly "紹介用イメージ". There are NO AI chat capabilities, prices, store logos, release claims, or extra illegible text. Use only the following exact copy, well-formed Japanese glyphs.
+Card 01 is the overall introduction. Background a softly blurred grand hall/library staircase from the reference. Nino gives a modest welcoming open-hand gesture. Beneath headline use three simple elegant gold outlined circular icons: conversation speech bubble, diary, game controller.
+Exact copy:
+Capsule: "01 / INTRO"
+Large two-line headline: "ニノと過ごす、" then "あなただけの毎日。"
+Supporting line: "会話・記録・ミニゲームを、ひとつに。"
+Bottom icon labels: "会話" / "記録" / "ミニゲーム"
+Keep text beautifully legible, no overlap with character face or hands.
+
+=== 02 ===
+Use case: ads-marketing.
+Create ONE complete Japanese app introduction graphic for "Nino Room", part of a four-card matching series.
+Input image 1: the app's actual character identity and default costume reference. Input image 2: the SAME character's face and hair identity plus elegant library mood reference. These are identity/style references, not screenshots.
+CRITICAL: Depict the SAME Nino character in both supplied images. Match the recognizable face, blue eyes, straight short rose-pink bob ending around the jaw, diagonal side fringe, and TWO black ribbon bows at the sides of her head with fine pink edging. Use the exact black tailored long-sleeved suit jacket, wine-red patterned waistcoat, black buttoned shirt, wine-red necktie, rose brooch, and black gloves from image 1. Do not substitute another woman, do not change the hair to brown, do not add a green pendant. Keep her natural poised expression and the reference's anime rendering.
+Fully clothed, NONSEXUAL, family-friendly depiction. Only neutral everyday record keeping and board-game features, no erotic content or suggestive pose.
+Output must be landscape EXACT 4:3. Requested deliverable is 560x420 pixels; if higher native resolution is necessary use the same exact 4:3 composition (e.g. 1120x840 or 1536x1152). Every word must remain readable at 560x420.
+Graphic design: elegant black/charcoal and wine-red mansion atmosphere with restrained brass-gold rules, ivory text, soft warm chandelier lighting. Strong clear Japanese typography, limited text, generous negative space. Fine gold rectangular border within full-bleed artwork, no outside mockup frame, no contact sheet. Left 55% headline/feature graphics, right 45% character from the waist up. Preserve character identity over posing complexity. Brand at top-left is exactly "Nino Room". Small top capsule gives the card number. Small bottom-right note exactly "紹介用イメージ". There are NO AI chat capabilities, prices, store logos, release claims, or extra illegible text. Use only the following exact copy, well-formed Japanese glyphs.
+Card 02 explains records. Nino holds a small open notebook at a desk with a calm, confident smile, keeping the default costume from image 1. In the lower-left show a restrained ivory/gold calendar grid with some checkmarks, a search icon and a tiny simple bar-chart graphic, as FEATURE ILLUSTRATIONS, not actual screenshots. No random numbers/dates or gibberish.
+Exact copy:
+Capsule: "02 / RECORD"
+Large two-line headline: "毎日の記録を、" then "ひと目で。"
+Supporting line: "カレンダー・検索・週間報告"
+Bottom icon labels: "カレンダー" / "検索" / "週間報告"
+Any calendar title should only read "記録カレンダー".
+Avoid over-detailed charts; keep editorial spacing coherent with card 01.
+
+=== 03 ===
+Use case: ads-marketing.
+Create ONE complete Japanese app introduction graphic for "Nino Room", part of a four-card matching series.
+Input image 1: the app's actual character identity and default costume reference. Input image 2: the SAME character's face and hair identity plus elegant library mood reference. These are identity/style references, not screenshots.
+CRITICAL: Depict the SAME Nino character in both supplied images. Match the recognizable face, blue eyes, straight short rose-pink bob ending around the jaw, diagonal side fringe, and TWO black ribbon bows at the sides of her head with fine pink edging. Use the exact black tailored long-sleeved suit jacket, wine-red patterned waistcoat, black buttoned shirt, wine-red necktie, rose brooch, and black gloves from image 1. Do not substitute another woman, do not change the hair to brown, do not add a green pendant. Keep her natural poised expression and the reference's anime rendering.
+Fully clothed, NONSEXUAL, family-friendly depiction. Only neutral everyday record keeping and board-game features, no erotic content or suggestive pose.
+Output must be landscape EXACT 4:3. Requested deliverable is 560x420 pixels; if higher native resolution is necessary use the same exact 4:3 composition (e.g. 1120x840 or 1536x1152). Every word must remain readable at 560x420.
+Graphic design: elegant black/charcoal and wine-red mansion atmosphere with restrained brass-gold rules, ivory text, soft warm chandelier lighting. Strong clear Japanese typography, limited text, generous negative space. Fine gold rectangular border within full-bleed artwork, no outside mockup frame, no contact sheet. Left 55% headline/feature graphics, right 45% character from the waist up. Preserve character identity over posing complexity. Brand at top-left is exactly "Nino Room". Small top capsule gives the card number. Small bottom-right note exactly "紹介用イメージ". There are NO AI chat capabilities, prices, store logos, release claims, or extra illegible text. Use only the following exact copy, well-formed Japanese glyphs.
+Card 03 explains points, rewards and collections. Nino gently presents a small closed gift box with a neat gold bow. Background warmly lit elegant room. Lower-left has refined gold outlined circle icons of a token bearing "Pt", a gift, and a collection folder. No money or gambling imagery and no invented reward types.
+Exact copy:
+Capsule: "03 / POINTS"
+Large two-line headline: "貯める楽しみ。" then "交換するご褒美。"
+Supporting line: "ログインボーナス・ポイント交換"
+Bottom icon labels: "ボーナス" / "ご褒美" / "コレクション"
+Maintain generous text spacing and exactly the same pink bob/blue eyes/paired black ribbons/costume as the references.
+
+=== 04 ===
+Use case: ads-marketing.
+Create ONE complete Japanese app introduction graphic for "Nino Room", part of a four-card matching series.
+Input image 1: the app's actual character identity and default costume reference. Input image 2: the SAME character's face and hair identity plus elegant library mood reference. These are identity/style references, not screenshots.
+CRITICAL: Depict the SAME Nino character in both supplied images. Match the recognizable face, blue eyes, straight short rose-pink bob ending around the jaw, diagonal side fringe, and TWO black ribbon bows at the sides of her head with fine pink edging. Use the exact black tailored long-sleeved suit jacket, wine-red patterned waistcoat, black buttoned shirt, wine-red necktie, rose brooch, and black gloves from image 1. Do not substitute another woman, do not change the hair to brown, do not add a green pendant. Keep her natural poised expression and the reference's anime rendering.
+Fully clothed, NONSEXUAL, family-friendly depiction. Only neutral everyday record keeping and board-game features, no erotic content or suggestive pose.
+Output must be landscape EXACT 4:3. Requested deliverable is 560x420 pixels; if higher native resolution is necessary use the same exact 4:3 composition (e.g. 1120x840 or 1536x1152). Every word must remain readable at 560x420.
+Graphic design: elegant black/charcoal and wine-red mansion atmosphere with restrained brass-gold rules, ivory text, soft warm chandelier lighting. Strong clear Japanese typography, limited text, generous negative space. Fine gold rectangular border within full-bleed artwork, no outside mockup frame, no contact sheet. Left 55% headline/feature graphics, right 45% character from the waist up. Preserve character identity over posing complexity. Brand at top-left is exactly "Nino Room". Small top capsule gives the card number. Small bottom-right note exactly "紹介用イメージ". There are NO AI chat capabilities, prices, store logos, release claims, or extra illegible text. Use only the following exact copy, well-formed Japanese glyphs.
+Card 04 explains mini games. Nino seated at a tasteful board-game table, presenting one ordinary die with natural gloved hands. In lower-left a simple small green Reversi board with black and white discs, a winding tile-path board-game symbol, and a resume/play icon. No gambling or casino imagery. Background warm candlelit game-room with restrained rose details; focus on face and readable copy.
+Exact copy:
+Capsule: "04 / GAMES"
+Large two-line headline: "気分転換に、" then "ミニゲーム。"
+Supporting line: "すごろく・オセロを楽しもう"
+Bottom icon labels: "すごろく" / "オセロ" / "続きから再開"
+Avoid visual clutter and keep all text inside the border.
+
+=== 05 TASKS ===
+Use case: ads-marketing.
+Create ONE finished Japanese app feature advertisement for "Nino Room", extending the existing reference series. Reference image 1 supplies the exact app character, hair/face and outfit. Reference image 2 supplies the established advertisement layout, typography, black/wine-red/gold color scheme and ornamental border. This is a general-audience, completely NONSEXUAL depiction of everyday app features.
+The character must be the SAME Nino: short rose-pink bob ending at jaw, side fringe, blue eyes, two black ribbon bows with pink piping, black tailored long-sleeve jacket, wine-red patterned waistcoat, closed black shirt, wine-red necktie, rose brooch and black gloves. Preserve the reference face, accessories, recognizable silhouette and anime illustration style. No different character, no brown hair or green pendant. Fully clothed and modest, natural ordinary pose.
+Landscape EXACT 4:3 composition. Final delivered target 560x420 pixels; if native rendering must be larger use the exact same ratio, e.g. 1448x1086 or 1536x1152. All headline, supporting text and three feature labels must remain readable at 560x420.
+Match reference 2's refined mansion/library ambience, ivory large Japanese type, wine-red labels, restrained brass gold outline icons and fine gold full-bleed border. Leave the left 55% as a clear headline/copy area and the right 45% for the character from waist up. Warm chandelier and candle lighting. Don't crowd the design or cover the face with copy. The UI symbols are illustrations, NOT real screenshots. No unsupported AI chat, cloud syncing, encryption, ads, prices, dates or store logos. No tiny gibberish. Copy must be verbatim, correctly formed Japanese.
+Brand at top-left: "Nino Room". Small note at bottom-right: "紹介用イメージ". No additional words beyond the specified text.
+Feature card 05 / TASKS, daily task status.
+Nino stands beside a tasteful semi-transparent checklist illustration and points gently at a single check mark with a relaxed gloved hand. Background elegant hallway/study, consistent with reference series. Lower-left three simple circular gold feature icons: a checklist, a completion/progress circle, and a doorway/arrow for opening the relevant screen. In the checklist illustration show only "本日のタスク" as a header and simple lines/checkmarks, no extra fabricated tasks or numbers. Use an inviting calm expression.
+Exact copy:
+Capsule: "05 / TASKS"
+Main headline in two large lines: "今日のタスクを、" then "ひと目で確認。"
+Supporting line: "未完了・実施済みをまとめてチェック"
+Three lower icon labels: "本日のタスク" / "達成状況" / "画面へ移動"
+Everything should feel like the fifth card of the same completed series, not a different brand.
+
+=== 06 FILES ===
+Use case: ads-marketing. Create ONE finished Japanese feature-promotion image for "Nino Room", extending the established set.
+Output landscape EXACT 4:3, delivered at 560x420 pixels. If native generation is larger use the exact same 4:3 ratio, such as 1448x1086 or 1536x1152. All copy must be readable after reduction to 560x420.
+Use the supplied advertisement as visual-style reference: black and wine-red palette, elegant restrained gold ornamental border, ivory Japanese type, rose accents, warm mansion lighting, large headline with uncluttered negative space. Brand is exactly "Nino Room". Fine full-bleed border; no extra mockup frame, no contact sheet.
+This must be a NONSEXUAL general-audience feature illustration. No erotic text, no provocative posing, no nudity, no fetish depiction, no sensual interaction. No prices, fake store badges, invented capabilities or AI chat claims. Only use the exact copy specified below, with well-formed Japanese glyphs. Small bottom-right note: "紹介用イメージ". Imagined interface graphics are decorative illustrations, not actual screenshots.
+Reference image 1 supplies the app's Nino character and default outfit. Reference image 2 supplies the finished advertising-series design.
+Preserve exactly the same Nino: short rose-pink bob, blue eyes, two black bows with pink edging, black tailored long-sleeve suit jacket, wine-red patterned waistcoat and tie, closed black shirt, rose brooch, black gloves. Fully clothed and professional with a gentle confident expression. Do not substitute a different woman.
+Composition: left 55% clear text and feature icons; right 45% Nino, waist-up, presenting a small floating gallery with a few neutral LANDSCAPE thumbnails (mountains, night sky, flowers), a single video play icon and a search symbol. The gallery is simple and tasteful, not crowded; do not put portraits or suggestive media in the thumbnails. Warm library background.
+Exact copy:
+Capsule: "06 / FILES"
+Headline in two large lines: "好きな画像・動画を、" then "まとめて楽しむ。"
+Supporting line: "複数取り込み・検索・拡大表示"
+Three lower gold circular icon labels: "まとめて格納" / "ファイル名検索" / "拡大表示"
+For a tiny gallery title, if needed, use only "ファイル格納".
+The design should make managing and viewing your own images/videos immediately clear.
+
+=== 07 BATTLE ===
+Use case: ads-marketing. Create ONE finished Japanese feature-promotion image for "Nino Room", extending the established set.
+Output landscape EXACT 4:3, delivered at 560x420 pixels. If native generation is larger use the exact same 4:3 ratio, such as 1448x1086 or 1536x1152. All copy must be readable after reduction to 560x420.
+Use the supplied advertisement as visual-style reference: black and wine-red palette, elegant restrained gold ornamental border, ivory Japanese type, rose accents, warm mansion lighting, large headline with uncluttered negative space. Brand is exactly "Nino Room". Fine full-bleed border; no extra mockup frame, no contact sheet.
+This must be a NONSEXUAL general-audience feature illustration. No erotic text, no provocative posing, no nudity, no fetish depiction, no sensual interaction. No prices, fake store badges, invented capabilities or AI chat claims. Only use the exact copy specified below, with well-formed Japanese glyphs. Small bottom-right note: "紹介用イメージ". Imagined interface graphics are decorative illustrations, not actual screenshots.
+Reference image 1 is the actual fantasy boss reference. Use ONLY her face, long pink hair, red eyes, curved black/red horns, crown and bat-wing silhouette as visual identity references. Do NOT reproduce the reference's revealing costume or body framing. Depict a strictly nonsexual HEAD-AND-SHOULDERS portrait cropped ABOVE THE CHEST: face, hair, horns, crown, neck collar and upper shoulders only. Do not show cleavage, torso, hips or thighs. No alluring gestures. She is an imposing fantasy opponent with a composed challenging expression, not a romantic subject.
+Reference image 2 supplies the advertisement's brand lettering, border, typography and black/wine-red/gold palette, NOT the person for this specific card. This card prominently features the boss rather than the host mascot.
+Composition: left 55% clear copy area, right 45% the boss head-and-shoulders portrait, horns fully visible. Behind her are restrained bat-wing silhouettes and a moonlit forest path outside the mansion, subtle crimson magic sparks, heroic game-adventure tone. A modest illustrated HP bar and crossed-swords/shield motifs may support the battle idea, without damage numbers or fabricated screenshot text. Bottom-left three refined gold feature icons for a map, sword-and-shield, and level-up arrow. No depiction of anyone being injured, no sexual contact, no blood.
+Exact copy:
+Capsule: "07 / BATTLE"
+Large headline in two lines: "館の外へ。" then "サキュバスに挑め。"
+Supporting line: "探索・レベルアップ・コマンドバトル"
+Three lower icon labels: "探索" / "攻撃・防御" / "レベルアップ"
+Only optional status text: "HP".
+Keep this a dramatic yet nonsexual fantasy battle advertisement. Ensure the boss face and horns remain recognizable from reference 1 while following the modest face-only crop.

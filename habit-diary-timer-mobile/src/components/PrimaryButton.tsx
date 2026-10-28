@@ -26,9 +26,10 @@ type Props = {
     | "battleDefense"
     | "battleSpecial";
   disabled?: boolean;
+  testID?: string;
 };
 
-export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Props) {
+export function PrimaryButton({ title, onPress, tone = "primary", disabled, testID }: Props) {
   const { playEffect } = useAppAudio();
   const darkNavigation = title === "ホームへ戻る" || title === "スタート画面に移動";
   const activeSubmit =
@@ -49,6 +50,9 @@ export function PrimaryButton({ title, onPress, tone = "primary", disabled }: Pr
   }
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      testID={testID}
       disabled={disabled}
       onPress={press}
       style={({ pressed }) => [
