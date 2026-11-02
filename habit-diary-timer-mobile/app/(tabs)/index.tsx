@@ -5,6 +5,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
 import { roomMessages } from "@/constants/messages";
 import { Screen } from "@/components/Screen";
+import { HomePointsCard } from "@/features/points/HomePointsCard";
 
 const rooms = [
   ["本日のタスク", "/(tabs)/tasks"],
@@ -30,6 +31,7 @@ export default function HomeScreen() {
         contractLines={roomMessages.home.contractLines}
       />
       <View style={styles.rooms}>
+        <HomePointsCard />
         {rooms.map(([title, href]) => (
           <View key={href} style={styles.roomRow}>
             <View style={styles.button}>

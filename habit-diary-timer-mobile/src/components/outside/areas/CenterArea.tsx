@@ -28,7 +28,7 @@ export function CenterArea(props: Props) {
       <Pressable accessibilityRole="button" accessibilityLabel="右の草原へ移動" style={styles.rightExit} onPress={props.onMoveRight} />
       <Pressable accessibilityRole="button" accessibilityLabel="奥の森へ移動" style={styles.forwardExit} onPress={props.onMoveForward} />
       <Pressable accessibilityRole="button" accessibilityLabel="館へ戻る" style={styles.homeExit} onPress={props.onReturnHome} />
-      <Pressable hitSlop={18} style={styles.crystalTap} onPress={props.onOpenCrystal}>
+      <Pressable testID="outside-settings-open" accessibilityRole="button" accessibilityLabel="設定" hitSlop={18} style={styles.crystalTap} onPress={props.onOpenCrystal}>
         <View style={[styles.crystal, { transform: [{ scaleX: props.crystalScaleX }] }]}>
           <Image source={props.crystalSource} style={styles.crystalImage} contentFit="contain" />
         </View>

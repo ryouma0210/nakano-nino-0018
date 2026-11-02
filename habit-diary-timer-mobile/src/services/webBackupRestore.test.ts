@@ -2,6 +2,7 @@ import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readBackupArchive, writeBackupArchive } from "./backupArchive";
 import type { BackupPayload } from "./backupService";
+import type { VoiceLibrary } from "../features/voices/library";
 
 const mocks = vi.hoisted(() => ({
   settings: new Map<string, string>(),
@@ -80,13 +81,30 @@ function select(file: File) {
   mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: file.name, size: file.size, uri: "blob:selected-backup", file }] });
 }
 
+async function voiceArchive(library: VoiceLibrary, audio: Uint8Array[]) {
+  const parts: BlobPart[] = [];
+  await writeBackupArchive([
+    { name: "manifest.json", ...source(encoder.encode(JSON.stringify({ ...payload(), version: 3, voiceLibrary: library }))) },
+    ...audio.map((bytes, index) => ({ name: `voices/${String(index).padStart(6, "0")}`, ...source(bytes) })),
+  ], { write: async (bytes) => { parts.push(new Uint8Array(bytes)); } });
+  return new File(parts, "voices-complete.zip", { type: "application/zip" });
+}
+
+const incomingLibrary = (audio: Uint8Array[]): VoiceLibrary => ({
+  version: 3, mode: "all", scope: "folder-evening",
+  folders: [{ id: "folder-morning", name: "Morning" }, { id: "folder-evening", name: "Evening" }],
+  voices: audio.map((bytes, index) => ({ id: `voice-backup-${index}`, fileName: `voice-backup-${index}.mp3`,
+    name: `Renamed ${index}`, originalName: `original-${index}.mp3`, size: bytes.length, mimeType: "audio/mpeg",
+    folderIds: index === 0 ? ["folder-morning", "folder-evening"] : ["folder-evening"] })),
+});
+
 async function services() {
   // Vitest does not load the Expo TypeScript path aliases; resolve this alias to the real module.
   vi.doMock("@/services/fileStorageService", () => import("./fileStorageService"));
-  const [{ backupService }, { fileStorageService }] = await Promise.all([
-    import("./backupService"), import("./fileStorageService"),
+  const [{ backupService }, { fileStorageService }, { voiceStorageService }] = await Promise.all([
+    import("./backupService"), import("./fileStorageService"), import("./voiceStorageService"),
   ]);
-  return { backupService, fileStorageService };
+  return { backupService, fileStorageService, voiceStorageService };
 }
 
 beforeEach(() => {
@@ -147,6 +165,95 @@ afterEach(() => {
 });
 
 describe("APP backups restored into Web IndexedDB", () => {
+  it("round-trips large voice binaries, shared folders, names, order and playback settings through a complete ZIP", async () => {
+    const audio = [Uint8Array.from({ length: 6 * 1024 * 1024 + 1 }, (_, index) => index % 251), new Uint8Array([9, 8, 7, 6])];
+    const library = incomingLibrary(audio);
+    const { backupService, voiceStorageService } = await services();
+    select(await voiceArchive(library, audio));
+    const picked = (await backupService.pick())!;
+    expect(picked.voiceLibrary).toEqual(library);
+    expect(picked.voices?.map((file) => file.blob?.size)).toEqual(audio.map((bytes) => bytes.length));
+    await backupService.restore(picked);
+    expect((await voiceStorageService.withExclusiveBackup((access) => access.snapshot())).library).toEqual(library);
+    const voices = (await voiceStorageService.load()).voices;
+    for (const [index, voice] of voices.entries()) {
+      expect(Buffer.compare(Buffer.from(await (await fetch(voice.uri)).arrayBuffer()), audio[index])).toBe(0);
+    }
+    vi.resetModules(); const reloaded = await services();
+    const snapshot = await reloaded.voiceStorageService.withExclusiveBackup((access) => access.snapshot());
+    expect(snapshot.library).toEqual(library);
+    await reloaded.backupService.export("complete");
+    const entries = await readBackupArchive(source(new Uint8Array(await downloads[0].arrayBuffer())));
+    expect(entries.map((entry) => entry.name)).toEqual(["manifest.json", "voices/000000", "voices/000001"]);
+    const manifest = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
+    expect(manifest.version).toBe(3); expect(manifest.voiceLibrary).toEqual(library);
+    for (const [index, bytes] of audio.entries()) {
+      await entries[index + 1].verify();
+      const exported = new Uint8Array(bytes.length);
+      for (let offset = 0; offset < bytes.length; offset += 256 * 1024) exported.set(await entries[index + 1].read(offset, Math.min(256 * 1024, bytes.length - offset)), offset);
+      expect(Buffer.compare(exported, bytes)).toBe(0);
+    }
+    expect(localSet.mock.calls.some(([, value]) => value.length > 20000)).toBe(false);
+    expect(mocks.native).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it("preserves voices for old complete and save-only backups, but honors an explicitly empty new library", async () => {
+    const { backupService, voiceStorageService } = await services();
+    const audio = [new Uint8Array([1, 2, 3])]; const library = incomingLibrary(audio);
+    select(await voiceArchive(library, audio)); await backupService.restore((await backupService.pick())!);
+    const before = await voiceStorageService.load();
+    select(await appArchive(new Uint8Array([4, 5, 6])));
+    const old = (await backupService.pick())!;
+    expect(old.voiceLibrary).toBeUndefined(); await backupService.restore(old);
+    expect(await voiceStorageService.load()).toEqual(before);
+    await backupService.restore({ ...payload(), kind: "save", files: undefined });
+    expect(await voiceStorageService.load()).toEqual(before);
+    await backupService.export("save");
+    const save = JSON.parse(await downloads[0].text());
+    expect(save.voiceLibrary).toBeUndefined(); expect(save.voices).toBeUndefined();
+    select(await voiceArchive({ version: 3, voices: [], folders: [], mode: "one", scope: "all" }, []));
+    await backupService.restore((await backupService.pick())!);
+    expect(await voiceStorageService.load()).toEqual({ voices: [], folders: [], mode: "one", scope: "all" });
+  });
+
+  it.each(["settings", "database"] as const)("rolls back voice audio, metadata and URLs with other data when %s restoration fails", async (failure) => {
+    const { backupService, voiceStorageService, fileStorageService } = await services();
+    const originalBytes = [new Uint8Array([1, 2, 3, 4])]; const library = incomingLibrary(originalBytes);
+    select(await voiceArchive(library, originalBytes)); await backupService.restore((await backupService.pick())!);
+    await fileStorageService.restoreFromBackup([{ name: "previous.png", size: 4, purpose: "punishment", mimeType: "image/png", data: "AQIDBA==" }]);
+    const before = await voiceStorageService.load();
+    const previousSettings = [...mocks.settings]; const previousRows = structuredClone(mocks.rows);
+    const newBytes = [new Uint8Array([5, 6, 7, 8])];
+    select(await voiceArchive({ ...library, voices: library.voices.map((voice) => ({ ...voice, name: "Replacement" })) }, newBytes));
+    const picked = (await backupService.pick())!;
+    if (failure === "settings") mocks.multiSet.mockRejectedValueOnce(new Error("settings failed"));
+    else mocks.execute.mockImplementationOnce(() => { throw new Error("database failed"); });
+    await expect(backupService.restore(picked)).rejects.toThrow(`${failure} failed`);
+    expect(await voiceStorageService.load()).toEqual(before);
+    expect(new Uint8Array(await (await fetch(before.voices[0].uri)).arrayBuffer())).toEqual(originalBytes[0]);
+    expect((await voiceStorageService.withExclusiveBackup((access) => access.snapshot())).library).toEqual(library);
+    expect([...mocks.settings]).toEqual(previousSettings); expect(mocks.rows).toEqual(previousRows);
+    expect((await fileStorageService.list()).map((file) => file.name)).toEqual(["previous.png"]);
+    vi.resetModules(); const reloaded = await services();
+    expect((await reloaded.voiceStorageService.withExclusiveBackup((access) => access.snapshot())).library).toEqual(library);
+  });
+
+  it("rejects missing, wrong-sized and invalid voice data before touching live content", async () => {
+    const { backupService, voiceStorageService } = await services();
+    const bytes = [new Uint8Array([1, 2, 3])]; const library = incomingLibrary(bytes);
+    select(await voiceArchive(library, bytes)); await backupService.restore((await backupService.pick())!);
+    const before = await voiceStorageService.load(); mocks.execute.mockClear();
+    for (const [invalid, audio] of [
+      [library, []], [library, [new Uint8Array([1])]],
+      [{ ...library, scope: "folder-missing" }, bytes],
+      [{ ...library, voices: library.voices.map((voice) => ({ ...voice, fileName: "../escape.mp3" })) }, bytes],
+    ] as [VoiceLibrary, Uint8Array[]][]) {
+      select(await voiceArchive(invalid, audio));
+      await expect(backupService.pick()).rejects.toThrow();
+      expect(await voiceStorageService.load()).toEqual(before);
+    }
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
   it("restores shared daily photos and statuses into IndexedDB and exports them after reloading", async () => {
     const historyKey = "nino-room:chastity-history:v1";
     const saved = JSON.stringify({ version: 1, calendarDisplay: "photos", photos: { "2026-10-05": "daily.png" }, records: [

@@ -92,6 +92,14 @@ function reconcileLegacyLossMemoryPurchases() {
 }
 
 export const pointRepository = {
+  /** Positive activity awards only; spending, losses and the virtual STG grant are excluded.
+   * Call reconcileCompletionAwards before a snapshot, outside any enclosing transaction. */
+  totalEarned() {
+    return queryOne<{ total: number }>(
+      "SELECT COALESCE(SUM(points), 0) AS total FROM point_transactions WHERE points > 0",
+    )?.total ?? 0;
+  },
+
   award(sourceKey: string, points: number, description: string, createdAt = toDateTimeKey(), options: { notify?: boolean } = {}) {
     const result = execute(
       "INSERT OR IGNORE INTO point_transactions(source_key, points, description, created_at) VALUES(?, ?, ?, ?)",
@@ -168,8 +176,8 @@ export const rewardRepository = {
       queryOne<{ total: number }>(
         "SELECT COALESCE(SUM(points_spent), 0) AS total FROM reward_redemptions",
       )?.total ?? 0;
-    const earned = activityPoints + stgBonus;
-    return { earned, spent, available: earned - spent, stgBonus };
+    const earned = pointRepository.totalEarned();
+    return { earned, spent, available: activityPoints + stgBonus - spent, stgBonus };
   },
 
   acquired() {

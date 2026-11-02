@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Modal, Platform, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Image, Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Asset } from "expo-asset";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -47,6 +47,12 @@ import { earnedGameTitles } from "@/features/games/achievements";
 import { loadOthello } from "@/features/othello/storage";
 import { getSugorokuAchievements, loadSugoroku } from "@/features/sugoroku/storage";
 import { downloadUriOnWeb } from "@/utils/webDownload";
+import { PointMilestoneCollection } from "@/features/points/PointMilestoneCollection";
+import { usePointMilestones } from "@/features/points/PointMilestoneProvider";
+import { collectionCategories, contractCollectionKey, filterCollection, milestoneCollectionKey, rewardCategory, rewardCollectionKey, titleCollectionKey, type CollectionCategory, type CollectionEntry } from "@/features/collection/model";
+import { collectionSeenRepository } from "@/features/collection/seenRepository";
+import { CollectionNewBadge } from "@/features/collection/CollectionNewBadge";
+import { translateText } from "@/i18n";
 
 const rewardVideos = [
   { name: "準備動画", fileName: "nino-preparation.mp4", module: require("../../assets/videos/preparation_1.mp4") },
@@ -127,18 +133,37 @@ export default function CollectionScreen() {
   const [contract, setContract] = useState<ContractSettings | null>(null);
   const [gameTitles, setGameTitles] = useState<ReturnType<typeof earnedGameTitles>>([]);
   const [titlesError, setTitlesError] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+  const [category, setCategory] = useState<CollectionCategory>("all");
+  const [onlyNew, setOnlyNew] = useState(false);
+  const [seenKeys, setSeenKeys] = useState<string[] | null>(null);
+  const [seenError, setSeenError] = useState(false);
+  const [pointsResetAt, setPointsResetAt] = useState("");
+  const { snapshot: milestones, error: milestonesError } = usePointMilestones();
   const loadVersion = useRef(0);
 
   const load = useCallback(() => {
     const version = ++loadVersion.current;
-    setRewards(rewardRepository.acquired());
-    contractService.load().then((value) => { if (version === loadVersion.current) setContract(value); }).catch(console.error);
+    setDataReady(false);
+    setLoadError(false);
+    setSeenKeys(null);
+    try {
+      setRewards(rewardRepository.acquired());
+      setPointsResetAt(collectionSeenRepository.pointsResetAt());
+    } catch {
+      setLoadError(true);
+      return () => { loadVersion.current += 1; };
+    }
     setTitlesError(false);
-    void Promise.allSettled([loadOthello(), loadSugoroku()]).then(([othello, sugoroku]) => {
+    void Promise.allSettled([contractService.load(), loadOthello(), loadSugoroku()]).then(([loadedContract, othello, sugoroku]) => {
       if (version !== loadVersion.current) return;
+      if (loadedContract.status === "fulfilled") setContract(loadedContract.value);
       setGameTitles(earnedGameTitles(othello.status === "fulfilled" ? othello.value.achievements : [],
         sugoroku.status === "fulfilled" ? getSugorokuAchievements(sugoroku.value) : []));
       setTitlesError(othello.status === "rejected" || sugoroku.status === "rejected");
+      setLoadError(loadedContract.status === "rejected");
+      setDataReady([loadedContract, othello, sugoroku].every((result) => result.status === "fulfilled"));
     });
     return () => { loadVersion.current += 1; };
   }, []);
@@ -147,8 +172,46 @@ export default function CollectionScreen() {
   const sortedRewards = [...rewards].sort(
     (left, right) => left.points_spent - right.points_spent || left.id - right.id,
   );
-  const titles = [...unlockedTitles(contract), ...gameTitles];
+  const titles = useMemo(() => [...unlockedTitles(contract), ...gameTitles], [contract, gameTitles]);
   const achievements = achievementRepository.summary();
+  const entries = useMemo<CollectionEntry[]>(() => [
+    ...(milestones?.unlocked ?? []).map((item) => ({ key: milestoneCollectionKey(item.id, pointsResetAt), category: "message" as const })),
+    ...titles.map((item) => ({ key: titleCollectionKey(item.name), category: "title" as const })),
+    ...(contract?.signedAt ? [{ key: contractCollectionKey(contract.signedAt), category: "contract" as const }] : []),
+    ...rewards.map((item) => ({ key: rewardCollectionKey(item, pointsResetAt), category: rewardCategory(item) })),
+  ], [milestones?.unlocked, titles, contract, rewards, pointsResetAt]);
+
+  const refreshSeen = useCallback(() => {
+    if (!dataReady || !milestones || milestonesError) return;
+    try {
+      setSeenKeys(collectionSeenRepository.sync().seen);
+      setSeenError(false);
+    } catch { setSeenError(true); }
+  }, [dataReady, milestones, milestonesError]);
+  useEffect(refreshSeen, [refreshSeen]);
+  const seen = new Set(seenKeys ?? []);
+  const visibleEntries = filterCollection(entries, category, onlyNew, seen);
+  const visibleKeys = new Set(visibleEntries.map((entry) => entry.key));
+  const unreadCount = seenKeys === null ? 0 : entries.filter((entry) => !seen.has(entry.key)).length;
+  const visibleUnread = seenKeys === null ? [] : visibleEntries.filter((entry) => !seen.has(entry.key));
+  const visibleMilestones = new Set((milestones?.unlocked ?? []).filter((item) => visibleKeys.has(milestoneCollectionKey(item.id, pointsResetAt))).map((item) => item.id));
+  const visibleTitles = titles.filter((item) => visibleKeys.has(titleCollectionKey(item.name)));
+  const visibleRewards = sortedRewards.filter((item) => visibleKeys.has(rewardCollectionKey(item, pointsResetAt)));
+  const showCategory = (value: CollectionCategory) => category === "all" || category === value;
+  const language = settings?.language ?? "ja";
+
+  function markSeen(keys: string[]) {
+    try {
+      setSeenKeys(collectionSeenRepository.markSeen(entries, keys).seen);
+      setSeenError(false);
+    } catch { setSeenError(true); }
+  }
+
+  function newBadge(key: string, id: string) {
+    return seenKeys !== null && !seen.has(key)
+      ? <CollectionNewBadge id={id} onRead={() => markSeen([key])} />
+      : null;
+  }
 
   return (
     <Screen>
@@ -160,17 +223,58 @@ export default function CollectionScreen() {
         contractLines={roomMessages.collection.contractLines}
       />
 
-      <Card style={styles.achievementCard}>
+      <Card>
+        <AppText variant="subtitle">種類で絞り込み</AppText>
+        <View style={styles.filters}>
+          {collectionCategories.map((item) => <Pressable key={item.key} accessibilityRole="button"
+            accessibilityState={{ selected: category === item.key }}
+            {...(Platform.OS === "web" ? { "aria-pressed": category === item.key } : {})}
+            accessibilityLabel={translateText(item.label, language)}
+            onPress={() => setCategory(item.key)} testID={`collection-filter-${item.key}`}
+            style={[styles.filterButton, category === item.key && styles.filterSelected]}>
+            <AppText>{item.label}</AppText>
+            <AppText localize={false} variant="muted">{entries.filter((entry) => item.key === "all" || entry.category === item.key).length}</AppText>
+          </Pressable>)}
+        </View>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: onlyNew, disabled: seenKeys === null }}
+          accessibilityLabel={translateText("NEWのみ", language)}
+          {...(Platform.OS === "web" ? { "aria-pressed": onlyNew } : {})}
+          disabled={seenKeys === null} onPress={() => setOnlyNew((value) => !value)}
+          style={[styles.newFilter, onlyNew && styles.filterSelected]} testID="collection-filter-new">
+          <AppText localize={false}>{onlyNew ? "☑" : "□"}</AppText>
+          <AppText>NEWのみ</AppText>
+          <AppText localize={false}>{unreadCount}</AppText>
+        </Pressable>
+        <AppText variant="muted">NEWは「確認済みにする」を押すまで残ります。</AppText>
+        <AppText variant="muted">初回は保存済みの項目にもNEWを表示します。</AppText>
+        <PrimaryButton title="表示中を確認済みにする" tone="secondary" disabled={visibleUnread.length === 0 || seenError}
+          onPress={() => markSeen(visibleUnread.map((entry) => entry.key))} testID="collection-read-visible" />
+        {seenError ? <>
+          <AppText accessibilityRole="alert">コレクションの確認状態を保存・読み込みできませんでした。</AppText>
+          <PrimaryButton title="再読み込み" tone="secondary" onPress={refreshSeen} />
+        </> : null}
+        {loadError ? <>
+          <AppText accessibilityRole="alert">コレクションの一部を読み込めませんでした。</AppText>
+          <PrimaryButton title="再読み込み" tone="secondary" onPress={load} />
+        </> : null}
+        {dataReady && visibleEntries.length === 0 ? <AppText testID="collection-empty" variant="muted">この条件のコレクションはありません。</AppText> : null}
+      </Card>
+
+      {showCategory("message") && (!onlyNew || visibleMilestones.size > 0) ? <PointMilestoneCollection visibleIds={visibleMilestones}
+        renderBadge={(id) => newBadge(milestoneCollectionKey(id, pointsResetAt), id)} /> : null}
+
+      {showCategory("title") && (!onlyNew || visibleTitles.length > 0) ? <Card style={styles.achievementCard}>
         <AppText variant="subtitle">称号</AppText>
         {titlesError ? <>
           <AppText>ゲームの称号を読み込めませんでした。</AppText>
           <PrimaryButton title="再読み込み" tone="secondary" onPress={load} />
         </> : null}
-        {titles.length === 0 ? (
+        {visibleTitles.length === 0 ? (
           <AppText variant="muted">まだ称号を獲得していません。</AppText>
         ) : null}
-        {titles.map((title) => (
+        {visibleTitles.map((title, index) => (
           <View key={title.name} style={styles.collectionRow}>
+            {newBadge(titleCollectionKey(title.name), `title-${index}`)}
             <AppText style={styles.titleText}>🏆 {title.name}</AppText>
             <AppText>達成条件：{title.condition}</AppText>
             <AppText variant="muted">現在値：{title.progress}</AppText>
@@ -196,12 +300,13 @@ export default function CollectionScreen() {
             </AppText>
           </View>
         </View>
-      </Card>
+      </Card> : null}
 
-      <Card style={styles.contractCard}>
+      {showCategory("contract") && (!onlyNew || (contract?.signedAt && visibleKeys.has(contractCollectionKey(contract.signedAt)))) ? <Card style={styles.contractCard}>
         <AppText variant="subtitle">契約書・契約ルール</AppText>
         {contract?.signedAt ? (
           <>
+            {newBadge(contractCollectionKey(contract.signedAt), "contract")}
             <AppText>契約日：{formatContractDate(contract.signedAt)}</AppText>
             <AppText>契約者：{contract.signature ?? "-"}</AppText>
             <AppText>契約日数：{contractDays(contract.signedAt)}日</AppText>
@@ -218,25 +323,26 @@ export default function CollectionScreen() {
         ) : (
           <AppText variant="muted">契約はまだ成立していません。</AppText>
         )}
-      </Card>
+      </Card> : null}
 
-      <Card style={styles.collectionCard}>
+      {(category === "all" || ["message", "outfit", "video", "voice", "memory"].includes(category)) && (!onlyNew || visibleRewards.length > 0) ? <Card style={styles.collectionCard}>
         <AppText variant="subtitle">ご褒美（使用Pt順）</AppText>
-        {sortedRewards.length === 0 ? (
+        {visibleRewards.length === 0 ? (
           <AppText variant="muted">まだご褒美を獲得していません。</AppText>
         ) : null}
-        {sortedRewards.map((item) =>
-          item.reward_key === "video" ? (
-            <CollectionVideo key={item.id} item={item} />
+        {visibleRewards.map((item) => <View key={rewardCollectionKey(item, pointsResetAt)} testID={`collection-reward-${item.id}`}>
+          {newBadge(rewardCollectionKey(item, pointsResetAt), `reward-${item.id}`)}
+          {item.reward_key === "video" ? (
+            <CollectionVideo item={item} />
           ) : item.reward_key === "voice" ? (
-            <CollectionVoice key={item.id} item={item} />
+            <CollectionVoice item={item} />
           ) : item.reward_key === "outfit" ? (
-            <CollectionOutfit key={item.id} item={item} />
+            <CollectionOutfit item={item} />
           ) : (
-            <RewardText key={item.id} item={item} playerName={playerName} />
-          ),
-        )}
-      </Card>
+            <RewardText item={item} playerName={playerName} />
+          )}
+        </View>)}
+      </Card> : null}
 
       <PrimaryButton
         title="記録・交換メニューへ戻る"
@@ -546,6 +652,10 @@ function CollectionVideoPlayer({
 }
 
 const styles = StyleSheet.create({
+  filters: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  filterButton: { minHeight: 44, minWidth: 120, flexGrow: 1, flexBasis: "28%", flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: "#555", borderRadius: 4 },
+  filterSelected: { borderColor: "#f2c94c", backgroundColor: "#302918" },
+  newFilter: { minHeight: 44, flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 12, borderWidth: 1, borderColor: "#555", borderRadius: 4 },
   collectionCard: { borderColor: "#f2c94c" },
   contractCard: { borderColor: "#b875ff" },
   achievementCard: { borderColor: "#f2c94c" },

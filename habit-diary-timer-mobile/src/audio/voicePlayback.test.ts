@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createVoicePlayback, type VoicePlaybackState, type VoicePlaylist, type VoiceTrack } from "./voicePlayback";
+import { createSleepTimer } from "./sleepTimer";
 
 const tracks: VoiceTrack[] = [
   { id: "first", name: "First voice", uri: "file:///first.mp3" },
@@ -18,6 +19,7 @@ function setup() {
   const player = {
     currentIndex: 0,
     currentTime: 0,
+    duration: 90,
     playing: false,
     isBuffering: false,
     get currentStatus(): { playing: boolean; isBuffering: boolean } {
@@ -41,12 +43,137 @@ function setup() {
     deactivate: vi.fn(),
     release: vi.fn(),
     onChange: vi.fn((next: VoicePlaybackState) => { state = next; }),
+    onProgress: vi.fn(),
     onError: vi.fn(),
   };
   return { player, queue, options, playback: createVoicePlayback(player, options), state: () => state };
 }
 
 describe("voice library playback", () => {
+  it.each([true, false])("seeks inside the current track without restarting or changing pause state (playing=%s)", async (playing) => {
+    const { playback, player, options } = setup();
+    await playback.sync(tracks, "all");
+    await playback.play("second");
+    if (!playing) playback.pause();
+    player.play.mockClear(); player.pause.mockClear(); player.skipTo.mockClear();
+    await playback.seekTo(35, "second");
+    expect(player.currentTime).toBe(35);
+    expect(player.playing).toBe(playing);
+    expect(player.play).not.toHaveBeenCalled();
+    expect(player.pause).not.toHaveBeenCalled();
+    expect(player.skipTo).not.toHaveBeenCalled();
+    expect(playback.getProgress()).toEqual({ currentId: "second", position: 35, duration: 90 });
+    expect(options.onProgress).toHaveBeenLastCalledWith({ currentId: "second", position: 35, duration: 90 });
+    await playback.seekBy(15, "second");
+    expect(player.currentTime).toBe(50);
+    await playback.seekBy(-15, "second");
+    expect(player.currentTime).toBe(35);
+    await playback.seekTo(999, "second");
+    expect(player.currentTime).toBe(90);
+    await playback.seekTo(-100, "second");
+    expect(player.currentTime).toBe(0);
+  });
+
+  it("accumulates rapid 15-second presses and applies only the latest queued target", async () => {
+    const { playback, player } = setup();
+    await playback.sync(tracks, "one"); await playback.play("first");
+    player.currentTime = 10;
+    player.seekTo.mockClear();
+    await Promise.all([playback.seekBy(15, "first"), playback.seekBy(15, "first"), playback.seekBy(15, "first")]);
+    expect(player.currentTime).toBe(55);
+    expect(player.seekTo).toHaveBeenCalledExactlyOnceWith(55);
+  });
+
+  it("ignores unknown durations, stale track gestures, invalid positions and a stopped player", async () => {
+    const { playback, player } = setup();
+    await playback.sync(tracks, "all"); await playback.play("first");
+    player.seekTo.mockClear();
+    for (const duration of [0, NaN, Infinity]) {
+      player.duration = duration;
+      await playback.seekTo(10, "first");
+      expect(playback.getProgress().duration).toBe(0);
+    }
+    player.duration = 90;
+    await playback.seekTo(20, "second");
+    await playback.seekTo(NaN, "first");
+    await playback.seekBy(Infinity, "first");
+    playback.stop();
+    await playback.seekTo(25, "first");
+    expect(player.seekTo).not.toHaveBeenCalled();
+    expect(playback.getProgress()).toEqual({ currentId: null, position: 0, duration: 0 });
+  });
+
+  it("does not apply a queued old-track seek after native advancement or pause", async () => {
+    const { playback, player } = setup();
+    await playback.sync(tracks, "all"); await playback.play("first");
+    player.seekTo.mockClear();
+    const seek = playback.seekTo(60, "first");
+    player.currentIndex = 1;
+    await seek;
+    expect(player.seekTo).not.toHaveBeenCalled();
+    const next = playback.seekTo(30, "second");
+    playback.pause();
+    await next;
+    expect(player.seekTo).not.toHaveBeenCalled();
+    expect(player.playing).toBe(false);
+  });
+
+  it("finishes an in-flight user seek before selecting and seeking a newer track", async () => {
+    const { playback, player, state } = setup();
+    await playback.sync(tracks, "all"); await playback.play("first");
+    const pending = deferred();
+    player.seekTo.mockImplementationOnce(async (seconds) => { await pending.promise; player.currentTime = seconds; });
+    const seek = playback.seekTo(60, "first");
+    await Promise.resolve();
+    const next = playback.play("second");
+    pending.resolve();
+    await Promise.all([seek, next]);
+    expect(player.currentIndex).toBe(1);
+    expect(player.currentTime).toBe(0);
+    expect(state()).toEqual({ currentId: "second", playing: true });
+  });
+
+  it("reports a seek failure without discarding the selected paused voice", async () => {
+    const { playback, player, options, state } = setup();
+    await playback.sync(tracks, "one"); await playback.play("first"); playback.pause();
+    const error = new Error("seek failed");
+    player.seekTo.mockRejectedValueOnce(error);
+    await playback.seekTo(40, "first");
+    expect(options.onError).toHaveBeenLastCalledWith(error);
+    expect(state()).toEqual({ currentId: "first", playing: false });
+    await playback.seekTo(40, "first");
+    expect(player.currentTime).toBe(40);
+    expect(player.playing).toBe(false);
+  });
+
+  it("updates progress from the native queue and clears it when stopped", async () => {
+    const { playback, player, options } = setup();
+    await playback.sync(tracks, "all"); await playback.play("first");
+    player.currentIndex = 2; player.currentTime = 12.5; player.duration = 50;
+    playback.check({ playing: true, isBuffering: false });
+    expect(options.onProgress).toHaveBeenLastCalledWith({ currentId: "third", position: 12.5, duration: 50 });
+    playback.stop();
+    expect(options.onProgress).toHaveBeenLastCalledWith({ currentId: null, position: 0, duration: 0 });
+  });
+
+  it("the shared deadline timer stops a paused voice after suspension and releases its media session", async () => {
+    vi.useFakeTimers();
+    try {
+      const { playback, player, options, state } = setup();
+      await playback.sync(tracks, "all"); await playback.play("second");
+      const now = Date.now();
+      const timer = createSleepTimer(() => playback.stop(), vi.fn());
+      timer.setMinutes(5);
+      playback.pause();
+      vi.setSystemTime(now + 6 * 60_000);
+      timer.check();
+      expect(state()).toEqual({ currentId: null, playing: false });
+      expect(player.playing).toBe(false);
+      expect(options.deactivate).toHaveBeenCalledOnce();
+      timer.dispose();
+    } finally { vi.useRealTimers(); }
+  });
+
   it("loads the ordered native queue and switches repeat modes without restarting it", async () => {
     const { playback, player, queue } = setup();
     await playback.sync(tracks, "one");

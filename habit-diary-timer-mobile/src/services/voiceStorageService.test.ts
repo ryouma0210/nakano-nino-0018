@@ -96,6 +96,173 @@ beforeEach(async () => {
   ({ voiceStorageService: service } = await import("./voiceStorageService"));
 });
 
+describe.each(["android", "web"])("%s voice backup transactions", (platform) => {
+  beforeEach(() => {
+    mocks.platform.OS = platform;
+    // Model native directories as trees so activation/rollback exercise real moves.
+    mocks.info.mockImplementation(async (uri: string) => nativeFiles.has(uri)
+      ? { exists: true, isDirectory: false, size: nativeFiles.get(uri)!.length }
+      : uri.endsWith("/") && [...nativeFiles.keys()].some((key) => key.startsWith(uri))
+        ? { exists: true, isDirectory: true } : { exists: false });
+    mocks.move.mockImplementation(async ({ from, to }: { from: string; to: string }) => {
+      if (from.endsWith("/")) {
+        const entries = [...nativeFiles].filter(([key]) => key.startsWith(from));
+        if (!entries.length) throw new Error("missing directory");
+        for (const [key, value] of entries) { nativeFiles.set(`${to}${key.slice(from.length)}`, value); nativeFiles.delete(key); }
+      } else {
+        if (!nativeFiles.has(from)) throw new Error("missing source");
+        nativeFiles.set(to, nativeFiles.get(from)!); nativeFiles.delete(from);
+      }
+    });
+  });
+
+  async function seed() {
+    const folder = await service.createFolder("Morning");
+    const other = await service.createFolder("Evening");
+    const makeAsset = platform === "web" ? webAsset : asset;
+    select(makeAsset("shared.mp3", "original audio bytes"), makeAsset("other.mp3", "second clip"));
+    await service.importVoices();
+    const voices = (await service.load()).voices;
+    await service.setVoiceFolders(voices[0].id, [folder.id, other.id]);
+    await service.rename(voices[0].id, "Renamed shared voice");
+    await service.setMode("all"); await service.setScope(folder.id);
+    await service.reorder([voices[1].id, voices[0].id]);
+    return { snapshot: await service.withExclusiveBackup((access) => access.snapshot()), current: await service.load() };
+  }
+  const sourceText = async (file: { uri?: string; blob?: Blob }) => file.blob ? file.blob.text() : nativeFiles.get(file.uri!);
+
+  it("captures one binary copy per voice with names, shared memberships, order, mode and scope", async () => {
+    const { snapshot, current } = await seed();
+    expect(snapshot.library.version).toBe(3);
+    expect(snapshot.library.voices.map((voice) => voice.id)).toEqual(current.voices.map((voice) => voice.id));
+    expect(snapshot.library.voices[1]).toMatchObject({ name: "Renamed shared voice", originalName: "shared.mp3", folderIds: current.folders.map((folder) => folder.id) });
+    expect(snapshot.library).toMatchObject({ folders: current.folders, mode: "all", scope: current.scope });
+    expect(snapshot.files).toHaveLength(2);
+    expect(await Promise.all(snapshot.files.map(sourceText))).toEqual(["second clip", "original audio bytes"]);
+    expect(localStorageWrite).not.toHaveBeenCalled();
+  });
+
+  it("restores bytes and metadata, refreshes URLs only after commit, and persists on reload", async () => {
+    const { snapshot, current } = await seed();
+    const restoredLibrary = { ...snapshot.library, voices: snapshot.library.voices.map((voice) => ({ ...voice, name: `Restored ${voice.name}`, size: 8 })) };
+    const files = restoredLibrary.voices.map((voice) => {
+      const uri = `file:///stage/${voice.id}`; nativeFiles.set(uri, "replaced");
+      return platform === "web" ? { id: voice.id, blob: new Blob(["replaced"], { type: voice.mimeType }) } : { id: voice.id, uri };
+    });
+    const listener = vi.fn(); const unsubscribe = service.subscribe(listener);
+    await service.withExclusiveBackup(async (access) => {
+      const prepared = await access.prepareRestore(restoredLibrary, files);
+      await prepared.activate();
+      expect(listener).not.toHaveBeenCalled();
+      for (const voice of current.voices) expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(voice.uri);
+      await prepared.finalize();
+      await prepared.finalize();
+    });
+    expect(listener).toHaveBeenCalledOnce(); unsubscribe();
+    const restored = await service.withExclusiveBackup((access) => access.snapshot());
+    expect(restored.library).toEqual(restoredLibrary);
+    expect(await Promise.all(restored.files.map(sourceText))).toEqual(["replaced", "replaced"]);
+    if (platform === "web") for (const voice of current.voices) expect(URL.revokeObjectURL).toHaveBeenCalledWith(voice.uri);
+    vi.resetModules(); ({ voiceStorageService: service } = await import("./voiceStorageService"));
+    expect((await service.withExclusiveBackup((access) => access.snapshot())).library).toEqual(restoredLibrary);
+  });
+
+  it("rolls back after activation without revoking original URLs or losing bytes", async () => {
+    const { snapshot, current } = await seed();
+    const listener = vi.fn(); const unsubscribe = service.subscribe(listener);
+    await service.withExclusiveBackup(async (access) => {
+      const prepared = await access.prepareRestore({ version: 3, voices: [], folders: [], mode: "one", scope: "all" }, []);
+      await prepared.activate();
+      expect((await access.snapshot()).library.voices).toEqual([]);
+      await prepared.rollback(); await prepared.rollback(); await prepared.finalize();
+    });
+    expect(await service.load()).toEqual(current);
+    const restored = await service.withExclusiveBackup((access) => access.snapshot());
+    expect(restored.library).toEqual(snapshot.library);
+    expect(await Promise.all(restored.files.map(sourceText))).toEqual(["second clip", "original audio bytes"]);
+    for (const voice of current.voices) expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(voice.uri);
+    expect(listener).not.toHaveBeenCalled(); unsubscribe();
+  });
+
+  it("rejects invalid metadata, missing audio, wrong size and duplicate IDs without changing the library", async () => {
+    const { snapshot, current } = await seed();
+    for (const files of [[], [...snapshot.files, snapshot.files[0]], [{ ...snapshot.files[0], id: "voice-unknown" }, snapshot.files[1]],
+      snapshot.files.map((file) => ({ ...file, ...(platform === "web" ? { blob: new Blob(["bad"]) } : { uri: "file:///missing" }) }))]) {
+      await expect(service.withExclusiveBackup((access) => access.prepareRestore(snapshot.library, files))).rejects.toThrow();
+      expect(await service.load()).toEqual(current);
+    }
+    const invalid = { ...snapshot.library, voices: snapshot.library.voices.map((voice) => ({ ...voice, fileName: "../unsafe" })) };
+    await expect(service.withExclusiveBackup((access) => access.prepareRestore(invalid, snapshot.files))).rejects.toThrow();
+    expect(await service.load()).toEqual(current);
+  });
+
+  it("blocks mutations behind the snapshot and rejects importing while a backup is in progress", async () => {
+    const { current } = await seed();
+    const entered = deferred<void>(); const finish = deferred<void>();
+    const backup = service.withExclusiveBackup(async (access) => {
+      const before = await access.snapshot(); entered.resolve();
+      await finish.promise;
+      expect(await access.snapshot()).toEqual(before);
+    });
+    await entered.promise;
+    const rename = service.rename(current.voices[0].id, "After backup");
+    await expect(service.importVoices()).rejects.toThrow("ボイスを処理中");
+    await expect(service.withExclusiveBackup((access) => access.snapshot())).rejects.toThrow("ボイスを処理中");
+    finish.resolve(); await backup; await rename;
+    expect((await service.load()).voices[0].name).toBe("After backup");
+  });
+
+  if (platform === "android") {
+    it("recovers original directory if installing the staged library fails", async () => {
+      const { snapshot, current } = await seed();
+      await service.withExclusiveBackup(async (access) => {
+        const prepared = await access.prepareRestore(snapshot.library, snapshot.files);
+        const move = mocks.move.getMockImplementation()!;
+        mocks.move.mockImplementation(async (paths: { from: string; to: string }) => {
+          if (paths.from.includes("voices-restore-")) throw new Error("installation failed");
+          return move(paths);
+        });
+        await expect(prepared.activate()).rejects.toThrow("installation failed");
+        await prepared.rollback();
+      });
+      expect(await service.load()).toEqual(current);
+      expect([...nativeFiles.keys()].filter((path) => path.includes("voices-restore-") || path.includes("voices-previous-"))).toEqual([]);
+    });
+
+    it("retains the original directory for a rollback retry when its first move fails", async () => {
+      const { snapshot, current } = await seed();
+      await service.withExclusiveBackup(async (access) => {
+        const prepared = await access.prepareRestore(snapshot.library, snapshot.files);
+        await prepared.activate();
+        const move = mocks.move.getMockImplementation()!;
+        mocks.move.mockRejectedValueOnce(new Error("rollback move failed"));
+        await expect(prepared.rollback()).rejects.toThrow("rollback move failed");
+        expect([...nativeFiles.keys()].some((path) => path.includes("voices-previous-"))).toBe(true);
+        await prepared.finalize();
+        expect([...nativeFiles.keys()].some((path) => path.includes("voices-previous-"))).toBe(true);
+        mocks.move.mockImplementation(move);
+        await prepared.rollback();
+      });
+      expect(await service.load()).toEqual(current);
+    });
+  } else {
+    it("keeps original blobs and metadata when the replacement IndexedDB transaction aborts", async () => {
+      const { snapshot, current } = await seed();
+      await service.withExclusiveBackup(async (access) => {
+        const prepared = await access.prepareRestore(snapshot.library, snapshot.files);
+        const original = IDBObjectStore.prototype.put; const put = vi.spyOn(IDBObjectStore.prototype, "put");
+        put.mockImplementation(function(this: IDBObjectStore, ...args: Parameters<IDBObjectStore["put"]>) {
+          if (this.name === "metadata") throw new Error("metadata write failed");
+          return original.apply(this, args);
+        });
+        await expect(prepared.activate()).rejects.toThrow("metadata write failed");
+        put.mockRestore(); await prepared.rollback();
+      });
+      expect(await service.load()).toEqual(current);
+    });
+  }
+});
+
 describe.each(["android", "web"])("%s atomic voice ordering", (platform) => {
   beforeEach(() => { mocks.platform.OS = platform; });
 

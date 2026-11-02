@@ -53,6 +53,26 @@ async function settle() { await Promise.resolve(); await Promise.resolve(); }
 afterEach(() => { vi.useRealTimers(); });
 
 describe("browser voice playlist", () => {
+  it("publishes time and metadata changes and exposes a finite duration for the seek bar", () => {
+    const { playlist, elements } = setup();
+    expect(playlist.duration).toBe(0);
+    playlist.add({ uri: "blob:first", name: "First" });
+    const audio = elements[0];
+    const progress: [number, number][] = [];
+    playlist.addListener("playlistStatusUpdate", () => progress.push([playlist.currentTime, playlist.duration ?? 0]));
+    audio.currentTime = 15.25; audio.duration = 120;
+    audio.dispatchEvent(new Event("timeupdate"));
+    expect(progress.at(-1)).toEqual([15.25, 120]);
+    audio.duration = 180;
+    audio.dispatchEvent(new Event("durationchange"));
+    expect(progress.at(-1)).toEqual([15.25, 180]);
+    audio.duration = NaN;
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    expect(progress.at(-1)).toEqual([15.25, 0]);
+    audio.duration = Infinity;
+    expect(playlist.duration).toBe(0);
+    playlist.destroy();
+  });
   it("advances and wraps ordered tracks on the same media element", async () => {
     const { playlist, elements, factory } = setup();
     expect(factory).not.toHaveBeenCalled();
@@ -120,11 +140,12 @@ describe("browser voice playlist", () => {
     const listener = vi.fn();
     playlist.addListener("playlistStatusUpdate", listener);
     for (const dispatch of queued) dispatch();
+    expect(listener).not.toHaveBeenCalled();
     audio.currentTime = 2;
     audio.dispatchEvent(new Event("timeupdate"));
     expect(playlist.currentStatus).toEqual({ playing: true, isBuffering: false });
     expect(playlist.currentTime).toBe(2);
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledExactlyOnceWith({ playing: true, isBuffering: false });
     audio.paused = true;
     audio.dispatchEvent(new Event("pause"));
     expect(playlist.currentStatus).toEqual({ playing: false, isBuffering: false });

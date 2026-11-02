@@ -17,6 +17,7 @@ import { useAppModal } from "@/components/AppModalProvider";
 import { roomMessages } from "@/constants/messages";
 import { ninoOutfits as outfits } from "@/constants/outfits";
 import { rewardRepository } from "@/repositories/rewardRepository";
+import { usePointMilestones } from "@/features/points/PointMilestoneProvider";
 import {
   profileService,
   type ProfileSettings,
@@ -38,6 +39,7 @@ export default function NinoRoomScreen() {
   const [panel, setPanel] = useState<Panel>(null);
   const [mediaMode, setMediaMode] = useState<MediaMode>("image");
   const [lineIndex, setLineIndex] = useState(0);
+  const { snapshot: milestones } = usePointMilestones();
 
   const baseLines = useMemo(
     () => [
@@ -68,10 +70,10 @@ export default function NinoRoomScreen() {
     outfits.find((item) => item.key === profile?.ninoOutfit) ?? outfits[0];
   const lines = useMemo(
     () =>
-      selectedOutfit.key === "default"
+      [...(milestones?.unlocked ?? []).map((item) => ({ text: item.message })), ...(selectedOutfit.key === "default"
         ? [...baseLines, ...selectedOutfit.lines.map((text) => ({ text }))]
-        : selectedOutfit.lines.map((text) => ({ text })),
-    [baseLines, selectedOutfit],
+        : selectedOutfit.lines.map((text) => ({ text })))],
+    [baseLines, selectedOutfit, milestones?.unlocked],
   );
   const currentLine = lines[lineIndex % lines.length];
   const hasVideo = Boolean(selectedOutfit.video);

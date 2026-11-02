@@ -8,7 +8,9 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Screen } from "@/components/Screen";
 import { DesktopDisplaySettings } from "@/components/DesktopDisplaySettings";
-import { execute } from "@/database/client";
+import { execute, transaction } from "@/database/client";
+import { pointRepository } from "@/repositories/rewardRepository";
+import { pointMilestoneRepository } from "@/repositories/pointMilestoneRepository";
 import { clearSugoroku } from "@/features/sugoroku/storage";
 import { clearOthelloHistory } from "@/features/othello/storage";
 import { clearEndurance } from "@/features/endurance/service";
@@ -58,7 +60,7 @@ async function disposeBackup(backup: PickedBackup | null) {
 
 export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   const { settings, updateAudioSettings } = useAppAudio();
-  const { clearVoices } = useVoiceLibrary();
+  const { clearVoices, stop: stopVoices } = useVoiceLibrary();
   const { showNotice, showError } = useAppModal();
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
@@ -179,7 +181,9 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
     pendingRestoreRef.current = null;
     setPendingRestore(null);
     try {
+      if ("voiceLibrary" in pending && pending.voiceLibrary) stopVoices();
       const kind = await backupService.restore(pending);
+      pointRepository.notifyChanged();
       await updateAudioSettings(await settingsService.load());
       if (!mountedRef.current) return;
       loadSize();
@@ -215,6 +219,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
         execute("DELETE FROM habits");
         execute("DELETE FROM timer_presets");
         execute("DELETE FROM app_settings");
+        pointRepository.notifyChanged();
         await settingsService.reset();
         await dailyOrderService.clearAll();
         await clearSugoroku();
@@ -271,8 +276,19 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           customCommandService.clearRecords();
         }
         if (selected.has("points")) {
-          execute("DELETE FROM reward_redemptions");
-          execute("DELETE FROM point_transactions");
+          const resetAt = toDateTimeKey();
+          transaction(() => {
+            execute("DELETE FROM reward_redemptions");
+            execute("DELETE FROM point_transactions");
+            pointMilestoneRepository.clear();
+            execute(
+              `INSERT INTO app_settings(setting_key, setting_value, updated_at)
+               VALUES('points_reset_at', ?, ?)
+               ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
+              [resetAt, resetAt],
+            );
+          });
+          pointRepository.notifyChanged();
         }
         if (selected.has("contract")) {
           await contractService.clear();
@@ -289,15 +305,6 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           await notificationService.cancelAll();
         }
         if (selected.has("files")) await fileStorageService.clear();
-        if (selected.has("points")) {
-          const resetAt = toDateTimeKey();
-          execute(
-            `INSERT INTO app_settings(setting_key, setting_value, updated_at)
-             VALUES('points_reset_at', ?, ?)
-             ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
-            [resetAt, resetAt],
-          );
-        }
         execute("DELETE FROM journal_tags WHERE journal_id NOT IN (SELECT id FROM journals)");
         execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM journal_tags)");
         setPartialSelection([]);
@@ -415,6 +422,8 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           onPress={() => exportBackup("complete")}
         />
         <AppText variant="muted">セーブデータに加えて、格納した画像・動画・音声も保存します。</AppText>
+        <AppText variant="muted">ボイス格納の音声・名前・フォルダー・再生順も、完全バックアップに含まれます。</AppText>
+        <AppText variant="muted">ボイスを含まない旧バックアップとセーブデータのみの復元では、現在のボイスを残します。</AppText>
         <AppText variant="muted">完全バックアップはZIP形式、セーブデータのみはJSON形式で保存します。</AppText>
         <AppText variant="muted">貞操帯管理の添付画像も保存する場合は、完全バックアップを選んでください。</AppText>
         <PrimaryButton
