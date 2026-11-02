@@ -1,9 +1,11 @@
 export type VoiceTrack = { id: string; name: string; uri: string };
 export type VoicePlaybackState = { currentId: string | null; playing: boolean };
+export type VoicePlaybackProgress = { currentId: string | null; position: number; duration: number };
 export type VoicePlaylist = {
   readonly currentIndex: number;
   readonly playing: boolean;
   readonly currentTime: number;
+  readonly duration?: number;
   readonly currentStatus?: { isBuffering: boolean };
   loop: "none" | "single" | "all";
   volume: number;
@@ -23,6 +25,7 @@ type Options = {
   deactivate(): void;
   release(): void;
   onChange(state: VoicePlaybackState): void;
+  onProgress?(progress: VoicePlaybackProgress): void;
   onError(error: unknown): void;
 };
 
@@ -35,6 +38,7 @@ export function createVoicePlayback(player: VoicePlaylist, options: Options) {
   let disposed = false;
   let currentTitle = "";
   let seekPending: Promise<void> = Promise.resolve();
+  let requestedPosition: { id: string; seconds: number; token: number } | null = null;
 
   // Native queues can advance while JS is suspended. Use the actual player
   // position before editing or skipping, rather than the last rendered row.
@@ -57,11 +61,38 @@ export function createVoicePlayback(player: VoicePlaylist, options: Options) {
   function publish(next: VoicePlaybackState) {
     state = next;
     options.onChange(next);
+    options.onProgress?.(getProgress());
     const title = tracks.find((track) => track.id === next.currentId)?.name;
     if (title && title !== currentTitle) {
       currentTitle = title;
       options.updateTitle(title);
     }
+  }
+
+  function getProgress(): VoicePlaybackProgress {
+    const currentId = liveState().currentId;
+    if (!currentId || preparing || tracks[player.currentIndex]?.id !== currentId) return { currentId, position: 0, duration: 0 };
+    const duration = Number.isFinite(player.duration) && player.duration! > 0 ? player.duration! : 0;
+    const position = Number.isFinite(player.currentTime) ? Math.max(0, player.currentTime) : 0;
+    return { currentId, position: duration > 0 ? Math.min(position, duration) : position, duration };
+  }
+
+  async function seekTo(seconds: number, expectedId = liveState().currentId) {
+    const progress = getProgress();
+    if (disposed || preparing || !Number.isFinite(seconds) || !expectedId || progress.currentId !== expectedId || progress.duration <= 0) return;
+    const token = ++request;
+    const target = Math.max(0, Math.min(progress.duration, seconds));
+    requestedPosition = { id: expectedId, seconds: target, token };
+    const task = seekPending.then(async () => {
+      // Do not turn a delayed seek from the old track into a seek on the next one.
+      if (disposed || token !== request || preparing || liveState().currentId !== expectedId) return;
+      await player.seekTo(target);
+      if (!disposed && token === request && liveState().currentId === expectedId) publish(liveState());
+    });
+    seekPending = task.catch(() => {});
+    try { await task; }
+    catch (error) { if (!disposed && token === request) options.onError(error); }
+    finally { if (requestedPosition?.token === token) requestedPosition = null; }
   }
 
   function stop() {
@@ -107,6 +138,14 @@ export function createVoicePlayback(player: VoicePlaylist, options: Options) {
   return {
     initialize() { disposed = false; },
     getState() { return { ...liveState() }; },
+    getProgress,
+    seekTo,
+    seekBy(seconds: number, expectedId = liveState().currentId) {
+      if (!Number.isFinite(seconds) || !expectedId || liveState().currentId !== expectedId) return Promise.resolve();
+      const position = requestedPosition?.id === expectedId && requestedPosition.token === request
+        ? requestedPosition.seconds : getProgress().position;
+      return seekTo(position + seconds, expectedId);
+    },
     setVolume(volume: number) { player.volume = volume; },
     async sync(next: readonly VoiceTrack[], mode: "one" | "all") {
       if (disposed) return;

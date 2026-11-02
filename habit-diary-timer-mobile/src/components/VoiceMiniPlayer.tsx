@@ -3,11 +3,14 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
+import { useLoopSleepRemaining } from "@/audio/useLoopSleepRemaining";
+import { secondsToClock } from "@/utils/date";
 import { AppText } from "./AppText";
 import { LocalizedPressable as Pressable } from "./LocalizedPressable";
 
 export function VoiceMiniPlayer({ bottomInset = false }: { bottomInset?: boolean }) {
-  const { visibleVoices, folders, scope, currentId, playing, loading, busy, play, pause, stop, previous, next } = useVoiceLibrary();
+  const { visibleVoices, folders, scope, currentId, playing, loading, busy, play, pause, stop, previous, next, position, duration, sleepDeadline } = useVoiceLibrary();
+  const remaining = useLoopSleepRemaining(sleepDeadline);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const compact = width < 440;
@@ -24,6 +27,8 @@ export function VoiceMiniPlayer({ bottomInset = false }: { bottomInset?: boolean
         <AppText localize={false} numberOfLines={1} style={styles.name}>{current.name}</AppText>
         <AppText localize={!folder} numberOfLines={1} variant="muted" style={styles.hint}>{folder?.name ?? (scope === "all" ? "すべてのボイス" : "未分類")}</AppText>
         <AppText variant="muted" numberOfLines={1} style={styles.hint}>{playing ? "再生中・タップして設定" : "一時停止中"}</AppText>
+        <AppText localize={false} style={styles.hint} testID="voice-mini-playback-time">{secondsToClock(Math.floor(position))} / {secondsToClock(Math.floor(duration))}</AppText>
+        {remaining ? <AppText variant="muted" style={styles.hint} testID="voice-mini-sleep-remaining">停止まで {remaining}</AppText> : null}
       </View>
     </Pressable>
     <View style={[styles.controls, compact && styles.compactControls]}>

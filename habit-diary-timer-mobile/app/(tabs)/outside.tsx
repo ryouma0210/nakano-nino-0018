@@ -2145,34 +2145,54 @@ export default function OutsideScreen() {
               <View style={styles.crystalSettingRow}>
                 <View style={styles.crystalSettingText}>
                   <AppText style={styles.crystalSettingLabel}>自分のレベル</AppText>
-                  <AppText style={styles.crystalSettingValue}>現在 Lv.{level}</AppText>
+                  <AppText testID="outside-player-level-value" style={styles.crystalSettingValue}>現在 Lv.{level}</AppText>
                   <AppText style={styles.crystalModalNote}>最大 Lv.{PLAYER_MAX_LEVEL}</AppText>
                 </View>
                 <View style={styles.crystalStepButtons}>
-                  <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(-10)}>
-                    <AppText style={styles.crystalStepButtonText}>-10</AppText>
-                  </Pressable>
-                  <Pressable style={styles.crystalStepButton} onPress={() => adjustPlayerLevel(10)}>
-                    <AppText style={styles.crystalStepButtonText}>+10</AppText>
-                  </Pressable>
+                  {[-10, 10, -100, 100].map((delta) => {
+                    const disabled = delta < 0 ? level <= 1 : level >= PLAYER_MAX_LEVEL;
+                    const label = `${delta > 0 ? "+" : ""}${delta}`;
+                    return <LocalizedPressable
+                      key={delta}
+                      testID={`outside-player-level-${delta < 0 ? "minus" : "plus"}-${Math.abs(delta)}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={`自分のレベル ${label}`}
+                      accessibilityState={{ disabled }}
+                      disabled={disabled}
+                      style={[styles.crystalStepButton, disabled && styles.crystalStepButtonDisabled]}
+                      onPress={() => adjustPlayerLevel(delta)}
+                    >
+                      <AppText style={styles.crystalStepButtonText}>{label}</AppText>
+                    </LocalizedPressable>;
+                  })}
                 </View>
               </View>
 
               <View style={styles.crystalSettingRow}>
                 <View style={styles.crystalSettingText}>
                   <AppText style={styles.crystalSettingLabel}>サキュバスのレベル</AppText>
-                  <AppText style={[styles.crystalSettingValue, { color: succubus.color }]}>
+                  <AppText testID="outside-enemy-level-value" style={[styles.crystalSettingValue, { color: succubus.color }]}>
                     現在 Lv.{succubus.level}
                   </AppText>
                   <AppText style={styles.crystalModalNote}>最大 Lv.{ENEMY_MAX_LEVEL}</AppText>
                 </View>
                 <View style={styles.crystalStepButtons}>
-                  <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(-10)}>
-                    <AppText style={styles.crystalStepButtonText}>-10</AppText>
-                  </Pressable>
-                  <Pressable style={styles.crystalStepButton} onPress={() => adjustSuccubusLevel(10)}>
-                    <AppText style={styles.crystalStepButtonText}>+10</AppText>
-                  </Pressable>
+                  {[-10, 10, -100, 100].map((delta) => {
+                    const disabled = delta < 0 ? succubus.level <= 1 : succubus.level >= ENEMY_MAX_LEVEL;
+                    const label = `${delta > 0 ? "+" : ""}${delta}`;
+                    return <LocalizedPressable
+                      key={delta}
+                      testID={`outside-enemy-level-${delta < 0 ? "minus" : "plus"}-${Math.abs(delta)}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={`サキュバスのレベル ${label}`}
+                      accessibilityState={{ disabled }}
+                      disabled={disabled}
+                      style={[styles.crystalStepButton, disabled && styles.crystalStepButtonDisabled]}
+                      onPress={() => adjustSuccubusLevel(delta)}
+                    >
+                      <AppText style={styles.crystalStepButtonText}>{label}</AppText>
+                    </LocalizedPressable>;
+                  })}
                 </View>
               </View>
             </View>
@@ -2988,9 +3008,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   crystalSettingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: 12,
     borderWidth: 1,
     borderColor: "#d8c8d0",
@@ -2998,7 +3015,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   crystalSettingText: {
-    flex: 1,
     gap: 4,
   },
   crystalSettingLabel: {
@@ -3015,15 +3031,23 @@ const styles = StyleSheet.create({
   },
   crystalStepButtons: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
   },
   crystalStepButton: {
+    flexGrow: 1,
+    flexBasis: "40%",
     minWidth: 52,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: "#7c6673",
     backgroundColor: "#fff",
     paddingVertical: 8,
     alignItems: "center",
+    justifyContent: "center",
+  },
+  crystalStepButtonDisabled: {
+    opacity: 0.4,
   },
   crystalStepButtonText: {
     color: "#33232c",

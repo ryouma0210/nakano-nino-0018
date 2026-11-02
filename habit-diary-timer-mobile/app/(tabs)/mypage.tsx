@@ -32,7 +32,14 @@ import { resolveFavorites } from "@/features/profile/catalog";
 import {
   activityCertificatePhotoDataUrl,
   exportActivityCertificate,
+  exportPreparedActivityCertificate,
+  prepareActivityCertificatePreview,
+  type ActivityCertificatePreview,
 } from "@/features/profile/certificateExport";
+import type { ActivityCertificateData } from "@/features/profile/certificate";
+import { CertificatePreviewModal } from "@/features/profile/CertificatePreviewModal";
+import { createCertificateDismissal } from "@/features/profile/certificateCapture";
+import { hasUnsavedProfileChanges } from "@/features/profile/unsavedProfile";
 import { useCertificateImageRenderer } from "@/features/profile/useCertificateImageRenderer";
 import { readOutsideLevelSnapshot } from "@/features/outside/gameState";
 import { useAppModal } from "@/components/AppModalProvider";
@@ -281,6 +288,11 @@ export default function MyPageScreen() {
   const [photoSaving, setPhotoSaving] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
   const [certificateBusy, setCertificateBusy] = useState(false);
+  const [certificatePreview, setCertificatePreview] = useState<ActivityCertificatePreview | null>(null);
+  const [certificatePreviewVisible, setCertificatePreviewVisible] = useState(false);
+  const [certificatePreviewError, setCertificatePreviewError] = useState<string | null>(null);
+  const certificatePreviewRef = useRef<ActivityCertificatePreview | null>(null);
+  const certificatePreviewDismissal = useRef<ReturnType<typeof createCertificateDismissal> | null>(null);
   const {
     renderImage: renderCertificateImage,
     renderHost: certificateImageHost,
@@ -319,6 +331,14 @@ export default function MyPageScreen() {
         loadVersion.current += 1;
         setWeaknessModalVisible(false);
         setFavoriteModalVisible(false);
+        setCertificatePreviewVisible(false);
+        setCertificatePreview(null);
+        const preview = certificatePreviewRef.current;
+        certificatePreviewRef.current = null;
+        certificatePreviewDismissal.current?.complete();
+        // A native export may still be reading its temporary source while the
+        // route loses focus. Release it only after that operation finishes.
+        void Promise.resolve(saveOperation.current).catch(() => undefined).then(() => preview?.dispose());
       };
     }, [reload]),
   );
@@ -353,6 +373,15 @@ export default function MyPageScreen() {
     nameSaving ||
     certificateBusy;
   const profileEditable = profileReady && !busy;
+  const hasUnsavedChanges = profileReady && settings !== null
+    && hasUnsavedProfileChanges(profile, savedProfile.current, playerName, settings.playerName);
+
+  function checkCertificateSaved() {
+    if (!hasUnsavedChanges) return true;
+    Keyboard.dismiss();
+    showNotice("未保存の変更があります", "名前やステータスを保存してから、プレビュー・発行してください。入力した内容はそのまま残っています。");
+    return false;
+  }
 
   function updateProfile(partial: Partial<ProfileSettings>) {
     setProfile((current) => ({ ...current, ...partial }));
@@ -559,39 +588,129 @@ export default function MyPageScreen() {
     }
   }
 
+  async function loadCertificateSnapshot() {
+    const [stored, storedPhoto, storedSettings] = await Promise.all([
+      profileService.load(),
+      profileService.loadPhoto(),
+      settingsService.load(),
+    ]);
+    const currentStats = loadProfileStats();
+    const outsideLevels = readOutsideLevelSnapshot();
+    const data: ActivityCertificateData = {
+      name: storedSettings.playerName,
+      photoDataUrl: await activityCertificatePhotoDataUrl(storedPhoto),
+      topWeaknesses: stored.topWeaknesses,
+      topFavorites: resolveFavorites(stored.topFavoriteIds),
+      favoriteCount: stored.favoriteIds.length,
+      weaknessCount: stored.weaknesses.length,
+      erectionLengthCm: stored.erectionLengthCm,
+      masturbationPerWeek: stored.masturbationPerWeek,
+      longestActivitySeconds: currentStats.achievements.longestTrainingSeconds,
+      totalTimerSeconds: currentStats.achievements.punishmentSeconds,
+      outsidePlayerLevel: outsideLevels.playerLevel,
+      outsideSuccubusLevel: outsideLevels.succubusLevel,
+      totalEarnedPoints: currentStats.points.earned,
+      currentPoints: currentStats.points.available,
+      issuedAt: new Date(),
+    };
+    return { data, language: storedSettings.language };
+  }
+
+  async function previewCertificate() {
+    if (!profileReady || savingRef.current) return;
+    if (!checkCertificateSaved()) return;
+    savingRef.current = true;
+    setCertificateBusy(true);
+    const version = loadVersion.current;
+    try {
+      const operation = (async () => {
+        const snapshot = await loadCertificateSnapshot();
+        if (version !== loadVersion.current) return;
+        const preview = await prepareActivityCertificatePreview(snapshot.data, snapshot.language, renderCertificateImage);
+        if (version !== loadVersion.current) {
+          await preview.dispose();
+          return;
+        }
+        certificatePreviewRef.current = preview;
+        setCertificatePreview(preview);
+        setCertificatePreviewError(null);
+        setCertificatePreviewVisible(true);
+      })();
+      saveOperation.current = operation;
+      await operation;
+    } catch (error) {
+      if (version === loadVersion.current) showError("証明書のプレビューを表示できませんでした", error);
+    } finally {
+      saveOperation.current = null;
+      savingRef.current = false;
+      setCertificateBusy(false);
+    }
+  }
+
+  function closeCertificatePreview() {
+    if (savingRef.current) return;
+    const preview = certificatePreviewRef.current;
+    certificatePreviewRef.current = null;
+    setCertificatePreviewVisible(false);
+    setCertificatePreview(null);
+    void preview?.dispose();
+  }
+
+  async function issuePreviewedCertificate() {
+    const preview = certificatePreviewRef.current;
+    if (!preview || savingRef.current) return;
+    savingRef.current = true;
+    setCertificateBusy(true);
+    setCertificatePreviewError(null);
+    const version = loadVersion.current;
+    const dismissal = createCertificateDismissal();
+    certificatePreviewDismissal.current = dismissal;
+    setCertificatePreviewVisible(false);
+    try {
+      const operation = (async () => {
+        // UIKit must finish dismissing the preview before showing a native
+        // directory picker or an issuance notice.
+        if (Platform.OS === "ios") await dismissal.wait();
+        if (version !== loadVersion.current) return;
+        const result = await exportPreparedActivityCertificate(preview);
+        if (version !== loadVersion.current) return;
+        if (result.status === "cancelled") {
+          setCertificatePreviewVisible(true);
+          return;
+        }
+        certificatePreviewRef.current = null;
+        setCertificatePreview(null);
+        await preview.dispose();
+        if (result.status === "saved") showNotice("証明書を発行しました", "活動記録証明書を画像（PNG）で保存しました。");
+      })();
+      saveOperation.current = operation;
+      await operation;
+    } catch (error) {
+      console.error("Could not issue a previewed certificate", error);
+      if (version === loadVersion.current) {
+        setCertificatePreviewError("証明書の発行に失敗しました");
+        setCertificatePreviewVisible(true);
+      }
+    } finally {
+      dismissal.complete();
+      certificatePreviewDismissal.current = null;
+      saveOperation.current = null;
+      savingRef.current = false;
+      setCertificateBusy(false);
+    }
+  }
+
   async function issueCertificate(action: "save" | "share" | "print" = "save") {
     if (!profileReady || savingRef.current) return;
+    if (!checkCertificateSaved()) return;
     savingRef.current = true;
     setCertificateBusy(true);
     try {
       const operation = (async () => {
-        const [stored, storedPhoto, storedSettings] = await Promise.all([
-          profileService.load(),
-          profileService.loadPhoto(),
-          settingsService.load(),
-        ]);
-        const currentStats = loadProfileStats();
-        const outsideLevels = readOutsideLevelSnapshot();
+        const snapshot = await loadCertificateSnapshot();
         const result = await exportActivityCertificate(
-          {
-            name: storedSettings.playerName,
-            photoDataUrl: await activityCertificatePhotoDataUrl(storedPhoto),
-            topWeaknesses: stored.topWeaknesses,
-            topFavorites: resolveFavorites(stored.topFavoriteIds),
-            favoriteCount: stored.favoriteIds.length,
-            weaknessCount: stored.weaknesses.length,
-            erectionLengthCm: stored.erectionLengthCm,
-            masturbationPerWeek: stored.masturbationPerWeek,
-            longestActivitySeconds:
-              currentStats.achievements.longestTrainingSeconds,
-            totalTimerSeconds: currentStats.achievements.punishmentSeconds,
-            outsidePlayerLevel: outsideLevels.playerLevel,
-            outsideSuccubusLevel: outsideLevels.succubusLevel,
-            totalEarnedPoints: currentStats.points.earned,
-            currentPoints: currentStats.points.available,
-            issuedAt: new Date(),
-          },
-          storedSettings.language,
+          snapshot.data,
+          snapshot.language,
           action,
           renderCertificateImage,
         );
@@ -641,8 +760,19 @@ export default function MyPageScreen() {
       </Card>
       <Card style={styles.certificateCard}>
         <AppText variant="subtitle">活動記録証明書の発行</AppText>
+        {hasUnsavedChanges ? <AppText accessibilityLiveRegion="polite" testID="certificate-unsaved-warning">
+          未保存の変更があります。名前やステータスを保存すると、証明書に反映されます。
+        </AppText> : null}
+        <PrimaryButton
+          title={certificateBusy ? "処理中..." : "プレビュー"}
+          tone="secondary"
+          testID="certificate-preview-open"
+          disabled={!profileEditable || settings === null}
+          onPress={() => { void previewCertificate(); }}
+        />
         <PrimaryButton
           title={certificateBusy ? "発行中..." : "発行する"}
+          testID="certificate-issue"
           tone="save"
           disabled={!profileEditable || settings === null}
           onPress={() => {
@@ -939,6 +1069,15 @@ export default function MyPageScreen() {
         onPress={() => router.replace("/(tabs)")}
       />
       {certificateImageHost}
+      {certificatePreview ? <CertificatePreviewModal
+        preview={certificatePreview}
+        visible={certificatePreviewVisible}
+        busy={certificateBusy}
+        error={certificatePreviewError}
+        onClose={closeCertificatePreview}
+        onIssue={() => { void issuePreviewedCertificate(); }}
+        onDismiss={() => certificatePreviewDismissal.current?.complete()}
+      /> : null}
       <FavoritePickerModal
         visible={favoriteModalVisible}
         selected={favoriteDraft}

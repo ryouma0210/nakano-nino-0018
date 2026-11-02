@@ -10,6 +10,13 @@ import {
 export type { StoredVoice, VoiceFolder, VoicePlaybackMode, VoiceScope } from "../features/voices/library";
 export type VoiceLibrarySnapshot = { voices: StoredVoice[]; mode: VoicePlaybackMode; folders: VoiceFolder[]; scope: VoiceScope };
 export type VoiceImportResult = { added: number; failed: number; canceled: boolean };
+export type VoiceBackupFile = { id: string; uri?: string; blob?: Blob };
+export type VoiceBackupSnapshot = { library: VoiceLibrary; files: VoiceBackupFile[] };
+export type PreparedVoiceRestore = { activate: () => Promise<void>; rollback: () => Promise<void>; finalize: () => Promise<void> };
+export type VoiceBackupAccess = {
+  snapshot: () => Promise<VoiceBackupSnapshot>;
+  prepareRestore: (library: VoiceLibrary, files: readonly VoiceBackupFile[]) => Promise<PreparedVoiceRestore>;
+};
 
 const databaseName = "nino-room-voice-library-v1";
 const saveFailureMessage = "ボイスを保存できませんでした。";
@@ -19,6 +26,7 @@ const objectUrls = new Map<string, string>();
 let queue: Promise<unknown> = Promise.resolve();
 let databasePromise: Promise<IDBDatabase> | null = null;
 let importing = false;
+let backupBusy = false;
 let sequence = 0;
 
 function serialized<T>(operation: () => Promise<T>): Promise<T> {
@@ -213,7 +221,162 @@ async function storeWebAsset(asset: DocumentPicker.DocumentPickerAsset, folderId
   });
 }
 
+async function backupSnapshot(): Promise<VoiceBackupSnapshot> {
+  if (Platform.OS === "web") {
+    return webTransaction("readonly", async (current) => {
+      const library = await readWebLibrary(current);
+      const files = await Promise.all(library.voices.map(async (voice) => {
+        const blob: unknown = await requestResult(current.objectStore("voices").get(voice.id));
+        if (!(blob instanceof Blob) || blob.size !== voice.size) throw new Error(invalidVoiceLibraryMessage);
+        return { id: voice.id, blob };
+      }));
+      return { library, files };
+    });
+  }
+  const library = await readNativeLibrary();
+  const files = [];
+  for (const voice of library.voices) {
+    const uri = `${nativeDirectory()}${voice.fileName}`;
+    const info = await FileSystem.getInfoAsync(uri);
+    if (!info.exists || info.isDirectory || info.size !== voice.size) throw new Error(invalidVoiceLibraryMessage);
+    files.push({ id: voice.id, uri });
+  }
+  return { library, files };
+}
+
+function releaseObjectUrls() {
+  objectUrls.forEach((uri) => URL.revokeObjectURL(uri));
+  objectUrls.clear();
+}
+
+async function prepareVoiceRestore(input: VoiceLibrary, files: readonly VoiceBackupFile[]): Promise<PreparedVoiceRestore> {
+  const library = parseVoiceLibrary(input);
+  if (!Array.isArray(files) || files.length !== library.voices.length || new Set(files.map((file) => file?.id)).size !== files.length) {
+    throw new Error(invalidVoiceLibraryMessage);
+  }
+  const byId = new Map(files.map((file) => [file?.id, file]));
+  if (library.voices.some((voice) => !byId.has(voice.id))) throw new Error(invalidVoiceLibraryMessage);
+  if (Platform.OS === "web") {
+    const incoming = library.voices.map((voice) => {
+      const blob = byId.get(voice.id)?.blob;
+      if (!(blob instanceof Blob) || blob.size !== voice.size) throw new Error(invalidVoiceLibraryMessage);
+      return { id: voice.id, blob: blob.slice(0, blob.size, voice.mimeType) };
+    });
+    const previous = await webTransaction("readonly", async (current) => {
+      const raw: unknown = await requestResult(current.objectStore("metadata").get("library"));
+      const keys = await requestResult(current.objectStore("voices").getAllKeys());
+      const blobs = await requestResult(current.objectStore("voices").getAll());
+      return { raw, keys, blobs };
+    });
+    let active = false;
+    let closed = false;
+    return {
+      async activate() {
+        if (active || closed) return;
+        await webTransaction("readwrite", async (current) => {
+          const store = current.objectStore("voices");
+          await requestResult(store.clear());
+          for (const file of incoming) await requestResult(store.put(file.blob, file.id));
+          await writeWebLibrary(current, library);
+        });
+        active = true;
+      },
+      async rollback() {
+        if (closed) return;
+        if (active) await webTransaction("readwrite", async (current) => {
+          const store = current.objectStore("voices");
+          await requestResult(store.clear());
+          for (const [index, key] of previous.keys.entries()) await requestResult(store.put(previous.blobs[index], key));
+          const metadata = current.objectStore("metadata");
+          if (previous.raw === undefined) await requestResult(metadata.delete("library"));
+          else await requestResult(metadata.put(previous.raw, "library"));
+        });
+        closed = true;
+      },
+      async finalize() {
+        if (closed) return;
+        closed = true;
+        if (active) { releaseObjectUrls(); changed(); }
+      },
+    };
+  }
+
+  const token = `${Date.now()}-${sequence++}-${Math.random().toString(36).slice(2)}`;
+  const live = nativeDirectory();
+  const stage = `${FileSystem.documentDirectory}voices-restore-${token}/`;
+  const previous = `${FileSystem.documentDirectory}voices-previous-${token}/`;
+  try {
+    await FileSystem.makeDirectoryAsync(`${stage}.metadata/`, { intermediates: true });
+    for (const voice of library.voices) {
+      const source = byId.get(voice.id)?.uri;
+      if (typeof source !== "string" || !source.startsWith("file://")) throw new Error(invalidVoiceLibraryMessage);
+      const destination = `${stage}${voice.fileName}`;
+      await FileSystem.copyAsync({ from: source, to: destination });
+      const info = await FileSystem.getInfoAsync(destination);
+      if (!info.exists || info.isDirectory || info.size !== voice.size) throw new Error(invalidVoiceLibraryMessage);
+    }
+    await FileSystem.writeAsStringAsync(`${stage}.metadata/current.json`, JSON.stringify(library));
+  } catch (error) {
+    await cleanupNative(stage);
+    throw error;
+  }
+  let state: "prepared" | "active" | "recovering" | "closed" = "prepared";
+  let previousMoved = false;
+  let installationAttempted = false;
+  const rollback = async () => {
+    if (state === "closed") return;
+    state = "recovering";
+    if (previousMoved) {
+      const info = await FileSystem.getInfoAsync(previous);
+      if (!info.exists || !info.isDirectory) throw new Error(invalidVoiceLibraryMessage);
+      await FileSystem.deleteAsync(live, { idempotent: true });
+      await FileSystem.moveAsync({ from: previous, to: live });
+      previousMoved = false;
+    } else if (installationAttempted) {
+      await FileSystem.deleteAsync(live, { idempotent: true });
+    }
+    installationAttempted = false;
+    state = "closed";
+    await cleanupNative(stage);
+  };
+  return {
+    async activate() {
+      if (state !== "prepared") return;
+      try {
+        const info = await FileSystem.getInfoAsync(live);
+        if (info.exists) {
+          if (!info.isDirectory) throw new Error(invalidVoiceLibraryMessage);
+          await FileSystem.moveAsync({ from: live, to: previous });
+          previousMoved = true;
+        }
+        installationAttempted = true;
+        await FileSystem.moveAsync({ from: stage, to: live });
+        state = "active";
+      } catch (error) {
+        try { await rollback(); } catch (rollbackError) { console.warn("Could not roll back a voice restore", rollbackError); }
+        throw error;
+      }
+    },
+    rollback,
+    async finalize() {
+      if (state === "closed" || state === "recovering") return;
+      const active = state === "active";
+      if (active) await cleanupNative(previous);
+      state = "closed";
+      await cleanupNative(stage);
+      if (active) changed();
+    },
+  };
+}
+
 export const voiceStorageService = {
+  /** Hold the existing operation queue through the whole backup/restore transaction. */
+  async withExclusiveBackup<T>(operation: (access: VoiceBackupAccess) => Promise<T>): Promise<T> {
+    if (importing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
+    backupBusy = true;
+    try { return await serialized(() => operation({ snapshot: backupSnapshot, prepareRestore: prepareVoiceRestore })); }
+    finally { backupBusy = false; }
+  },
   load(): Promise<VoiceLibrarySnapshot> {
     return serialized(async () => {
       if (Platform.OS !== "web") {
@@ -240,7 +403,7 @@ export const voiceStorageService = {
   },
 
   async importVoices(folderId: string | null = null): Promise<VoiceImportResult> {
-    if (importing) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
+    if (importing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
     importing = true;
     let assets: DocumentPicker.DocumentPickerAsset[] = [];
     try {

@@ -54,7 +54,13 @@ export function createBrowserVoicePlaylist(createAudio: () => HTMLAudioElement =
       },
       waiting: () => { if (wantsToPlay) publish({ playing: !audio.paused, isBuffering: true }); },
       stalled: () => { if (wantsToPlay) publish({ playing: !audio.paused, isBuffering: true }); },
-      timeupdate: () => { if (Number.isFinite(audio.currentTime)) savedTime = audio.currentTime; },
+      timeupdate: () => {
+        if (Number.isFinite(audio.currentTime)) savedTime = audio.currentTime;
+        publish({ ...status });
+      },
+      loadedmetadata: () => publish({ ...status }),
+      durationchange: () => publish({ ...status }),
+      seeked: () => publish({ ...status }),
       error: fail,
       ended: () => {
         if (!wantsToPlay || index < 0) return;
@@ -134,6 +140,7 @@ export function createBrowserVoicePlaylist(createAudio: () => HTMLAudioElement =
   const playlist: BrowserVoicePlaylist = {
     get currentIndex() { return index; },
     get currentTime() { return media && Number.isFinite(media.currentTime) ? media.currentTime : savedTime; },
+    get duration() { return media && Number.isFinite(media.duration) && media.duration > 0 ? media.duration : 0; },
     get playing() { return status.playing; },
     get currentStatus() { return { ...status }; },
     get loop() { return repeat; },

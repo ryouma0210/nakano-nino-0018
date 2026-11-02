@@ -2,12 +2,13 @@ import { Stack } from "expo-router";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { BottomNavigationLayout } from "@/components/BottomNavigation";
 import { translateText } from "@/i18n";
+import { PointMilestoneProvider } from "@/features/points/PointMilestoneProvider";
 
 export default function TabLayout() {
   const { settings } = useAppAudio();
   const t = (value: string) => translateText(value, settings?.language ?? "ja");
   return (
-    <BottomNavigationLayout>
+    <PointMilestoneProvider><BottomNavigationLayout>
       <Stack screenOptions={{ headerShown: false, animation: "none" }}>
         <Stack.Screen name="index" options={{ title: t("ホーム") }} />
         <Stack.Screen name="tasks" options={{ title: t("タスク") }} />
@@ -46,6 +47,6 @@ export default function TabLayout() {
         <Stack.Screen name="external-links" options={{ title: t("外部リンク") }} />
         <Stack.Screen name="slave-contract" options={{ title: t("奴隷契約書") }} />
       </Stack>
-    </BottomNavigationLayout>
+    </BottomNavigationLayout></PointMilestoneProvider>
   );
 }

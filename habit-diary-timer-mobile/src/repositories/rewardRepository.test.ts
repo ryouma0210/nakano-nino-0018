@@ -127,12 +127,43 @@ describe("native completion award reconciliation", () => {
 
       sqlite.exec("DROP TRIGGER reject_management_award");
       const balance = rewardRepository.balance();
-      expect(balance).toEqual({ earned: 55 + balance.stgBonus, spent: 0, available: 55 + balance.stgBonus, stgBonus: balance.stgBonus });
+      expect(balance).toEqual({ earned: 55, spent: 0, available: 55 + balance.stgBonus, stgBonus: balance.stgBonus });
       const repaired = ledger();
       expect(repaired).toHaveLength(3);
       rewardRepository.balance();
       expect(ledger()).toEqual(repaired);
       expect(listener).not.toHaveBeenCalled();
     } finally { unsubscribe(); }
+  });
+});
+
+describe("cumulative earnings and spendable balance", () => {
+  function seed() {
+    pointRepository.award("earned", 1000, "Award");
+    pointRepository.award("loss", -250, "Loss");
+    sqlite.prepare("INSERT INTO reward_redemptions(points_spent) VALUES(?)").run(200);
+  }
+
+  it("uses positive awards for cumulative earnings and retains losses/redemptions in the balance", () => {
+    seed();
+    const balance = rewardRepository.balance();
+    expect(balance.earned).toBe(1000);
+    expect(pointRepository.totalEarned()).toBe(balance.earned);
+    expect(balance.spent).toBe(200);
+    expect(balance.available).toBe(550 + balance.stgBonus);
+    pointRepository.award("another-loss", -900, "Loss");
+    expect(rewardRepository.balance().earned).toBe(1000);
+    expect(rewardRepository.balance().available).toBe(-350 + balance.stgBonus);
+  });
+
+  it("keeps the STG grant spendable without counting it as an earned milestone", async () => {
+    seed();
+    vi.stubEnv("EXPO_PUBLIC_APP_ENV", "stg");
+    vi.resetModules();
+    try {
+      const stg = await import("./rewardRepository");
+      expect(stg.rewardRepository.balance()).toEqual({ earned: 1000, spent: 200, available: 100549, stgBonus: 99999 });
+      expect(stg.pointRepository.totalEarned()).toBe(1000);
+    } finally { vi.unstubAllEnvs(); vi.resetModules(); }
   });
 });

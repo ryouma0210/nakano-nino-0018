@@ -1,13 +1,13 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { Platform } from "react-native";
+import { Image, Platform } from "react-native";
 import { translateText, type AppLanguage } from "../../i18n";
 import { fileStorageService, mimeTypeForName, type StoredFile } from "../../services/fileStorageService";
 import { invalidProfilePhotoMessage, isProfilePhotoMetadata } from "../files/profilePhoto";
 import { activityCertificateFileName, createActivityCertificateHtml, validateCertificatePhotoDataUrl, type ActivityCertificateData } from "./certificate";
 import { printCertificateHtml } from "./certificatePrint";
-import { downloadCertificatePng, renderCertificatePng } from "./certificateImage";
+import { downloadCertificatePng, renderCertificatePng, type CertificatePng } from "./certificateImage";
 
 export type NativeCertificateImageRenderer = (data: ActivityCertificateData, language: AppLanguage) => Promise<string>;
 
@@ -16,6 +16,69 @@ export type ActivityCertificateExportResult = {
   fileName: string;
   uri?: string;
 };
+
+type CertificatePreviewImage = {
+  uri: string;
+  width: number;
+  height: number;
+  png?: CertificatePng;
+};
+
+export type ActivityCertificatePreview = {
+  data: ActivityCertificateData;
+  language: AppLanguage;
+  image: CertificatePreviewImage;
+  dispose: () => Promise<void>;
+};
+
+// Prepare the actual output, without requesting permissions, downloading,
+// printing, sharing, or writing an issued certificate to permanent storage.
+export async function prepareActivityCertificatePreview(
+  data: ActivityCertificateData,
+  language: AppLanguage,
+  renderNativeImage?: NativeCertificateImageRenderer,
+): Promise<ActivityCertificatePreview> {
+  const snapshot: ActivityCertificateData = {
+    ...data,
+    issuedAt: new Date(data.issuedAt),
+    topWeaknesses: [...data.topWeaknesses],
+    topFavorites: data.topFavorites.map((favorite) => ({ ...favorite })),
+  };
+  const html = createActivityCertificateHtml(snapshot, language);
+  if (Platform.OS === "web") {
+    const png = await renderCertificatePng(html);
+    return { data: snapshot, language, image: { uri: png.dataUrl, width: png.width, height: png.height, png }, dispose: async () => undefined };
+  }
+  if (!renderNativeImage) throw new Error("証明書の画像作成を開始できませんでした。");
+  const uri = await renderNativeImage(snapshot, language);
+  try {
+    const { width, height } = await Image.getSize(uri);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new Error("証明書の画像を生成できませんでした。");
+    }
+    let disposed = false;
+    return {
+      data: snapshot, language, image: { uri, width, height },
+      dispose: async () => {
+        if (disposed) return;
+        disposed = true;
+        await removeTemporaryFile(uri);
+      },
+    };
+  } catch (error) {
+    await removeTemporaryFile(uri);
+    throw error;
+  }
+}
+
+// Reuse the preview's pixels and snapshot, including its name and timestamp.
+// The caller retains ownership until the preview is closed or issuance ends.
+export function exportPreparedActivityCertificate(
+  preview: ActivityCertificatePreview,
+  action: "save" | "share" | "print" = "save",
+): Promise<ActivityCertificateExportResult> {
+  return exportActivityCertificate(preview.data, preview.language, action, undefined, preview.image);
+}
 
 export async function activityCertificatePhotoDataUrl(photo: StoredFile | null): Promise<string | null> {
   if (!photo) return null;
@@ -64,6 +127,7 @@ export async function exportActivityCertificate(
   language: AppLanguage = "ja",
   action: "save" | "share" | "print" = "save",
   renderNativeImage?: NativeCertificateImageRenderer,
+  preparedImage?: CertificatePreviewImage,
 ): Promise<ActivityCertificateExportResult> {
   const html = createActivityCertificateHtml(data, language);
   let fileName = activityCertificateFileName(data.issuedAt, data.name);
@@ -72,7 +136,7 @@ export async function exportActivityCertificate(
       await printCertificateHtml(html);
       return { status: "printed", fileName };
     }
-    const image = await renderCertificatePng(html);
+    const image = preparedImage?.png ?? await renderCertificatePng(html);
     await downloadCertificatePng(image, fileName);
     return { status: "saved", fileName };
   }
@@ -81,7 +145,7 @@ export async function exportActivityCertificate(
     return { status: "printed", fileName };
   }
   let directoryUri: string | undefined;
-  if (!renderNativeImage) throw new Error("画像を保存できませんでした。");
+  if (!renderNativeImage && !preparedImage) throw new Error("画像を保存できませんでした。");
   if (action === "share") {
     if (!(await Sharing.isAvailableAsync())) throw new Error("共有画面を開けませんでした。");
   } else if (Platform.OS === "android") {
@@ -90,7 +154,7 @@ export async function exportActivityCertificate(
     directoryUri = permission.directoryUri;
   }
 
-  const temporaryUri = await renderNativeImage(data, language);
+  const temporaryUri = preparedImage?.uri ?? await renderNativeImage!(data, language);
   let targetUri: string | undefined;
   try {
     if (action === "share") {
@@ -123,6 +187,6 @@ export async function exportActivityCertificate(
     if (targetUri) await removeTemporaryFile(targetUri);
     throw error;
   } finally {
-    await removeTemporaryFile(temporaryUri);
+    if (!preparedImage) await removeTemporaryFile(temporaryUri);
   }
 }

@@ -3,6 +3,9 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["累計{0}Pt達成", "{0} total earned Pt reached", "누적 {0}Pt 달성", "累计获得{0}Pt"],
+  ["累計獲得：{0}Pt", "Total earned: {0} Pt", "누적 획득: {0}Pt", "累计获得：{0}Pt"],
+  ["次の解放まであと{0}Pt", "{0} Pt until the next message", "다음 해제까지 {0}Pt", "距离下次解锁还差{0}Pt"],
   ["{0}ptで交換", "Redeem for {0} pt", "{0}pt로 교환", "花费{0}pt兑换"],
   ["{0}ptを消費します。\n\nゲーム⑤・⑥の解除PWも含まれます。交換後はコレクション部屋で確認できます。\n\nポイントがあれば何度でも交換できます。",
     "Spend {0} pt.\n\nIncludes the password to unlock games 5 and 6. You can view it in the Collection room after redeeming.\n\nYou can redeem this again whenever you have enough points.",

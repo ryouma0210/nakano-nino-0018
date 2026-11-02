@@ -4,11 +4,14 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
+import { useLoopSleepRemaining } from "@/audio/useLoopSleepRemaining";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PageTitle } from "@/components/PageTitle";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { TextField } from "@/components/TextField";
+import { VoiceSeekBar } from "@/components/VoiceSeekBar";
+import { secondsToClock } from "@/utils/date";
 import { VOICE_FOLDER_NAME_LIMIT, VOICE_NAME_LIMIT, voiceDisplayName, voiceFolderName } from "@/features/voices/library";
 import { translateText } from "@/i18n";
 import type { StoredVoice, VoiceFolder, VoiceScope } from "@/services/voiceStorageService";
@@ -44,6 +47,8 @@ export default function VoicesScreen() {
   const locked = library.loading || library.busy || working;
   const current = library.visibleVoices.find((voice) => voice.id === library.currentId);
   const playable = current ?? library.visibleVoices[0];
+  const remaining = useLoopSleepRemaining(library.sleepDeadline);
+  const seekDisabled = locked || !current || library.duration <= 0;
   const selectedFolder = library.folders.find((folder) => folder.id === library.scope);
   const scopeName = selectedFolder?.name ?? (library.scope === "all" ? "すべてのボイス" : "未分類");
   const folderCounts = new Map<string | null, number>();
@@ -237,6 +242,19 @@ export default function VoicesScreen() {
       <AppText variant="muted">「順番にループ」は選択中の一覧を最後まで再生すると、先頭に戻ります。</AppText>
       <AppText variant="label">{library.playing ? "再生中" : current ? "一時停止中" : "停止中"}</AppText>
       {playable ? <AppText localize={false} style={styles.voiceName}>{playable.name}</AppText> : <AppText variant="muted">再生するボイスを追加してください。</AppText>}
+      <View style={styles.heading}>
+        <AppText variant="muted">再生位置</AppText>
+        <AppText localize={false} testID="voice-playback-time">{secondsToClock(Math.floor(library.position))} / {secondsToClock(Math.floor(library.duration))}</AppText>
+      </View>
+      <VoiceSeekBar key={current?.id ?? "stopped"} position={library.position} duration={library.duration}
+        disabled={seekDisabled} label={t("再生位置")}
+        onSeek={(seconds) => { if (current) library.seekTo(seconds, current.id); }} />
+      <View style={styles.actions}>
+        <VoiceButton label="15秒戻す" equalWidth disabled={seekDisabled}
+          onPress={() => { if (current) library.seekBy(-15, current.id); }} testID="voice-seek-backward" />
+        <VoiceButton label="15秒進める" equalWidth disabled={seekDisabled}
+          onPress={() => { if (current) library.seekBy(15, current.id); }} testID="voice-seek-forward" />
+      </View>
       <View style={styles.actions}>
         <VoiceButton label="前のボイス" equalWidth disabled={locked || !current || library.visibleVoices.length < 2} onPress={library.previous} testID="voice-previous" />
         <VoiceButton label={library.playing ? "一時停止" : "再生"} equalWidth disabled={locked || !playable}
@@ -245,6 +263,16 @@ export default function VoicesScreen() {
       </View>
       <VoiceButton label="停止" danger disabled={!current} onPress={library.stop} testID="voice-stop" />
       <AppText variant="muted">画面を移動しても再生は続きます。止めるときは「停止」を押してください。</AppText>
+      <AppText variant="subtitle">停止タイマー</AppText>
+      {remaining ? <AppText localize={false} testID="voice-sleep-remaining">{`${t("停止まで")} ${remaining}`}</AppText>
+        : <AppText variant="muted">タイマー未設定</AppText>}
+      <View style={styles.timerPresets}>
+        {[5, 15, 30, 60].map((minutes) => <View key={minutes} style={styles.timerPreset}>
+          <VoiceButton label={`${minutes}分`} disabled={locked || !current} onPress={() => library.setSleepMinutes(minutes)} testID={`voice-sleep-${minutes}`} />
+        </View>)}
+      </View>
+      <VoiceButton label="タイマーを解除" disabled={library.sleepDeadline === null} onPress={() => library.setSleepMinutes(null)} testID="voice-sleep-clear" />
+      <AppText variant="muted">一時停止中も時間は進みます。停止するとタイマーを解除します。</AppText>
     </Card>
     <View style={styles.heading}>
       <AppText variant="subtitle">格納したボイス</AppText>
@@ -416,6 +444,8 @@ function formatVoiceSize(size: number) {
 }
 
 const styles = StyleSheet.create({
+  timerPresets: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  timerPreset: { flexGrow: 1, flexBasis: "42%" },
   root: { flex: 1, backgroundColor: "#000" },
   content: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 14, padding: 16, paddingBottom: 24 },
   section: { gap: 14 },

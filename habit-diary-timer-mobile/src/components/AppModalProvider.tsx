@@ -16,11 +16,13 @@ type Notice = {
 };
 
 type AppModalContextValue = {
+  isNoticeVisible: boolean;
   showNotice: (title: string, message: string, onClose?: () => void) => void;
   showError: (title: string, error: unknown, prefix?: string, onClose?: () => void) => void;
 };
 
 const AppModalContext = createContext<AppModalContextValue>({
+  isNoticeVisible: false,
   showNotice: () => {},
   showError: () => {},
 });
@@ -52,7 +54,7 @@ export function AppModalProvider({ children }: PropsWithChildren) {
     onClose?.();
   }, [notice]);
 
-  const value = useMemo(() => ({ showNotice, showError }), [showError, showNotice]);
+  const value = useMemo(() => ({ showNotice, showError, isNoticeVisible: notice !== null }), [showError, showNotice, notice]);
 
   return (
     <AppModalContext.Provider value={value}>
