@@ -16,8 +16,8 @@ export type RhythmHistoryEntry = {
   dailyRewardEligible?: true;
 };
 export type RhythmSave = { version: 1; images: RhythmImages; history: RhythmHistoryEntry[] };
-const LOAD_ERROR = "耐久チャレンジのデータを読み込めませんでした。";
-const SAVE_ERROR = "保存する耐久チャレンジのデータが正しくありません。";
+const LOAD_ERROR = "寸止め耐久チャレンジのデータを読み込めませんでした。";
+const SAVE_ERROR = "保存する寸止め耐久チャレンジのデータが正しくありません。";
 let pending: Promise<void> = Promise.resolve();
 
 function queue<T>(operation: () => Promise<T>): Promise<T> {

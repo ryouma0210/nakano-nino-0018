@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { FlatList, Image, Modal, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FlatList, Image, Modal, Platform, StyleSheet, View } from "react-native";
+import { Asset } from "expo-asset";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
@@ -24,13 +25,46 @@ export function RhythmImage({ state, images, files, loading, fill = false, overl
   useEffect(() => { setFailedUri(null); }, [file]);
   const uri = file?.uri;
   const useStored = Boolean(uri && uri !== failedUri);
+  const defaultAsset = useMemo(() => Asset.fromModule(defaultImages[state]), [state]);
+  const [storedSize, setStoredSize] = useState<{ uri: string; width: number; height: number } | null>(null);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const fitToImage = fill && Platform.OS === "web";
+  useEffect(() => {
+    if (!fitToImage || !useStored || !uri) return;
+    let active = true;
+    Image.getSize(uri, (width, height) => {
+      if (active) setStoredSize({ uri, width, height });
+    }, () => {});
+    return () => { active = false; };
+  }, [fitToImage, uri, useStored]);
+  const onImageError = useCallback(() => { if (uri) setFailedUri(uri); }, [uri]);
+  const imageSize = useStored && storedSize && storedSize.uri === uri ? storedSize : defaultAsset;
+  const imageWidth = imageSize.width ?? 0;
+  const imageHeight = imageSize.height ?? 0;
+  const scale = imageWidth > 0 && imageHeight > 0
+    ? Math.min(frameSize.width / imageWidth, frameSize.height / imageHeight) : 0;
+  // Keep overlays beside the contained image, with room for text and the voice
+  // button when a short window makes a portrait image particularly narrow.
+  const fittedContent = fitToImage && scale > 0 ? {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto" as const,
+    width: Math.min(frameSize.width, Math.max(240, imageWidth * scale)),
+    height: Math.min(frameSize.height, Math.max(140, imageHeight * scale)),
+  } : undefined;
   return <View style={[styles.media, fill && styles.fill]} testID={`rhythm-image-${state}`}>
-    <View style={[styles.imageFrame, fill && styles.fillFrame]} testID="rhythm-image-frame">
-      <Image key={useStored ? uri : state} source={useStored ? { uri } : defaultImages[state]}
-        style={styles.image} resizeMode="contain" accessibilityLabel={RHYTHM_IMAGE_LABELS[state]}
-        onError={() => { if (uri) setFailedUri(uri); }} />
-      {overlay}
-      {action ? <View style={styles.mediaAction} pointerEvents="box-none">{action}</View> : null}
+    <View style={[styles.imageFrame, fill && styles.fillFrame]} testID="rhythm-image-frame"
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setFrameSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
+      }}>
+      <View style={[styles.imageContent, fittedContent]} testID="rhythm-image-content">
+        <Image key={useStored ? uri : state} source={useStored ? { uri } : defaultImages[state]}
+          style={styles.image} resizeMode="contain" accessibilityLabel={RHYTHM_IMAGE_LABELS[state]}
+          onError={onImageError} />
+        {overlay}
+        {action ? <View style={styles.mediaAction} pointerEvents="box-none">{action}</View> : null}
+      </View>
     </View>
     {reference && !useStored && !loading ? <AppText variant="muted">選択した画像を読み込めないため、デフォルト画像を表示しています。</AppText> : null}
   </View>;
@@ -127,7 +161,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1, minHeight: 0 },
   fillFrame: { flex: 1, aspectRatio: undefined, borderRadius: 0, backgroundColor: "#000" },
   mediaAction: { position: "absolute", top: 8, right: 8, zIndex: 20, elevation: 20 },
-  imageFrame: { width: "100%", aspectRatio: 1.6, borderRadius: 6, overflow: "hidden", backgroundColor: "#10131e" },
+  imageFrame: { width: "100%", aspectRatio: 1.6, borderRadius: 6, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#10131e" },
+  imageContent: { flex: 1, width: "100%", minHeight: 0 },
   image: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" },
   backdrop: { flex: 1, padding: 16, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.85)" },
   dialog: { width: "100%", maxWidth: 560, height: "90%", padding: 14, borderWidth: 1, borderColor: "#fff", borderRadius: 6, backgroundColor: "#101018" },

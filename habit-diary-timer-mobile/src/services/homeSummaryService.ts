@@ -172,7 +172,7 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
     { id: "sugoroku", title: "すごろく", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/sugoroku" },
     { id: "endurance", title: "勃起我慢", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/endurance" },
     { id: "othello", title: "オセロ", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/othello" },
-    { id: "rhythm", title: "耐久チャレンジ", detail: "初回クリア報酬（寸止め10回以上）", href: "/(tabs)/rhythm-challenge" },
+    { id: "rhythm", title: "寸止め耐久チャレンジ", detail: "初回クリア報酬（寸止め10回以上）", href: "/(tabs)/rhythm-challenge" },
   ];
   tasks.push(...gameTasks.map((game) => {
     const completed = completedGames.has(game.id);
