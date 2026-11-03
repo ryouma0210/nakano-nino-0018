@@ -1,6 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
+import { sameBlobContent, sameNativeFileContent } from "./fileContentComparison";
 import {
   audioFileType, emptyVoiceLibrary, invalidVoiceLibraryMessage, invalidVoiceOrderMessage, moveVoice, normalizedVoiceFolderName, parseVoiceLibrary, reorderVoices,
   VOICE_FILE_EXTENSIONS, VOICE_NAME_LIMIT, voiceDisplayName, voiceFolderName,
@@ -9,7 +10,8 @@ import {
 
 export type { StoredVoice, VoiceFolder, VoicePlaybackMode, VoiceScope } from "../features/voices/library";
 export type VoiceLibrarySnapshot = { voices: StoredVoice[]; mode: VoicePlaybackMode; folders: VoiceFolder[]; scope: VoiceScope };
-export type VoiceImportResult = { added: number; failed: number; canceled: boolean };
+export type VoiceImportResult = { added: number; skipped: number; failed: number; canceled: boolean };
+export type VoiceDeleteResult = { removed: string[]; failed: string[] };
 export type VoiceBackupFile = { id: string; uri?: string; blob?: Blob };
 export type VoiceBackupSnapshot = { library: VoiceLibrary; files: VoiceBackupFile[] };
 export type PreparedVoiceRestore = { activate: () => Promise<void>; rollback: () => Promise<void>; finalize: () => Promise<void> };
@@ -209,16 +211,42 @@ async function storeNativeAsset(asset: DocumentPicker.DocumentPickerAsset, state
   }
 }
 
-async function storeWebAsset(asset: DocumentPicker.DocumentPickerAsset, folderId: string | null) {
+async function storeWebAsset(asset: DocumentPicker.DocumentPickerAsset, folderId: string | null): Promise<boolean> {
   if (!(asset.file instanceof Blob)) throw new Error(saveFailureMessage);
   const voice = newMetadata(asset, asset.file.size, folderId);
   const blob = asset.file.type === voice.mimeType ? asset.file : asset.file.slice(0, asset.file.size, voice.mimeType);
-  await webTransaction("readwrite", async (current) => {
-    const state = await readWebLibrary(current);
-    requireFolder(state, folderId);
-    await requestResult(current.objectStore("voices").add(blob, voice.id));
-    await writeWebLibrary(current, { ...state, voices: [...state.voices, voice] });
-  });
+  const matching = (state: VoiceLibrary) => state.voices.filter((candidate) => candidate.originalName === asset.name && candidate.size === blob.size);
+  // Reading Blob bytes is asynchronous and must finish outside an IndexedDB
+  // transaction. Recheck candidate IDs before committing so another window's
+  // imports/deletions cannot make the comparison snapshot stale.
+  for (;;) {
+    const candidates = await webTransaction("readonly", async (current) => {
+      const state = await readWebLibrary(current);
+      requireFolder(state, folderId);
+      return Promise.all(matching(state).map(async (candidate) => {
+        const bytes: unknown = await requestResult(current.objectStore("voices").get(candidate.id));
+        if (!(bytes instanceof Blob) || bytes.size !== candidate.size) throw new Error(invalidVoiceLibraryMessage);
+        return { id: candidate.id, blob: bytes };
+      }));
+    });
+    let duplicate = false;
+    for (const candidate of candidates) {
+      if (await sameBlobContent(blob, candidate.blob)) { duplicate = true; break; }
+    }
+    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+    const committed = await webTransaction(duplicate ? "readonly" : "readwrite", async (current) => {
+      const state = await readWebLibrary(current);
+      requireFolder(state, folderId);
+      const latest = matching(state);
+      if (latest.length !== candidateIds.size || latest.some((candidate) => !candidateIds.has(candidate.id))) return false;
+      if (!duplicate) {
+        await requestResult(current.objectStore("voices").add(blob, voice.id));
+        await writeWebLibrary(current, { ...state, voices: [...state.voices, voice] });
+      }
+      return true;
+    });
+    if (committed) return !duplicate;
+  }
 }
 
 async function backupSnapshot(): Promise<VoiceBackupSnapshot> {
@@ -369,6 +397,27 @@ async function prepareVoiceRestore(input: VoiceLibrary, files: readonly VoiceBac
   };
 }
 
+/** Caller owns the operation queue; each item commits independently for retries. */
+async function removeStoredVoice(id: string): Promise<void> {
+  if (Platform.OS === "web") {
+    await webTransaction("readwrite", async (current) => {
+      const state = await readWebLibrary(current);
+      if (!state.voices.some((voice) => voice.id === id)) throw new Error("ボイスが見つかりません。");
+      await requestResult(current.objectStore("voices").delete(id));
+      await writeWebLibrary(current, { ...state, voices: state.voices.filter((voice) => voice.id !== id) });
+    });
+    const uri = objectUrls.get(id);
+    if (uri) { URL.revokeObjectURL(uri); objectUrls.delete(id); }
+  } else {
+    const state = await readNativeLibrary();
+    const voice = state.voices.find((item) => item.id === id);
+    if (!voice) throw new Error("ボイスが見つかりません。");
+    await writeNativeLibrary({ ...state, voices: state.voices.filter((item) => item.id !== id) });
+    // Commit removal before cleanup so a failed metadata write never loses audio.
+    await cleanupNative(`${nativeDirectory()}${voice.fileName}`);
+  }
+}
+
 export const voiceStorageService = {
   /** Hold the existing operation queue through the whole backup/restore transaction. */
   async withExclusiveBackup<T>(operation: (access: VoiceBackupAccess) => Promise<T>): Promise<T> {
@@ -412,19 +461,28 @@ export const voiceStorageService = {
         type: Platform.OS === "web" ? ["audio/*", ...VOICE_FILE_EXTENSIONS] : ["audio/*", "application/ogg", "application/octet-stream"],
         multiple: true, copyToCacheDirectory: true, base64: false,
       });
-      if (selected.canceled || !selected.assets.length) return { added: 0, failed: 0, canceled: true };
+      if (selected.canceled || !selected.assets.length) return { added: 0, skipped: 0, failed: 0, canceled: true };
       assets = selected.assets;
       const result = await serialized(async () => {
         const web = Platform.OS === "web";
         // Reject corrupt library metadata before attempting any file writes.
         let state = web ? await webTransaction("readonly", readWebLibrary) : await readNativeLibrary();
         requireFolder(state, folderId);
-        const result: VoiceImportResult = { added: 0, failed: 0, canceled: false };
+        const result: VoiceImportResult = { added: 0, skipped: 0, failed: 0, canceled: false };
         for (const asset of assets) {
           try {
-            if (web) await storeWebAsset(asset, folderId);
-            else state = await storeNativeAsset(asset, state, folderId);
-            result.added++;
+            if (!audioFileType(asset.name, asset.mimeType)) throw new Error("音声ファイルを選択してください。");
+            if (web) {
+              if (await storeWebAsset(asset, folderId)) result.added++;
+              else result.skipped++;
+            } else {
+              let duplicate = false;
+              for (const candidate of state.voices.filter((voice) => voice.originalName === asset.name)) {
+                if (await sameNativeFileContent(asset.uri, `${nativeDirectory()}${candidate.fileName}`)) { duplicate = true; break; }
+              }
+              if (duplicate) result.skipped++;
+              else { state = await storeNativeAsset(asset, state, folderId); result.added++; }
+            }
           } catch { result.failed++; }
         }
         return result;
@@ -511,26 +569,23 @@ export const voiceStorageService = {
   },
 
   async remove(id: string): Promise<void> {
-    await serialized(async () => {
-      if (Platform.OS === "web") {
-        await webTransaction("readwrite", async (current) => {
-          const state = await readWebLibrary(current);
-          if (!state.voices.some((voice) => voice.id === id)) throw new Error("ボイスが見つかりません。");
-          await requestResult(current.objectStore("voices").delete(id));
-          await writeWebLibrary(current, { ...state, voices: state.voices.filter((voice) => voice.id !== id) });
-        });
-        const uri = objectUrls.get(id);
-        if (uri) { URL.revokeObjectURL(uri); objectUrls.delete(id); }
-      } else {
-        const state = await readNativeLibrary();
-        const voice = state.voices.find((item) => item.id === id);
-        if (!voice) throw new Error("ボイスが見つかりません。");
-        await writeNativeLibrary({ ...state, voices: state.voices.filter((item) => item.id !== id) });
-        // Commit removal before cleanup so a failed metadata write never loses audio.
-        await cleanupNative(`${nativeDirectory()}${voice.fileName}`);
-      }
-    });
+    await serialized(() => removeStoredVoice(id));
     changed();
+  },
+
+  async removeMany(ids: readonly string[]): Promise<VoiceDeleteResult> {
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || id.length === 0)) throw new Error(invalidVoiceLibraryMessage);
+    const targets = [...new Set(ids)];
+    const result = await serialized(async () => {
+      const result: VoiceDeleteResult = { removed: [], failed: [] };
+      for (const id of targets) {
+        try { await removeStoredVoice(id); result.removed.push(id); }
+        catch { result.failed.push(id); }
+      }
+      return result;
+    });
+    if (result.removed.length > 0) changed();
+    return result;
   },
 
   setMode(mode: VoicePlaybackMode): Promise<void> {

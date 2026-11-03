@@ -1,37 +1,45 @@
-import { useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
-import { useLoopSleepRemaining } from "@/audio/useLoopSleepRemaining";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
 import { PageTitle } from "@/components/PageTitle";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { TextField } from "@/components/TextField";
 import { VoiceSeekBar } from "@/components/VoiceSeekBar";
+import { VoiceSleepTimerSettings } from "@/components/VoiceSleepTimerSettings";
+import { useAppToast } from "@/components/AppToastProvider";
 import { secondsToClock } from "@/utils/date";
 import { VOICE_FOLDER_NAME_LIMIT, VOICE_NAME_LIMIT, voiceDisplayName, voiceFolderName } from "@/features/voices/library";
+import { filterVoicesByName, selectedVisibleVoices } from "@/features/voices/list";
+import { useVoiceListPreferences } from "@/features/voices/useVoiceListPreferences";
 import { translateText } from "@/i18n";
-import type { StoredVoice, VoiceFolder, VoiceScope } from "@/services/voiceStorageService";
+import type { StoredVoice, VoiceFolder, VoiceScope, VoiceImportResult } from "@/services/voiceStorageService";
 
 type Dialog =
-  | { kind: "renameVoice" | "deleteVoice" | "editFolders"; voice: StoredVoice }
+  | { kind: "renameVoice" | "deleteVoice" | "editFolders" | "details"; voice: StoredVoice }
   | { kind: "renameFolder" | "deleteFolder"; folder: VoiceFolder }
   | { kind: "reorder"; scope: VoiceScope; scopeName: string; customScopeName: boolean; voices: StoredVoice[] }
+  | { kind: "deleteVoices"; voices: StoredVoice[] }
   | { kind: "createFolder" | "chooseScope" };
 
 const dialogTitles: Record<Dialog["kind"], string> = {
   renameVoice: "ボイスの名前を変更", deleteVoice: "ボイスを削除", editFolders: "使用するフォルダー",
   createFolder: "フォルダーを作成", renameFolder: "フォルダーの名前を変更", deleteFolder: "フォルダーを削除",
   chooseScope: "再生する範囲を選択", reorder: "順序変更",
+  details: "ボイスの詳細", deleteVoices: "選択したボイスを削除",
 };
 
 export default function VoicesScreen() {
   const library = useVoiceLibrary();
+  const { showErrorToast } = useAppToast();
   const { settings } = useAppAudio();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const { columns, hydrated: columnsReady, error: columnsError, update: updateColumns, retry: retryColumns } = useVoiceListPreferences();
   const language = settings?.language ?? "ja";
   const t = (text: string) => translateText(text, language);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -41,13 +49,21 @@ export default function VoicesScreen() {
   const [reorderSourceId, setReorderSourceId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<{ added: number; failed: number } | null>(null);
+  const [importResult, setImportResult] = useState<VoiceImportResult | null>(null);
   const [working, setWorking] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selection, setSelection] = useState({ scope: library.scope, search: "", ids: new Set<string>() });
+  const [deleteResult, setDeleteResult] = useState<{ removed: number; failed: StoredVoice[] } | null>(null);
   const operationPending = useRef(false);
   const locked = library.loading || library.busy || working;
   const current = library.visibleVoices.find((voice) => voice.id === library.currentId);
   const playable = current ?? library.visibleVoices[0];
-  const remaining = useLoopSleepRemaining(library.sleepDeadline);
+  const shownVoices = useMemo(() => filterVoicesByName(library.visibleVoices, search), [library.visibleVoices, search]);
+  const selectedIds = selection.scope === library.scope && selection.search === search ? selection.ids : new Set<string>();
+  const selectedVoices = selectedVisibleVoices(shownVoices, selectedIds);
+  const cardWidth = Math.max(0, (Math.min(width, 900) - 32 - 8 * (columns - 1)) / columns);
+  const compact = columns > 1;
   const seekDisabled = locked || !current || library.duration <= 0;
   const selectedFolder = library.folders.find((folder) => folder.id === library.scope);
   const scopeName = selectedFolder?.name ?? (library.scope === "all" ? "すべてのボイス" : "未分類");
@@ -57,11 +73,29 @@ export default function VoicesScreen() {
     for (const id of folderIds) folderCounts.set(id, (folderCounts.get(id) ?? 0) + 1);
   }
   const editingName = dialog?.kind === "renameVoice" || dialog?.kind === "renameFolder" || dialog?.kind === "createFolder";
-  const deleting = dialog?.kind === "deleteVoice" || dialog?.kind === "deleteFolder";
+  const deleting = dialog?.kind === "deleteVoice" || dialog?.kind === "deleteFolder" || dialog?.kind === "deleteVoices";
   const foldersChanged = dialog?.kind === "editFolders" && (editingFolderIds.length !== dialog.voice.folderIds.length
     || editingFolderIds.some((id) => !dialog.voice.folderIds.includes(id)));
   const orderChanged = dialog?.kind === "reorder" && orderedVoices.some((voice, index) => voice.id !== dialog.voices[index]?.id);
   const reorderSource = orderedVoices.find((voice) => voice.id === reorderSourceId);
+
+  function clearSelection() {
+    setSelection({ scope: library.scope, search, ids: new Set() });
+  }
+
+  function changeSearch(next: string) {
+    setSearch(next);
+    setSelection({ scope: library.scope, search: next, ids: new Set() });
+    setDeleteResult(null);
+  }
+
+  function toggleSelected(id: string) {
+    if (locked) return;
+    const ids = new Set(selectedIds);
+    if (ids.has(id)) ids.delete(id);
+    else ids.add(id);
+    setSelection({ scope: library.scope, search, ids });
+  }
 
   async function run(action: () => Promise<void>, failure: string, success?: string) {
     if (operationPending.current || library.busy || library.loading) return;
@@ -139,6 +173,7 @@ export default function VoicesScreen() {
     } else if (dialog.kind === "createFolder") {
       void run(async () => {
         await library.createFolder(trimmed);
+        clearSelection();
         setDialog(null);
         setImportResult(null);
       }, "フォルダーを作成できませんでした。もう一度お試しください。", "フォルダーを作成しました。");
@@ -151,6 +186,7 @@ export default function VoicesScreen() {
       return;
     }
     void run(async () => {
+      clearSelection();
       await library.selectScope(scope);
       setDialog(null);
       setImportResult(null);
@@ -164,8 +200,17 @@ export default function VoicesScreen() {
       await library.removeVoice(dialog.voice.id);
       setDialog(null);
     }, "ボイスを削除できませんでした。もう一度お試しください。", "ボイスを削除しました。");
+    else if (dialog.kind === "deleteVoices") void run(async () => {
+      const result = await library.removeVoices(dialog.voices.map((voice) => voice.id));
+      const failed = dialog.voices.filter((voice) => result.failed.includes(voice.id));
+      setDeleteResult({ removed: result.removed.length, failed });
+      setSelection({ scope: library.scope, search, ids: new Set(result.failed) });
+      setSelectionMode(failed.length > 0);
+      setDialog(null);
+    }, "ボイスを削除できませんでした。もう一度お試しください。");
     else if (dialog.kind === "deleteFolder") void run(async () => {
       await library.removeFolder(dialog.folder.id);
+      clearSelection();
       setDialog(null);
       setImportResult(null);
     }, "フォルダーを削除できませんでした。もう一度お試しください。", "フォルダーを削除しました。ボイスは引き続き使用できます。");
@@ -209,9 +254,15 @@ export default function VoicesScreen() {
       onPress={() => void run(async () => {
         setImportResult(null);
         const result = await library.importVoices();
-        if (result && !result.canceled) setImportResult(result);
+        if (result && !result.canceled) {
+          setImportResult(result);
+          if (result.added === 0) showErrorToast(result.skipped > 0 && result.failed === 0
+            ? "同じファイル名・内容のボイスがすでに格納されているため、追加できませんでした。"
+            : "ボイスを追加できませんでした。保存結果を確認してください。");
+        }
       }, "ボイスを取り込めませんでした。もう一度お試しください。")}
       testID="voice-import" />
+    <AppText variant="muted">取り込み元のファイル名と内容が同じボイスはスキップします。同じ名前でも内容が違えば追加します。</AppText>
     <VoiceButton label="順序変更" disabled={locked || library.visibleVoices.length < 2}
       onPress={() => openDialog({ kind: "reorder", scope: library.scope, scopeName, customScopeName: Boolean(selectedFolder), voices: [...library.visibleVoices] })}
       testID="voice-reorder-open" />
@@ -220,10 +271,13 @@ export default function VoicesScreen() {
     {notice ? <AppText accessibilityLiveRegion="polite" style={styles.notice}>{notice}</AppText> : null}
     {importResult ? <Card>
       <View style={styles.heading} accessibilityLiveRegion="polite">
-        <AppText>追加したボイス</AppText><AppText localize={false}>{importResult.added}</AppText>
+        <AppText>追加したボイス</AppText><AppText localize={false} testID="voice-import-added">{importResult.added}</AppText>
       </View>
+      {importResult.skipped > 0 ? <View style={styles.heading}>
+        <AppText>重複でスキップしたボイス</AppText><AppText localize={false} testID="voice-import-skipped">{importResult.skipped}</AppText>
+      </View> : null}
       {importResult.failed > 0 ? <>
-        <View style={styles.heading}><AppText>取り込めなかったボイス</AppText><AppText localize={false}>{importResult.failed}</AppText></View>
+        <View style={styles.heading}><AppText>取り込めなかったボイス</AppText><AppText localize={false} testID="voice-import-failed">{importResult.failed}</AppText></View>
         <AppText style={styles.error}>取り込めなかったファイルをもう一度選択してください。</AppText>
       </> : null}
     </Card> : null}
@@ -263,61 +317,102 @@ export default function VoicesScreen() {
       </View>
       <VoiceButton label="停止" danger disabled={!current} onPress={library.stop} testID="voice-stop" />
       <AppText variant="muted">画面を移動しても再生は続きます。止めるときは「停止」を押してください。</AppText>
-      <AppText variant="subtitle">停止タイマー</AppText>
-      {remaining ? <AppText localize={false} testID="voice-sleep-remaining">{`${t("停止まで")} ${remaining}`}</AppText>
-        : <AppText variant="muted">タイマー未設定</AppText>}
-      <View style={styles.timerPresets}>
-        {[5, 15, 30, 60].map((minutes) => <View key={minutes} style={styles.timerPreset}>
-          <VoiceButton label={`${minutes}分`} disabled={locked || !current} onPress={() => library.setSleepMinutes(minutes)} testID={`voice-sleep-${minutes}`} />
-        </View>)}
-      </View>
-      <VoiceButton label="タイマーを解除" disabled={library.sleepDeadline === null} onPress={() => library.setSleepMinutes(null)} testID="voice-sleep-clear" />
-      <AppText variant="muted">一時停止中も時間は進みます。停止するとタイマーを解除します。</AppText>
+      <VoiceSleepTimerSettings disabled={locked} />
     </Card>
+    <Card>
+      <TextField label="ファイル名で検索" placeholder="表示名・元のファイル名" accessibilityLabel={t("ファイル名で検索")}
+        value={search} onChangeText={changeSearch} editable={!locked} testID="voice-search-input" autoCorrect={false} />
+      <AppText variant="muted">表示名・元のファイル名で検索できます。検索しても再生する範囲は変わりません。</AppText>
+      {search ? <VoiceButton label="検索をクリア" onPress={() => changeSearch("")} disabled={locked} testID="voice-search-clear" /> : null}
+      <AppText variant="label">表示列数</AppText>
+      <View style={styles.actions}>
+        {([1, 2, 3] as const).map((count) => <VoiceButton key={count} label={`${count}列`} equalWidth selected={columns === count}
+          disabled={locked || !columnsReady} onPress={() => updateColumns(count)} testID={`voice-columns-${count}`} />)}
+      </View>
+      {!columnsReady && !columnsError ? <AppText variant="muted">表示設定を読み込み中…</AppText> : null}
+      {columnsError ? <>
+        <AppText accessibilityRole="alert" style={styles.error}>{columnsError === "load" ? "表示設定を読み込めませんでした。" : "表示設定を保存できませんでした。"}</AppText>
+        <VoiceButton label="再試行" onPress={retryColumns} disabled={locked} />
+      </> : null}
+      <VoiceButton label={selectionMode ? "選択を終了" : "ファイルを選択"} disabled={locked || (!selectionMode && shownVoices.length === 0)}
+        onPress={() => { setSelectionMode(!selectionMode); clearSelection(); setDeleteResult(null); }} testID="voice-select-toggle" />
+      {selectionMode ? <>
+        <View style={styles.heading}><AppText>選択中</AppText><AppText localize={false} testID="voice-selected-count">{selectedVoices.length}</AppText></View>
+        <AppText variant="muted">検索条件やフォルダーを変えると選択を解除します。</AppText>
+        <VoiceButton label="表示中をすべて選択" disabled={locked || shownVoices.length === 0}
+          onPress={() => setSelection({ scope: library.scope, search, ids: new Set(shownVoices.map((voice) => voice.id)) })} testID="voice-select-all" />
+        <VoiceButton label="選択をすべて解除" disabled={locked || selectedVoices.length === 0} onPress={clearSelection} testID="voice-selection-clear" />
+        <VoiceButton label="選択したボイスを削除" danger disabled={locked || selectedVoices.length === 0}
+          onPress={() => openDialog({ kind: "deleteVoices", voices: [...selectedVoices] })} testID="voice-delete-selected" />
+      </> : null}
+    </Card>
+    {deleteResult ? <Card>
+      <View style={styles.heading} accessibilityLiveRegion="polite"><AppText>削除したボイス</AppText><AppText localize={false} testID="voice-delete-removed">{deleteResult.removed}</AppText></View>
+      {deleteResult.failed.length > 0 ? <>
+        <View style={styles.heading}><AppText>削除できなかったボイス</AppText><AppText localize={false} testID="voice-delete-failed">{deleteResult.failed.length}</AppText></View>
+        <AppText accessibilityRole="alert" style={styles.error}>削除できなかったボイスを選択したまま残しました。もう一度お試しください。</AppText>
+        {deleteResult.failed.map((voice) => <AppText key={voice.id} localize={false}>{voice.name}</AppText>)}
+      </> : null}
+    </Card> : null}
     <View style={styles.heading}>
       <AppText variant="subtitle">格納したボイス</AppText>
-      <AppText localize={false} variant="muted">{library.visibleVoices.length}</AppText>
+      <AppText localize={false} variant="muted" testID="voice-visible-count">{shownVoices.length} / {library.visibleVoices.length}</AppText>
     </View>
   </View>;
 
   return <View style={[styles.root, { paddingTop: Math.max(12, insets.top) }]}>
-    <FlatList data={library.visibleVoices} keyExtractor={(voice) => voice.id} contentContainerStyle={styles.content}
+    <FlatList key={`voice-columns-${columns}`} data={shownVoices} numColumns={columns} columnWrapperStyle={compact ? styles.gridRow : undefined}
+      keyExtractor={(voice) => voice.id} contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled" initialNumToRender={12} ListHeaderComponent={header}
-      extraData={{ locked, currentId: library.currentId, playing: library.playing, folders: library.folders }}
-      ListEmptyComponent={!library.loading ? <Card><AppText variant="muted">{library.scope === "all" ? "ボイスはまだ格納されていません。" : "この一覧にボイスはありません。ボイスを追加するか、「使用するフォルダー」を変更してください。"}</AppText></Card> : null}
+      extraData={{ locked, currentId: library.currentId, playing: library.playing, folders: library.folders, selectionMode, selectedIds, cardWidth }}
+      ListEmptyComponent={!library.loading ? <Card><AppText variant="muted">{search.trim() ? "検索条件に一致するボイスはありません。"
+        : library.scope === "all" ? "ボイスはまだ格納されていません。" : "この一覧にボイスはありません。ボイスを追加するか、「使用するフォルダー」を変更してください。"}</AppText></Card> : null}
       renderItem={({ item: voice, index }) => {
         const active = voice.id === library.currentId;
         const voiceFolders = library.folders.filter((folder) => voice.folderIds.includes(folder.id));
-        return <Card style={active ? styles.active : undefined}>
-          <View style={styles.heading}>
+        const selected = selectedIds.has(voice.id);
+        return <View style={{ width: cardWidth }} testID={`voice-card-${voice.id}`}>
+        <Card style={[styles.voiceCard, compact && styles.compactCard, active && styles.active, selectionMode && selected && styles.selectedButton]}>
+          <View style={compact ? styles.compactHeading : styles.heading}>
             <AppText localize={false} variant="muted">{index + 1}</AppText>
-            <AppText localize={false} style={styles.voiceName}>{voice.name}</AppText>
+            <AppText localize={false} numberOfLines={compact ? 2 : undefined} style={[styles.voiceName, compact && styles.compactName]}>{voice.name}</AppText>
             {active ? <AppText variant="muted">{library.playing ? "再生中" : "一時停止中"}</AppText> : null}
           </View>
-          <View style={styles.folderLabels}>
+          {!compact ? <View style={styles.folderLabels}>
             {voiceFolders.length > 0 ? voiceFolders.map((folder) => <AppText key={folder.id} localize={false} variant="muted" style={styles.folderLabel}>{folder.name}</AppText>)
               : <AppText variant="muted" style={styles.folderLabel}>未分類</AppText>}
-          </View>
-          <AppText localize={false} variant="muted">{voice.originalName}</AppText>
+          </View> : null}
+          <AppText localize={false} variant="muted" numberOfLines={compact ? 1 : undefined}>{voice.originalName}</AppText>
           <AppText localize={false} variant="muted">{formatVoiceSize(voice.size)}</AppText>
-          <View style={styles.actions}>
-            <VoiceButton label={active && library.playing ? "一時停止" : "再生"}
+          {selectionMode ? <Pressable accessibilityRole="button" accessibilityLabel={`${t(selected ? "選択済み" : "選択")}: ${voice.name}`}
+            accessibilityState={{ selected, disabled: locked }} aria-pressed={selected} disabled={locked} onPress={() => toggleSelected(voice.id)}
+            testID={`voice-select-${voice.id}`} style={[styles.button, compact && styles.compactButton, selected && styles.selectedButton, locked && styles.disabled]}>
+            <AppText localize={false} style={styles.choiceMark} accessible={false}>{selected ? "☑" : "☐"}</AppText>
+            <AppText style={[styles.buttonText, compact && styles.compactButtonText]}>{selected ? "選択済み" : "選択"}</AppText>
+          </Pressable> : <>
+          <View style={compact ? styles.compactActions : styles.actions}>
+            <VoiceButton label={active && library.playing ? "一時停止" : "再生"} compact={compact}
               accessibilityLabel={`${t(active && library.playing ? "一時停止" : "再生")}: ${voice.name}`} disabled={locked}
               onPress={() => active && library.playing ? library.pause() : library.play(voice.id)} testID={`voice-play-${voice.id}`} />
+            {compact ? <VoiceButton label="詳細" compact accessibilityLabel={`${t("詳細")}: ${voice.name}`} disabled={locked}
+              onPress={() => openDialog({ kind: "details", voice })} testID={`voice-details-${voice.id}`} /> : <>
             <VoiceButton label="名前を変更" accessibilityLabel={`${t("名前を変更")}: ${voice.name}`} disabled={locked}
               onPress={() => openDialog({ kind: "renameVoice", voice })} testID={`voice-rename-${voice.id}`} />
             <VoiceButton label="削除" danger accessibilityLabel={`${t("削除")}: ${voice.name}`} disabled={locked}
               onPress={() => openDialog({ kind: "deleteVoice", voice })} testID={`voice-delete-${voice.id}`} />
+            </>}
           </View>
-          <VoiceButton label="使用するフォルダー" accessibilityLabel={`${t("使用するフォルダー")}: ${voice.name}`} disabled={locked}
-            onPress={() => openDialog({ kind: "editFolders", voice })} testID={`voice-folders-edit-${voice.id}`} />
-        </Card>;
+          {!compact ? <VoiceButton label="使用するフォルダー" accessibilityLabel={`${t("使用するフォルダー")}: ${voice.name}`} disabled={locked}
+            onPress={() => openDialog({ kind: "editFolders", voice })} testID={`voice-folders-edit-${voice.id}`} /> : null}
+          </>}
+        </Card></View>;
       }}
       ListFooterComponent={<View style={styles.section}>
         <VoiceButton label="管理・設定メニューへ戻る" onPress={() => router.replace("/(tabs)/menu?section=management")} />
         <VoiceButton label="ホームへ戻る" onPress={() => router.replace("/(tabs)")} />
       </View>} />
-    <VoiceDialog visible={Boolean(dialog)} onClose={closeDialog}>
+    <VoiceDialog visible={Boolean(dialog)} onClose={closeDialog}
+      testID={dialog?.kind === "deleteVoices" ? "voice-delete-dialog" : dialog?.kind === "details" ? "voice-detail-dialog" : "voice-dialog"}>
       <PageTitle>{dialog ? dialogTitles[dialog.kind] : ""}</PageTitle>
       {editingName ? <TextField label={dialog?.kind === "renameVoice" ? "表示名" : "フォルダー名"}
         accessibilityLabel={t(dialog?.kind === "renameVoice" ? "表示名" : "フォルダー名")} value={name} onChangeText={setName}
@@ -328,6 +423,25 @@ export default function VoicesScreen() {
         <AppText localize={false} style={styles.voiceName}>{dialog.voice.name}</AppText>
         <AppText>格納したボイスを削除します。取り込み元のファイルは削除しません。</AppText>
         <AppText>削除すると、使用するすべてのフォルダーから取り除かれます。</AppText>
+      </> : null}
+      {dialog?.kind === "deleteVoices" ? <>
+        <View style={styles.heading}><AppText>選択中</AppText><AppText localize={false} testID="voice-delete-confirm-count">{dialog.voices.length}</AppText></View>
+        <AppText>格納したボイスを削除します。取り込み元のファイルは削除しません。</AppText>
+        <AppText>削除すると、使用するすべてのフォルダーから取り除かれます。</AppText>
+        {dialog.voices.map((voice) => <AppText key={voice.id} localize={false}>{voice.name}</AppText>)}
+      </> : null}
+      {dialog?.kind === "details" ? <>
+        <AppText localize={false} style={styles.voiceName}>{dialog.voice.name}</AppText>
+        <AppText localize={false} variant="muted">{dialog.voice.originalName}</AppText>
+        <AppText localize={false} variant="muted">{formatVoiceSize(dialog.voice.size)}</AppText>
+        <View style={styles.folderLabels}>
+          {dialog.voice.folderIds.length > 0 ? library.folders.filter((folder) => dialog.voice.folderIds.includes(folder.id)).map((folder) =>
+            <AppText key={folder.id} localize={false} variant="muted" style={styles.folderLabel}>{folder.name}</AppText>)
+            : <AppText variant="muted" style={styles.folderLabel}>未分類</AppText>}
+        </View>
+        <VoiceButton label="名前を変更" disabled={locked} onPress={() => openDialog({ kind: "renameVoice", voice: dialog.voice })} testID={`voice-rename-${dialog.voice.id}`} />
+        <VoiceButton label="使用するフォルダー" disabled={locked} onPress={() => openDialog({ kind: "editFolders", voice: dialog.voice })} testID={`voice-folders-edit-${dialog.voice.id}`} />
+        <VoiceButton label="削除" danger disabled={locked} onPress={() => openDialog({ kind: "deleteVoice", voice: dialog.voice })} testID={`voice-delete-${dialog.voice.id}`} />
       </> : null}
       {dialog?.kind === "deleteFolder" ? <>
         <AppText localize={false} style={styles.voiceName}>{dialog.folder.name}</AppText>
@@ -389,11 +503,12 @@ export default function VoicesScreen() {
       </> : null}
       {actionError ? <AppText accessibilityRole="alert" style={styles.error}>{actionError}</AppText> : null}
       <View style={styles.actions}>
-        <VoiceButton label={dialog?.kind === "chooseScope" ? "閉じる" : "キャンセル"} disabled={locked} onPress={closeDialog} />
-        {dialog && dialog.kind !== "chooseScope" ? <VoiceButton
+        <VoiceButton label={dialog?.kind === "chooseScope" || dialog?.kind === "details" ? "閉じる" : "キャンセル"} disabled={locked} onPress={closeDialog}
+          testID={dialog?.kind === "deleteVoices" ? "voice-delete-cancel" : "voice-dialog-cancel"} />
+        {dialog && dialog.kind !== "chooseScope" && dialog.kind !== "details" ? <VoiceButton
           label={locked ? "処理中..." : deleting ? "削除" : dialog.kind === "createFolder" ? "作成" : "保存"}
           danger={deleting} disabled={locked || (dialog.kind === "editFolders" && !foldersChanged) || (dialog.kind === "reorder" && !orderChanged)}
-          onPress={confirmDialog} testID="voice-dialog-confirm" /> : null}
+          onPress={confirmDialog} testID={dialog.kind === "deleteVoices" ? "voice-delete-confirm" : "voice-dialog-confirm"} /> : null}
       </View>
     </VoiceDialog>
   </View>;
@@ -411,27 +526,28 @@ function FolderChoice({ label, count, selected, disabled, onPress, testID, multi
   </Pressable>;
 }
 
-function VoiceButton({ label, onPress, disabled = false, selected = false, radio = false, danger = false, equalWidth = false, accessibilityLabel, testID }: {
+function VoiceButton({ label, onPress, disabled = false, selected, radio = false, danger = false, equalWidth = false, compact = false, accessibilityLabel, testID }: {
   label: string; onPress: () => void; disabled?: boolean; selected?: boolean; radio?: boolean; danger?: boolean; equalWidth?: boolean;
-  accessibilityLabel?: string; testID?: string;
+  compact?: boolean; accessibilityLabel?: string; testID?: string;
 }) {
   const { settings } = useAppAudio();
   return <Pressable accessibilityRole={radio ? "radio" : "button"}
     accessibilityLabel={accessibilityLabel ?? translateText(label, settings?.language ?? "ja")}
-    accessibilityState={{ disabled, ...(radio ? { checked: selected } : {}) }} aria-checked={radio ? selected : undefined} disabled={disabled} testID={testID} onPress={onPress}
-    style={({ pressed }) => [styles.button, equalWidth && styles.equalWidthButton, selected && styles.selectedButton, danger && styles.dangerButton, disabled && styles.disabled, pressed && !disabled && styles.pressed]}>
-    <AppText style={styles.buttonText}>{label}</AppText>
+    accessibilityState={{ disabled, ...(radio ? { checked: selected } : selected !== undefined ? { selected } : {}) }} aria-checked={radio ? selected : undefined}
+    aria-pressed={radio ? undefined : selected} disabled={disabled} testID={testID} onPress={onPress}
+    style={({ pressed }) => [styles.button, equalWidth && styles.equalWidthButton, compact && styles.compactButton, selected && styles.selectedButton, danger && styles.dangerButton, disabled && styles.disabled, pressed && !disabled && styles.pressed]}>
+    <AppText style={[styles.buttonText, compact && styles.compactButtonText]}>{label}</AppText>
   </Pressable>;
 }
 
-function VoiceDialog({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
+function VoiceDialog({ visible, onClose, children, testID }: { visible: boolean; onClose: () => void; children: ReactNode; testID?: string }) {
   const insets = useSafeAreaInsets();
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
     <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.dialogContainer, {
         paddingTop: Math.max(24, insets.top), paddingBottom: Math.max(24, insets.bottom),
       }]}>
-        <View style={styles.dialog} accessibilityViewIsModal onAccessibilityEscape={onClose}>{children}</View>
+        <View style={styles.dialog} accessibilityViewIsModal onAccessibilityEscape={onClose} testID={testID}>{children}</View>
       </ScrollView>
     </KeyboardAvoidingView>
   </Modal>;
@@ -444,11 +560,17 @@ function formatVoiceSize(size: number) {
 }
 
 const styles = StyleSheet.create({
-  timerPresets: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  timerPreset: { flexGrow: 1, flexBasis: "42%" },
   root: { flex: 1, backgroundColor: "#000" },
   content: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 14, padding: 16, paddingBottom: 24 },
   section: { gap: 14 },
+  gridRow: { gap: 8 },
+  voiceCard: { flex: 1, minWidth: 0 },
+  compactCard: { padding: 8, gap: 8 },
+  compactHeading: { gap: 4 },
+  compactName: { flexGrow: 0, fontSize: 14, lineHeight: 20 },
+  compactActions: { gap: 8 },
+  compactButton: { minWidth: 0, paddingHorizontal: 2, paddingVertical: 8 },
+  compactButtonText: { fontSize: 12, lineHeight: 18 },
   heading: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10 },
   voiceName: { flexGrow: 1, flexShrink: 1, color: "#fff", fontWeight: "800", minWidth: 0 },
   folderLabels: { flexDirection: "row", flexWrap: "wrap", gap: 6 },

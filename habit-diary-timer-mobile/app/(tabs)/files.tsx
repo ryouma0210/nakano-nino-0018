@@ -25,6 +25,7 @@ import { FileGalleryViewer } from "@/features/files/FileGalleryViewer";
 import { useCompletionNotice } from "@/features/files/useCompletionNotice";
 import { FILE_USAGES, getFileUsages, type FileUsage } from "@/features/files/usages";
 import { useAppModal } from "@/components/AppModalProvider";
+import { useAppToast } from "@/components/AppToastProvider";
 import {
   fileStorageService,
   formatBytes,
@@ -42,6 +43,7 @@ const usageLabels: Record<FileUsage, string> = { training: "調教用", punishme
 
 export default function FilesScreen() {
   const { showError, showNotice } = useAppModal();
+  const { showErrorToast } = useAppToast();
   const [files, setFiles] = useState<StoredFile[]>([]);
   const { importing, progress: importProgress, result: importResult } = useSyncExternalStore(
     fileStorageService.subscribeImports,
@@ -185,7 +187,11 @@ export default function FilesScreen() {
     if (filesBusy) return;
     try {
       const result = await fileStorageService.pickAndStore(purpose);
-      if (!focusedRef.current && result && result.failed.length > 0) {
+      if (result && result.stored === 0) {
+        showErrorToast(result.skipped.length > 0 && result.failed.length === 0
+          ? "同じファイル名・内容のファイルがすでに格納されているため、追加できませんでした。"
+          : "ファイルを格納できませんでした。保存結果を確認してください。");
+      } else if (!focusedRef.current && result && result.failed.length > 0) {
         showNotice("ファイル格納", [
           `${result.failed.length}件のファイルを格納できませんでした。`,
           "ファイル格納部屋で保存結果を確認できます。",
@@ -273,29 +279,35 @@ export default function FilesScreen() {
         header={<View style={styles.listSections}>
       <View style={styles.uploadButtons}>
         <View style={styles.grow}>
-          <PrimaryButton title="調教用" tone="save" disabled={filesBusy} onPress={() => upload("training")} />
+          <PrimaryButton title="調教用" tone="save" disabled={filesBusy} onPress={() => upload("training")} testID="file-import-training" />
         </View>
         <View style={styles.grow}>
-          <PrimaryButton title="お仕置き用" tone="save" disabled={filesBusy} onPress={() => upload("punishment")} />
+          <PrimaryButton title="お仕置き用" tone="save" disabled={filesBusy} onPress={() => upload("punishment")} testID="file-import-punishment" />
         </View>
         <View style={styles.grow}>
-          <PrimaryButton title="勃起我慢用" tone="save" disabled={filesBusy} onPress={() => upload("endurance")} />
+          <PrimaryButton title="勃起我慢用" tone="save" disabled={filesBusy} onPress={() => upload("endurance")} testID="file-import-endurance" />
         </View>
       </View>
       <AppText variant="muted">複数のファイルをまとめて選択できます。</AppText>
       <AppText variant="muted">格納後に用途を複数選べます。同じファイルを追加し直す必要はありません。</AppText>
+      <AppText variant="muted">ファイル名と内容が同じファイルはスキップします。同じ名前でも内容が違えば追加します。</AppText>
       {maintenance.active ? <AppText accessibilityLiveRegion="polite">ファイルを処理中です。完了してからもう一度お試しください。</AppText> : null}
       {importing ? (
         <AppText accessibilityLiveRegion="polite">
           {importProgress ? `格納中：${importProgress.completed}/${importProgress.total}件` : "ファイルを選択してください。"}
         </AppText>
       ) : null}
-      {importResult && (showImportNotice || importResult.failed.length > 0) ? (
+      {importResult && (showImportNotice || importResult.skipped.length > 0 || importResult.failed.length > 0) ? (
         <Card>
-          {showImportNotice ? <AppText accessibilityLiveRegion="polite">{`${importResult.stored}件のファイルを格納しました。`}</AppText> : null}
+          <View style={styles.importCount} accessibilityLiveRegion="polite">
+            <AppText>追加したファイル</AppText><AppText localize={false} testID="file-import-stored">{importResult.stored}</AppText>
+          </View>
+          {importResult.skipped.length > 0 ? <View style={styles.importCount}>
+            <AppText>重複でスキップしたファイル</AppText><AppText localize={false} testID="file-import-skipped">{importResult.skipped.length}</AppText>
+          </View> : null}
           {importResult.failed.length > 0 ? (
             <>
-              <AppText>{`${importResult.failed.length}件のファイルを格納できませんでした。`}</AppText>
+              <AppText testID="file-import-failed">{`${importResult.failed.length}件のファイルを格納できませんでした。`}</AppText>
               <AppText variant="muted">空き容量とファイルへのアクセスを確認し、保存できなかったファイルだけを選び直してください。</AppText>
               {importResult.failed.map((name, index) => <AppText key={index} localize={false}>{name}</AppText>)}
             </>
@@ -648,6 +660,7 @@ function VideoThumbnailPreview({ uri }: { uri: string }) {
 }
 
 const styles = StyleSheet.create({
+  importCount: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 },
   uploadButtons: { flexDirection: "row", gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   compactRow: { gap: 4, paddingTop: 5 },

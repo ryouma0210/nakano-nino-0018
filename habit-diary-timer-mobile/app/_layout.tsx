@@ -13,6 +13,7 @@ import { VoiceLibraryProvider } from "@/audio/VoiceLibraryProvider";
 import { VoiceMiniPlayer } from "@/components/VoiceMiniPlayer";
 import { formatError } from "@/utils/error";
 import { AppModalProvider } from "@/components/AppModalProvider";
+import { AppToastProvider } from "@/components/AppToastProvider";
 import { appendWebErrorLog } from "@/utils/webErrorLog";
 import { LoopAudioMiniPlayer } from "@/components/LoopAudioMiniPlayer";
 
@@ -112,9 +113,11 @@ function RootContent() {
         <AudioProvider>
           <VoiceLibraryProvider>
           <AppModalProvider>
+          <AppToastProvider>
             <StatusBar style="light" />
             <Stack screenOptions={{ headerShown: false }} />
             <NonTabAudioPlayer />
+          </AppToastProvider>
           </AppModalProvider>
           </VoiceLibraryProvider>
         </AudioProvider>

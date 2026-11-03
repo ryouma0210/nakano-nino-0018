@@ -1,6 +1,6 @@
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
-import { voiceStorageService, type StoredVoice, type VoicePlaybackMode, type VoiceFolder, type VoiceScope } from "@/services/voiceStorageService";
+import { voiceStorageService, type StoredVoice, type VoicePlaybackMode, type VoiceFolder, type VoiceScope, type VoiceImportResult, type VoiceDeleteResult } from "@/services/voiceStorageService";
 import { voicesInScope } from "@/features/voices/library";
 import { useAppAudio } from "./AudioProvider";
 import { setBackgroundAudioMode } from "./backgroundAudioMode";
@@ -9,7 +9,6 @@ import { createVoiceMediaSession } from "./voiceMediaSession";
 import { useVoicePlaylist } from "./useVoicePlaylist";
 import { useLoopSleepTimer } from "./useLoopSleepTimer";
 
-type ImportResult = { added: number; failed: number; canceled: boolean };
 type VoiceLibrary = {
   voices: StoredVoice[];
   visibleVoices: StoredVoice[];
@@ -24,10 +23,12 @@ type VoiceLibrary = {
   position: number;
   duration: number;
   sleepDeadline: number | null;
-  importVoices(): Promise<ImportResult | null>;
+  sleepMinutes: number | null;
+  importVoices(): Promise<VoiceImportResult | null>;
   renameVoice(id: string, name: string): Promise<void>;
   reorderVoices(orderedIds: string[], scope: VoiceScope): Promise<void>;
   removeVoice(id: string): Promise<void>;
+  removeVoices(ids: string[]): Promise<VoiceDeleteResult>;
   clearVoices(): Promise<void>;
   selectScope(scope: VoiceScope): Promise<void>;
   createFolder(name: string): Promise<void>;
@@ -67,6 +68,7 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [playbackState, setPlaybackState] = useState<VoicePlaybackState>({ currentId: null, playing: false });
   const [progress, setProgress] = useState<VoicePlaybackProgress>({ currentId: null, position: 0, duration: 0 });
+  const [selectedSleepMinutes, setSelectedSleepMinutes] = useState<number | null>(null);
   const operationActive = useRef(false);
   const mounted = useRef(true);
   const stopPlayback = useRef<() => void>(() => {});
@@ -112,7 +114,7 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
       onChange: (state) => {
         if (mounted.current) {
           setPlaybackState(state);
-          if (state.currentId === null) sleepTimer.cancel();
+          if (state.currentId === null) { sleepTimer.cancel(); setSelectedSleepMinutes(null); }
         }
         audioRef.current.setVoiceAudioActive(state.currentId !== null);
         if (Platform.OS === "web") browser.updatePlaying(state.playing);
@@ -193,6 +195,7 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
     position: progress.currentId === playbackState.currentId ? progress.position : 0,
     duration: progress.currentId === playbackState.currentId ? progress.duration : 0,
     sleepDeadline,
+    sleepMinutes: sleepDeadline === null ? null : selectedSleepMinutes,
     importVoices: () => operate(() => voiceStorageService.importVoices(scopeRef.current === "all" || scopeRef.current === "unfiled" ? null : scopeRef.current)),
     renameVoice: (id, name) => operate(() => voiceStorageService.rename(id, name)),
     reorderVoices: (orderedIds, scope) => operate(() => voiceStorageService.reorder(orderedIds, scope)),
@@ -201,6 +204,14 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
       if (playback.getState().currentId === id) playback.stop();
       await voiceStorageService.remove(id);
     }),
+    removeVoices: (ids) => {
+      const targets = [...new Set(ids)];
+      return operate(async () => {
+        const currentId = playback.getState().currentId;
+        if (currentId !== null && targets.includes(currentId)) playback.stop();
+        return voiceStorageService.removeMany(targets);
+      });
+    },
     clearVoices: () => operate(async () => {
       playback.stop();
       await voiceStorageService.clear();
@@ -234,7 +245,10 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
       if (!loading && !operationActive.current) { setError(null); void playback.seekBy(seconds, expectedId); }
     },
     setSleepMinutes: (minutes) => {
-      if (minutes === null || (!loading && !operationActive.current && playback.getState().currentId !== null)) sleepTimer.setMinutes(minutes);
+      if (minutes === null || (!loading && !operationActive.current && playback.getState().currentId !== null)) {
+        sleepTimer.setMinutes(minutes);
+        setSelectedSleepMinutes(minutes);
+      }
     },
   };
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
