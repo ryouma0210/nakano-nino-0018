@@ -5,6 +5,8 @@ import appConfig from "../../app.json";
 import { execute, query, transaction } from "@/database/client";
 import { OTHELLO_STORAGE_KEY, parseOthelloHistory } from "../features/othello/storage";
 import { SUGOROKU_STORAGE_KEY, parseSugorokuSave } from "../features/sugoroku/storage";
+import { RHYTHM_STORAGE_KEY, parseRhythmSave } from "./rhythmChallengeService";
+import { ROOM_VOICE_PREFERENCES_KEY, parseRoomVoicePreferences } from "../audio/roomVoiceSelection";
 import { CHASTITY_STORAGE_KEY, parseChastityHistory } from "./chastityHistoryStorage";
 import { validateCustomCommandSettings } from "./customCommandStorage";
 import { isFilePurpose, isValidFileUsages } from "../features/files/usages";
@@ -167,6 +169,12 @@ function validatePayload(value: unknown): BackupPayload {
   }
   if (Object.hasOwn(payload.asyncStorage, SUGOROKU_STORAGE_KEY)) {
     parseSugorokuSave(payload.asyncStorage[SUGOROKU_STORAGE_KEY]);
+  }
+  if (Object.hasOwn(payload.asyncStorage, RHYTHM_STORAGE_KEY)) {
+    parseRhythmSave(payload.asyncStorage[RHYTHM_STORAGE_KEY]);
+  }
+  if (Object.hasOwn(payload.asyncStorage, ROOM_VOICE_PREFERENCES_KEY)) {
+    parseRoomVoicePreferences(payload.asyncStorage[ROOM_VOICE_PREFERENCES_KEY]);
   }
   if (Object.hasOwn(payload.asyncStorage, CHASTITY_STORAGE_KEY)) {
     parseChastityHistory(payload.asyncStorage[CHASTITY_STORAGE_KEY]);

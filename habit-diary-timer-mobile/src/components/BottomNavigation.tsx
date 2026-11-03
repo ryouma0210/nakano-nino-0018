@@ -25,7 +25,7 @@ const destinations = [
   { id: "mypage", label: "マイページ", accessibilityLabel: "マイページ", icon: "person-circle-outline", href: "/(tabs)/mypage" },
 ] as const;
 
-const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello", "endurance"]);
+const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello", "endurance", "rhythm-challenge"]);
 const recordScreens = new Set(["records", "tribute", "disposal-history", "chastity-history", "rewards", "collection", "today", "report", "report-details"]);
 const managementScreens = new Set(["loop-audio", "files", "voices", "settings", "custom-orders", "manual", "external-links", "slave-contract"]);
 const BottomNavigationVisibleContext = createContext(false);

@@ -65,11 +65,11 @@ describe("daily first-clear rewards", () => {
     expect(service.completedGames("2026-10-08")).toEqual([]);
   });
 
-  it("keeps four independent games and the existing outside slime budget separate", () => {
+  it("keeps five independent games and the existing outside slime budget separate", () => {
     pointRepository.award("outside:slime:1", 100, "Outside", toDateTimeKey(new Date(finish(7))));
     for (const game of Object.keys(DAILY_GAME_POINTS) as DailyRewardGame[]) service.award(game, "same-result-id", finish(7));
-    expect(service.completedGames(day)).toEqual(["sugoroku", "endurance", "othello", "succubus"]);
-    expect(rows().reduce((total, row) => total + Number(row.points), 0)).toBe(350);
+    expect(service.completedGames(day)).toEqual(["sugoroku", "endurance", "othello", "succubus", "rhythm"]);
+    expect(rows().reduce((total, row) => total + Number(row.points), 0)).toBe(400);
   });
 
   it("reads missing and legacy results without adding receipts or points", () => {
@@ -141,28 +141,28 @@ describe("daily first-clear rewards", () => {
     } finally { unsubscribe(); }
   });
 
-  it("preserves receipts through points reset without resurrecting old points or old history badges", () => {
-    service.award("othello", "old", finish(7, 10));
+  it.each(["othello", "rhythm"] as const)("preserves %s receipts through points reset without resurrecting old points or old history badges", (game) => {
+    service.award(game, "old", finish(7, 10));
     web.execute("DELETE FROM point_transactions");
     web.execute("INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?)", ["points_reset_at", "2026-10-07 11:00:00"]);
-    expect(service.pointsForResult("othello", "old")).toBe(0);
-    expect(service.award("othello", "old", finish(8)).points).toBe(0);
-    expect(service.award("othello", "unclaimed-before-reset", finish(7, 10)).points).toBe(0);
-    expect(service.award("othello", "new", finish(7, 12)).points).toBe(50);
-    expect(service.pointsForResult("othello", "old")).toBe(0);
-    expect(service.pointsForResult("othello", "new")).toBe(50);
+    expect(service.pointsForResult(game, "old")).toBe(0);
+    expect(service.award(game, "old", finish(8)).points).toBe(0);
+    expect(service.award(game, "unclaimed-before-reset", finish(7, 10)).points).toBe(0);
+    expect(service.award(game, "new", finish(7, 12)).points).toBe(50);
+    expect(service.pointsForResult(game, "old")).toBe(0);
+    expect(service.pointsForResult(game, "new")).toBe(50);
     expect(rows()).toHaveLength(1);
   });
 
-  it("keeps restored ledger and result ownership idempotent without an in-memory claim cache", () => {
-    service.award("succubus", "restore:/%:victory", finish(7));
+  it.each(["succubus", "rhythm"] as const)("keeps restored %s ledger and result ownership idempotent without an in-memory claim cache", (game) => {
+    service.award(game, "restore:/%:victory", finish(7));
     const snapshots = ["app_settings", "point_transactions"].map((table) => ({ table, rows: structuredClone(web.query<Record<string, string | number>>(`SELECT * FROM ${table}`)) }));
     for (const snapshot of snapshots) {
       web.execute(`DELETE FROM ${snapshot.table}`);
       for (const row of snapshot.rows) web.execute(`INSERT INTO ${snapshot.table}(${Object.keys(row).join(", ")}) VALUES(${Object.keys(row).map(() => "?").join(", ")})`, Object.values(row));
     }
-    expect(service.award("succubus", "restore:/%:victory", finish(8))).toEqual({ awarded: false, points: 100, date: day });
-    expect(service.pointsForResult("succubus", "restore:/%:victory")).toBe(100);
+    expect(service.award(game, "restore:/%:victory", finish(8))).toEqual({ awarded: false, points: DAILY_GAME_POINTS[game], date: day });
+    expect(service.pointsForResult(game, "restore:/%:victory")).toBe(DAILY_GAME_POINTS[game]);
     expect(rows()).toHaveLength(1);
   });
 
@@ -177,19 +177,19 @@ describe("daily first-clear rewards", () => {
     expect(database.execute).not.toHaveBeenCalled();
   });
 
-  it("validates backed-up receipt and owner keys without trusting mismatched ownership", () => {
-    service.award("sugoroku", "first", finish(7));
+  it.each(["sugoroku", "rhythm"] as const)("validates backed-up %s receipt and owner keys without trusting mismatched ownership", (game) => {
+    service.award(game, "first", finish(7));
     const settings = web.query<Record<string, unknown>>("SELECT * FROM app_settings");
     expect(() => validateDailyGameRewardSettings(settings)).not.toThrow();
-    const receipt = settings.find((row) => row.setting_key === gameRewardReceiptKey("sugoroku", "first"))!;
-    expect(() => validateDailyGameRewardSettings([{ ...receipt, setting_key: gameRewardReceiptKey("sugoroku", "other") }])).toThrow("日次ポイント");
+    const receipt = settings.find((row) => row.setting_key === gameRewardReceiptKey(game, "first"))!;
+    expect(() => validateDailyGameRewardSettings([{ ...receipt, setting_key: gameRewardReceiptKey(game, "other") }])).toThrow("日次ポイント");
     expect(() => validateDailyGameRewardSettings([receipt, receipt])).toThrow("日次ポイント");
-    const owner = { ...receipt, setting_key: gameRewardOwnerKey("sugoroku", day), setting_value: JSON.stringify({ ...JSON.parse(receipt.setting_value as string), awarded: false }) };
+    const owner = { ...receipt, setting_key: gameRewardOwnerKey(game, day), setting_value: JSON.stringify({ ...JSON.parse(receipt.setting_value as string), awarded: false }) };
     expect(() => validateDailyGameRewardSettings([owner])).toThrow("日次ポイント");
     expect(() => validateDailyGameRewardSettings([{ setting_key: "unrelated", setting_value: "broken" }])).not.toThrow();
   });
 
-  it("matches SQLite's unique daily award and atomic receipt behavior", async () => {
+  it.each(["othello", "rhythm"] as const)("matches SQLite's unique %s daily award and atomic receipt behavior", async (game) => {
     const { DatabaseSync } = await import("node:sqlite");
     const sqlite = new DatabaseSync(":memory:");
     sqlite.exec(`CREATE TABLE app_settings (setting_key TEXT UNIQUE, setting_value TEXT, updated_at TEXT);
@@ -201,12 +201,12 @@ describe("daily first-clear rewards", () => {
       try { work(); sqlite.exec("COMMIT"); } catch (error) { sqlite.exec("ROLLBACK"); throw error; }
     });
     try {
-      expect(service.award("othello", "first", finish(7)).points).toBe(50);
-      expect(service.award("othello", "second", finish(7)).points).toBe(0);
-      expect(service.award("othello", "first", finish(8)).points).toBe(50);
-      expect(service.pointsForResult("othello", "second")).toBe(0);
-      expect(service.completedGames(day)).toEqual(["othello"]);
-      expect(sqlite.prepare("SELECT source_key, points FROM point_transactions").all()).toEqual([{ source_key: gameRewardSourceKey("othello", day), points: 50 }]);
+      expect(service.award(game, "first", finish(7)).points).toBe(50);
+      expect(service.award(game, "second", finish(7)).points).toBe(0);
+      expect(service.award(game, "first", finish(8)).points).toBe(50);
+      expect(service.pointsForResult(game, "second")).toBe(0);
+      expect(service.completedGames(day)).toEqual([game]);
+      expect(sqlite.prepare("SELECT source_key, points FROM point_transactions").all()).toEqual([{ source_key: gameRewardSourceKey(game, day), points: 50 }]);
     } finally { sqlite.close(); }
   });
 });

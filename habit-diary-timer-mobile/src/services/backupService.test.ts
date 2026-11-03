@@ -7,6 +7,8 @@ import { loadOthello, loadOthelloHistory, OTHELLO_STORAGE_KEY, saveOthelloCurren
 import { createGame, playMove } from "../features/othello/game";
 import { createGame as createSugorokuGame } from "../features/sugoroku/game";
 import { loadSugoroku, SUGOROKU_STORAGE_KEY } from "../features/sugoroku/storage";
+import { RHYTHM_STORAGE_KEY, rhythmChallengeService, type RhythmHistoryEntry } from "./rhythmChallengeService";
+import { ROOM_VOICE_PREFERENCES_KEY, defaultRoomVoicePreferences } from "../audio/roomVoiceSelection";
 import { createEnduranceGame, failEnduranceSlide, finishEndurance } from "../features/endurance/game";
 import { createEnduranceSession, ENDURANCE_CURRENT_KEY } from "../features/endurance/storage";
 import { createCountdown } from "../features/sugoroku/countdown";
@@ -519,6 +521,47 @@ describe("bounded backup export and import", () => {
         [row.setting_key, row.setting_value, row.updated_at],
       );
     }
+  });
+
+  it("round-trips rhythm history, stable image references and room voice choices", async () => {
+    const result: RhythmHistoryEntry = { id: "rhythm-one", startedAt: "2026-11-03T00:00:00.000Z", completedAt: "2026-11-03T00:05:00.000Z", interruptions: 2, elapsedSeconds: 150 };
+    await rhythmChallengeService.saveResult(result);
+    await rhythmChallengeService.saveResult({ ...result, id: "rhythm-clear", interruptions: 10, dailyRewardEligible: true });
+    await rhythmChallengeService.saveImages({ normal: { name: "picture.png", purpose: "training" }, paused: null, finished: null });
+    const voices = defaultRoomVoicePreferences(); voices.rooms.rhythm = { builtin: [], storedIds: ["stored-voice"] };
+    mocks.storage.set(ROOM_VOICE_PREFERENCES_KEY, JSON.stringify(voices));
+    const original = await rhythmChallengeService.load();
+    const payload = await savePayload();
+    expect(JSON.parse(payload.asyncStorage[RHYTHM_STORAGE_KEY])).toEqual(original);
+    expect(JSON.parse(payload.asyncStorage[ROOM_VOICE_PREFERENCES_KEY])).toEqual(voices);
+    await rhythmChallengeService.saveResult({ ...result, id: "after-backup" });
+    mocks.storage.delete(ROOM_VOICE_PREFERENCES_KEY);
+    await backupService.restore(payload);
+    expect(await rhythmChallengeService.load()).toEqual(original);
+    expect(JSON.parse(mocks.storage.get(ROOM_VOICE_PREFERENCES_KEY)!)).toEqual(voices);
+  });
+
+  it.each([
+    [RHYTHM_STORAGE_KEY, { version: 1, images: { normal: null, paused: null, finished: null }, history: [{ id: "broken" }] }],
+    [RHYTHM_STORAGE_KEY, { version: 1, images: { normal: { purpose: "profile", name: "private.png" }, paused: null, finished: null }, history: [] }],
+    [ROOM_VOICE_PREFERENCES_KEY, { version: 2, rooms: defaultRoomVoicePreferences().rooms }],
+    [ROOM_VOICE_PREFERENCES_KEY, { version: 1, rooms: { ...defaultRoomVoicePreferences().rooms, rhythm: { builtin: ["unknown"], storedIds: [] } } }],
+  ])("rejects invalid rhythm or room voice data in %s before any restore mutation", async (key, invalid) => {
+    const payload = await savePayload(); payload.asyncStorage[key as string] = JSON.stringify(invalid);
+    const original = new Map(mocks.storage);
+    await expect(backupService.restore(payload)).rejects.toThrow();
+    expect(mocks.storage).toEqual(original);
+    expect(mocks.multiSet).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("restores legacy backups without rhythm or voice settings by removing later values", async () => {
+    const payload = await savePayload();
+    mocks.storage.set(RHYTHM_STORAGE_KEY, JSON.stringify({ version: 1, images: { normal: null, paused: null, finished: null }, history: [] }));
+    mocks.storage.set(ROOM_VOICE_PREFERENCES_KEY, JSON.stringify(defaultRoomVoicePreferences()));
+    await backupService.restore(payload);
+    expect(mocks.storage.has(RHYTHM_STORAGE_KEY)).toBe(false);
+    expect(mocks.storage.has(ROOM_VOICE_PREFERENCES_KEY)).toBe(false);
   });
 
   it("round-trips completed and surrendered Othello results without stale cached history", async () => {

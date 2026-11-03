@@ -56,6 +56,11 @@ export default function GamesScreen() {
       />
 
       <View style={styles.gameList}>
+        <Card>
+          <View style={styles.gameEntry} testID="games-rhythm">
+            <PrimaryButton title="耐久チャレンジ" tone="training" onPress={() => router.push("/(tabs)/rhythm-challenge")} />
+          </View>
+        </Card>
         {RESUMABLE_GAMES.map((game) => {
           const entry = gameEntries[game];
           const state = progress[game];
