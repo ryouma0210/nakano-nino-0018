@@ -64,7 +64,7 @@ function useReducedMotion() {
   return reduced;
 }
 
-function FeedbackCaption({ state, width, fill }: { state: RhythmFeedbackState; width: number; fill: boolean }) {
+function FeedbackCaption({ state, width, height, fill }: { state: RhythmFeedbackState; width: number; height: number; fill: boolean }) {
   const { settings } = useAppAudio();
   const language = settings?.language ?? "ja";
   const reducedMotion = useReducedMotion();
@@ -74,6 +74,8 @@ function FeedbackCaption({ state, width, fill }: { state: RhythmFeedbackState; w
   const word = words[frame.index];
   const slot = frame.index % rowTops.length;
   const show = frame.visible && Boolean(word);
+  const lineHeight = width < 360 ? 20 : 24;
+  const rowTop = Math.max(0, Math.min(height * parseFloat(rowTops[slot]) / 100, height - lineHeight - 8));
 
   useEffect(() => startFeedbackSequence(words.length, (next) => {
     setFrame((current) => current.index === next.index && current.visible === next.visible ? current : next);
@@ -97,12 +99,12 @@ function FeedbackCaption({ state, width, fill }: { state: RhythmFeedbackState; w
       accessibilityLiveRegion="none" aria-live="off">
       <Animated.View pointerEvents="none"
         accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden
-        style={[styles.row, { top: rowTops[slot], right: slot < 3 ? 64 : 12, alignItems: slot % 2 === 0 ? "flex-start" : "flex-end",
+        style={[styles.row, { top: rowTop, right: slot < 3 ? 64 : 12, alignItems: slot % 2 === 0 ? "flex-start" : "flex-end",
           opacity: motion.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }),
           transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [3, -3] }) }],
         }]}>
         <AppText testID={`rhythm-feedback-word-${state}-${frame.index}`} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
-          style={[styles.word, { color: colors[state], fontSize: width < 360 ? 14 : 17, lineHeight: width < 360 ? 20 : 24 }]}>
+          style={[styles.word, { color: colors[state], fontSize: width < 360 ? 14 : 17, lineHeight }]}>
           {word}
         </AppText>
       </Animated.View>
@@ -118,7 +120,7 @@ export function RhythmFeedback({ state, eventKey, active, children, fill = false
   }}>
     {children}
     {active && state ? <MainCaption state={state} width={width} height={height} fill={fill} /> : null}
-    {active && state ? <FeedbackCaption key={`${state}:${typeof eventKey}:${eventKey}`} state={state} width={width} fill={fill} /> : null}
+    {active && state ? <FeedbackCaption key={`${state}:${typeof eventKey}:${eventKey}`} state={state} width={width} height={height} fill={fill} /> : null}
   </View>;
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Modal, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppAudio } from "@/audio/AudioProvider";
@@ -250,7 +250,7 @@ export default function RhythmChallengeScreen() {
               active={focused && appActive && !historyOpen && !exitGuard.requested} fill />
             } action={<RoomVoiceButton room="rhythm" onOpen={suspend} automaticBuiltin={automaticVoices} />} />
           </View>
-          <View style={[styles.controls, landscape && styles.landscapeControls]} testID="rhythm-controls">
+          <View style={[styles.controls, Platform.OS === "web" && styles.webControls, landscape && styles.landscapeControls]} testID="rhythm-controls">
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.controlsContent}>
           <Card style={styles.statusPanel}>
           <View style={styles.tempo}>
@@ -258,7 +258,7 @@ export default function RhythmChallengeScreen() {
             {session.status !== "finished" ? <AppText variant="muted" localize={false} testID="rhythm-bpm">{bpm} BPM</AppText> : null}
           </View>
           <View style={styles.statistics}>
-            <View style={styles.statistic}><AppText variant="muted">中断回数</AppText><AppText style={styles.value} localize={false} testID="rhythm-interruptions">{session.interruptions}</AppText></View>
+            <View style={styles.statistic}><AppText variant="muted">寸止め回数</AppText><AppText style={styles.value} localize={false} testID="rhythm-interruptions">{session.interruptions}</AppText></View>
             <View style={styles.statistic}><AppText variant="muted">プレイ時間</AppText><AppText style={styles.value} localize={false} testID="rhythm-elapsed">{secondsToClock(elapsed)}</AppText></View>
           </View>
           {session.status !== "finished" ? <>
@@ -333,7 +333,7 @@ export default function RhythmChallengeScreen() {
           <ScrollView contentContainerStyle={styles.history}>
             {history.length === 0 ? <AppText variant="muted">まだプレイ記録がありません。</AppText> : history.map((entry) => <View key={entry.id} style={styles.historyEntry} testID={`rhythm-history-${entry.id}`}>
               <AppText localize={false}>{toDateTimeKey(new Date(entry.completedAt))}</AppText>
-              <View style={styles.tempo}><AppText variant="muted">中断回数</AppText><AppText localize={false}>{entry.interruptions}</AppText></View>
+              <View style={styles.tempo}><AppText variant="muted">寸止め回数</AppText><AppText localize={false}>{entry.interruptions}</AppText></View>
               <View style={styles.tempo}><AppText variant="muted">プレイ時間</AppText><AppText localize={false}>{secondsToClock(entry.elapsedSeconds)}</AppText></View>
               <DailyGameRewardNotice game="rhythm" resultId={entry.id} />
             </View>)}
@@ -354,9 +354,10 @@ const styles = StyleSheet.create({
   landscape: { flexDirection: "row" },
   mediaFrame: { flex: 1, minHeight: 0, overflow: "hidden", backgroundColor: "#000" },
   controls: { flexGrow: 0, flexShrink: 1, maxHeight: "52%" },
+  webControls: { maxHeight: "75%" },
   detailsScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   playActions: { flexShrink: 0, paddingTop: 8, width: "100%", maxWidth: 720, alignSelf: "center" },
-  landscapeControls: { width: "42%", maxWidth: 430, maxHeight: "100%" },
+  landscapeControls: { width: "42%", maxWidth: 430, maxHeight: "100%", alignSelf: "center" },
   controlsContent: { width: "100%", maxWidth: 720, alignSelf: "center" },
   statusPanel: { padding: 10, backgroundColor: "#080808", gap: 8 },
   error: { gap: 8 },

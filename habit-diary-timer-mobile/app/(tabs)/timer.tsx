@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Image, Modal, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Modal, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
@@ -71,6 +71,8 @@ function createRandomMarkerOffsets(
 
 export default function TimerScreen() {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
   const [minutes, setMinutes] = useState("1");
   const [totalSeconds, setTotalSeconds] = useState(60);
   const [remaining, setRemaining] = useState(60);
@@ -349,17 +351,21 @@ export default function TimerScreen() {
         visible={running}
         animationType="fade"
         statusBarTranslucent
+        supportedOrientations={["portrait", "landscape"]}
         onRequestClose={() => {}}
       >
-        <ScrollView
-          style={styles.fullscreenScroll}
-          contentContainerStyle={[
+        <View
+          style={[
             styles.fullscreenWrap,
+            landscape && styles.fullscreenLandscape,
             {
               paddingTop: Math.max(12, insets.top),
               paddingBottom: Math.max(12, insets.bottom),
+              paddingLeft: Math.max(10, insets.left),
+              paddingRight: Math.max(10, insets.right),
             },
           ]}
+          testID="punishment-fullscreen"
         >
           <View style={styles.fullscreenMediaFrame}>
             <PunishmentMedia
@@ -369,6 +375,8 @@ export default function TimerScreen() {
               fullscreen
             />
           </View>
+          <View style={[styles.fullscreenControls, landscape && styles.landscapeControls]} testID="punishment-controls">
+          <ScrollView style={styles.fullscreenDetails} contentContainerStyle={styles.fullscreenDetailsContent}>
           <View style={styles.punishmentComment}>
             <AppText style={styles.punishmentCommentName}>ニノ</AppText>
             <AppText style={styles.punishmentCommentText}>
@@ -416,17 +424,23 @@ export default function TimerScreen() {
               })}
             </View>
           </View>
-          <PrimaryButton title="ギブアップ" tone="danger" onPress={stop} />
-        </ScrollView>
+          </ScrollView>
+          <PrimaryButton title="ギブアップ" tone="danger" onPress={stop} testID="punishment-stop" />
+          </View>
+        </View>
       </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  fullscreenScroll: { flex: 1, backgroundColor: "#000" },
-  fullscreenWrap: { flexGrow: 1, gap: 8, paddingHorizontal: 10 },
-  fullscreenMediaFrame: { flex: 1, minHeight: 76, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#000" },
+  fullscreenWrap: { flex: 1, gap: 8, backgroundColor: "#000" },
+  fullscreenLandscape: { flexDirection: "row" },
+  fullscreenControls: { flexShrink: 1, maxHeight: "60%", gap: 8 },
+  landscapeControls: { width: "42%", maxWidth: 430, maxHeight: "100%", alignSelf: "center" },
+  fullscreenDetails: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
+  fullscreenDetailsContent: { gap: 8 },
+  fullscreenMediaFrame: { flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#000" },
   mediaChoices: { flexDirection: "row", gap: 8 },
   mediaChoice: { flex: 1 },
   punishmentComment: {
@@ -470,6 +484,9 @@ const styles = StyleSheet.create({
   },
   rhythmHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 8,
+    rowGap: 4,
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 10,
