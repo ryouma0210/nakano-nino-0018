@@ -6,6 +6,7 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
 import { AppText } from "@/components/AppText";
 import { Card } from "@/components/Card";
+import { Disclosure } from "@/components/Disclosure";
 import { PageTitle } from "@/components/PageTitle";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { TextField } from "@/components/TextField";
@@ -52,6 +53,7 @@ export default function VoicesScreen() {
   const [importResult, setImportResult] = useState<VoiceImportResult | null>(null);
   const [working, setWorking] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selection, setSelection] = useState({ scope: library.scope, search: "", ids: new Set<string>() });
   const [deleteResult, setDeleteResult] = useState<{ removed: number; failed: StoredVoice[] } | null>(null);
@@ -320,10 +322,13 @@ export default function VoicesScreen() {
       <VoiceSleepTimerSettings disabled={locked} />
     </Card>
     <Card>
-      <TextField label="ファイル名で検索" placeholder="表示名・元のファイル名" accessibilityLabel={t("ファイル名で検索")}
-        value={search} onChangeText={changeSearch} editable={!locked} testID="voice-search-input" autoCorrect={false} />
-      <AppText variant="muted">表示名・元のファイル名で検索できます。検索しても再生する範囲は変わりません。</AppText>
-      {search ? <VoiceButton label="検索をクリア" onPress={() => changeSearch("")} disabled={locked} testID="voice-search-clear" /> : null}
+      <Disclosure title="検索" active={search.trim().length > 0} testID="voice-search-toggle"
+        expanded={searchExpanded} onExpandedChange={setSearchExpanded}>
+        <TextField label="ファイル名で検索" placeholder="表示名・元のファイル名" accessibilityLabel={t("ファイル名で検索")}
+          value={search} onChangeText={changeSearch} editable={!locked} testID="voice-search-input" autoCorrect={false} />
+        <AppText variant="muted">表示名・元のファイル名で検索できます。検索しても再生する範囲は変わりません。</AppText>
+        {search ? <VoiceButton label="検索をクリア" onPress={() => changeSearch("")} disabled={locked} testID="voice-search-clear" /> : null}
+      </Disclosure>
       <AppText variant="label">表示列数</AppText>
       <View style={styles.actions}>
         {([1, 2, 3] as const).map((count) => <VoiceButton key={count} label={`${count}列`} equalWidth selected={columns === count}

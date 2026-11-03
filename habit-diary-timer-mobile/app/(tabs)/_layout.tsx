@@ -14,7 +14,7 @@ export default function TabLayout() {
         <Stack.Screen name="tasks" options={{ title: t("タスク") }} />
         <Stack.Screen name="rooms" options={{ title: t("廊下") }} />
         <Stack.Screen name="games" options={{ title: t("ゲーム部屋") }} />
-        <Stack.Screen name="rhythm-challenge" options={{ title: t("耐久チャレンジ") }} />
+        <Stack.Screen name="rhythm-challenge" options={{ title: t("寸止め耐久チャレンジ") }} />
         <Stack.Screen name="sugoroku" options={{ title: t("すごろく") }} />
         <Stack.Screen name="othello" options={{ title: t("オセロ") }} />
         <Stack.Screen name="endurance" options={{ title: t("勃起我慢") }} />

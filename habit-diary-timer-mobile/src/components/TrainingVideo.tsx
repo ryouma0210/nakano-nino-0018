@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Modal, Platform, StyleSheet, View } from "react-native";
+import { Image, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { useEventListener } from "expo";
 import { VideoView } from "expo-video";
@@ -94,6 +94,8 @@ export function TrainingVideo({
   disabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
@@ -406,37 +408,47 @@ export function TrainingVideo({
         visible
         animationType="fade"
         statusBarTranslucent
+        supportedOrientations={["portrait", "landscape"]}
         onRequestClose={() => {}}
       >
         <View
           style={[
             styles.fullscreenWrap,
+            landscape && styles.fullscreenLandscape,
             {
               paddingTop: Math.max(12, insets.top),
               paddingBottom: Math.max(12, insets.bottom),
+              paddingLeft: Math.max(landscape ? 10 : 0, insets.left),
+              paddingRight: Math.max(landscape ? 10 : 0, insets.right),
             },
           ]}
+          testID="training-fullscreen"
         >
           <View style={styles.fullscreenMediaFrame} testID="training-media-frame">
             {media}
             {voiceControl}
           </View>
-          <View style={styles.trainingComment}>
-            <AppText style={styles.trainingCommentName}>ニノ</AppText>
-            <AppText style={styles.trainingCommentText}>
-              {formatConfiguredMessage(
-                trainingComment,
-                settings?.playerName.trim() ?? "",
-              )}
-            </AppText>
-          </View>
-          {rhythmGauge}
-          <View style={styles.fullscreenCompleteButton}>
-            <PrimaryButton
-              title="射精しました"
-              tone="danger"
-              onPress={completeTraining}
-            />
+          <View style={[styles.fullscreenControls, landscape && styles.landscapeControls]} testID="training-controls">
+            <ScrollView style={styles.fullscreenDetails}>
+              <View style={styles.trainingComment}>
+                <AppText style={styles.trainingCommentName}>ニノ</AppText>
+                <AppText style={styles.trainingCommentText}>
+                  {formatConfiguredMessage(
+                    trainingComment,
+                    settings?.playerName.trim() ?? "",
+                  )}
+                </AppText>
+              </View>
+              {rhythmGauge}
+            </ScrollView>
+            <View style={styles.fullscreenCompleteButton}>
+              <PrimaryButton
+                title="射精しました"
+                tone="danger"
+                onPress={completeTraining}
+                testID="training-complete"
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -533,9 +545,15 @@ const styles = StyleSheet.create({
   },
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
   fullscreenWrap: { flex: 1, backgroundColor: "#000" },
+  fullscreenLandscape: { flexDirection: "row", gap: 8 },
+  fullscreenControls: { flexShrink: 1, maxHeight: "60%" },
+  landscapeControls: { width: "42%", maxWidth: 430, maxHeight: "100%", alignSelf: "center" },
+  fullscreenDetails: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   fullscreenMediaFrame: {
     position: "relative",
     flex: 1,
+    minWidth: 0,
+    minHeight: 0,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

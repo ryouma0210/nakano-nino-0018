@@ -159,7 +159,7 @@ describe("home daily progress", () => {
     { game: "endurance", title: "勃起我慢", href: "/(tabs)/endurance", limit: 50 },
     { game: "othello", title: "オセロ", href: "/(tabs)/othello", limit: 50 },
     { game: "succubus", title: "館の外", href: "/(tabs)/outside", limit: 100 },
-    { game: "rhythm", title: "耐久チャレンジ", href: "/(tabs)/rhythm-challenge", limit: 50 },
+    { game: "rhythm", title: "寸止め耐久チャレンジ", href: "/(tabs)/rhythm-challenge", limit: 50 },
   ] as const)("counts only $game's first daily reward as its own task", ({ game, title, href, limit }) => {
     const summary = buildHomeSummary({
       ...baseSnapshot(), dailyGameRewards: { date: today, completedGames: [game, game] },
@@ -527,7 +527,7 @@ describe("saved point progress on every daily task", () => {
     expect(summary.tasks.find(({ id }) => id === "training")?.title).toBe("調教部屋（初回のみ）");
     expect(summary.tasks.find(({ id }) => id === "punishment")?.title).toBe("お仕置き部屋（初回のみ）");
     expect(summary.tasks.find(({ id }) => id === "rhythm"))
-      .toMatchObject({ title: "耐久チャレンジ", detail: "初回クリア報酬（寸止め10回以上）", href: "/(tabs)/rhythm-challenge" });
+      .toMatchObject({ title: "寸止め耐久チャレンジ", detail: "初回クリア報酬（寸止め10回以上）", href: "/(tabs)/rhythm-challenge" });
   });
 
   it("uses actual received amounts independently of completion and preserves historical reward rates", () => {

@@ -44,11 +44,11 @@ const partialResetItems: {
   label: string;
   description: string;
 }[] = [
-  { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置き・すごろく・オセロ・耐久チャレンジ・ゴミ汁廃棄履歴・貞操帯管理の全記録と添付画像・命令の閲覧履歴" },
+  { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置き・すごろく・オセロ・寸止め耐久チャレンジ・ゴミ汁廃棄履歴・貞操帯管理の全記録と添付画像・命令の閲覧履歴" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
   { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・解約日・契約後の追加ルール" },
   { key: "settings", label: "サウンド設定", description: "BGM・効果音・各部屋のボイス選択を初期値へ戻します" },
-  { key: "files", label: "格納ファイル", description: "格納した画像と動画・貞操帯管理の添付画像・耐久チャレンジの画像設定" },
+  { key: "files", label: "格納ファイル", description: "格納した画像と動画・貞操帯管理の添付画像・寸止め耐久チャレンジの画像設定" },
   { key: "voices", label: "ボイス格納", description: "格納した音声・表示名・再生順・再生モード" },
 ];
 
@@ -550,7 +550,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
       <ConfirmModal
         visible={resetConfirmation}
         title="全データを初期化しますか？"
-        message="次のデータをすべて削除します。\n\n・調教日記と準備・敗北記録\n・本日の命令・自分で追加した命令・命令の閲覧履歴\n・お仕置きと射精管理の履歴\n・すごろくとオセロの記録\n・耐久チャレンジの記録と画像設定\n・ゴミ汁廃棄履歴・貞操帯管理記録と添付画像\n・実績・ポイント・獲得済みご褒美\n・契約書と契約ルール\n・名前とサウンド設定・各部屋のボイス選択\n・格納ファイルとボイス\n\nこの操作は元に戻せません。"
+        message="次のデータをすべて削除します。\n\n・調教日記と準備・敗北記録\n・本日の命令・自分で追加した命令・命令の閲覧履歴\n・お仕置きと射精管理の履歴\n・すごろくとオセロの記録\n・寸止め耐久チャレンジの記録と画像設定\n・ゴミ汁廃棄履歴・貞操帯管理記録と添付画像\n・実績・ポイント・獲得済みご褒美\n・契約書と契約ルール\n・名前とサウンド設定・各部屋のボイス選択\n・格納ファイルとボイス\n\nこの操作は元に戻せません。"
         confirmLabel="削除を実行"
         confirmTone="danger"
         onCancel={() => setResetConfirmation(false)}
