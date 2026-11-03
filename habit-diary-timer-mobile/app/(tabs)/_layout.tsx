@@ -2,17 +2,19 @@ import { Stack } from "expo-router";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { BottomNavigationLayout } from "@/components/BottomNavigation";
 import { translateText } from "@/i18n";
+import { PointMilestoneProvider } from "@/features/points/PointMilestoneProvider";
 
 export default function TabLayout() {
   const { settings } = useAppAudio();
   const t = (value: string) => translateText(value, settings?.language ?? "ja");
   return (
-    <BottomNavigationLayout>
+    <PointMilestoneProvider><BottomNavigationLayout>
       <Stack screenOptions={{ headerShown: false, animation: "none" }}>
         <Stack.Screen name="index" options={{ title: t("ホーム") }} />
         <Stack.Screen name="tasks" options={{ title: t("タスク") }} />
         <Stack.Screen name="rooms" options={{ title: t("廊下") }} />
         <Stack.Screen name="games" options={{ title: t("ゲーム部屋") }} />
+        <Stack.Screen name="rhythm-challenge" options={{ title: t("耐久チャレンジ") }} />
         <Stack.Screen name="sugoroku" options={{ title: t("すごろく") }} />
         <Stack.Screen name="othello" options={{ title: t("オセロ") }} />
         <Stack.Screen name="endurance" options={{ title: t("勃起我慢") }} />
@@ -39,12 +41,13 @@ export default function TabLayout() {
         <Stack.Screen name="report-details" options={{ title: t("集計の内訳") }} />
         <Stack.Screen name="contract" options={{ title: t("契約部屋") }} />
         <Stack.Screen name="files" options={{ title: t("ファイル格納部屋") }} />
+        <Stack.Screen name="voices" options={{ title: t("ボイス格納") }} />
         <Stack.Screen name="settings" options={{ title: t("アプリ設定") }} />
         <Stack.Screen name="custom-orders" options={{ title: t("命令追加") }} />
         <Stack.Screen name="manual" options={{ title: t("マニュアル") }} />
         <Stack.Screen name="external-links" options={{ title: t("外部リンク") }} />
         <Stack.Screen name="slave-contract" options={{ title: t("奴隷契約書") }} />
       </Stack>
-    </BottomNavigationLayout>
+    </BottomNavigationLayout></PointMilestoneProvider>
   );
 }

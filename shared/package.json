@@ -6,6 +6,7 @@
     "./date": "./date.ts",
     "./search": "./search.ts",
     "./contract": "./contract.ts",
+    "./gamePassword": "./gamePassword.ts",
     "./messages": "./messages.ts"
   }
 }

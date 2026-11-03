@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activityCertificatePhotoDataUrl, exportActivityCertificate } from "./certificateExport";
+import { activityCertificatePhotoDataUrl, exportActivityCertificate, exportPreparedActivityCertificate, prepareActivityCertificatePreview } from "./certificateExport";
 import type { ActivityCertificateData } from "./certificate";
 import type { StoredFile } from "../../services/fileStorageService";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, print: vi.fn(), renderNative: vi.fn(), renderWeb: vi.fn(), permissions: vi.fn(), create: vi.fn(), read: vi.fn(), write: vi.fn(),
   copy: vi.fn(), remove: vi.fn(), mkdir: vi.fn(), info: vi.fn(), available: vi.fn(), share: vi.fn(), download: vi.fn(), webPrint: vi.fn(), getBlob: vi.fn(),
+  imageSize: vi.fn(),
 }));
-vi.mock("react-native", () => ({ Platform: mocks.platform }));
+vi.mock("react-native", () => ({ Platform: mocks.platform, Image: { getSize: mocks.imageSize } }));
 vi.mock("expo-print", () => ({ printAsync: mocks.print }));
 vi.mock("expo-sharing", () => ({ isAvailableAsync: mocks.available, shareAsync: mocks.share }));
 vi.mock("expo-file-system/legacy", () => ({
@@ -45,8 +46,78 @@ beforeEach(() => {
   mocks.read.mockResolvedValue("iVBORw0KGgo=");
   mocks.available.mockResolvedValue(true);
   mocks.info.mockResolvedValue({ exists: false });
+  mocks.imageSize.mockResolvedValue({ width: 1588, height: 2246 });
 });
 afterEach(() => vi.unstubAllGlobals());
+
+describe("activity certificate preview", () => {
+  it("previews browser pixels without downloading, printing, sharing or asking for permissions", async () => {
+    mocks.platform.OS = "web";
+    const preview = await prepareActivityCertificatePreview(data, "ja", mocks.renderNative);
+    expect(preview.image).toEqual({ uri: png.dataUrl, width: png.width, height: png.height, png });
+    expect(mocks.renderWeb).toHaveBeenCalledTimes(1);
+    for (const method of [mocks.download, mocks.webPrint, mocks.print, mocks.share, mocks.permissions, mocks.create, mocks.copy, mocks.write, mocks.renderNative]) {
+      expect(method).not.toHaveBeenCalled();
+    }
+    await preview.dispose();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("issues the exact browser preview image and its captured date/name without a second render", async () => {
+    mocks.platform.OS = "web";
+    const source = { ...data, issuedAt: new Date(data.issuedAt), topWeaknesses: ["Cold weather"] };
+    const preview = await prepareActivityCertificatePreview(source, "en");
+    source.name = "Changed name";
+    source.issuedAt.setFullYear(2030);
+    source.topWeaknesses[0] = "Changed record";
+    expect(await exportPreparedActivityCertificate(preview)).toEqual({ status: "saved", fileName });
+    expect(mocks.download).toHaveBeenCalledExactlyOnceWith(png, fileName);
+    expect(mocks.renderWeb).toHaveBeenCalledTimes(1);
+    expect(preview.data.topWeaknesses).toEqual(["Cold weather"]);
+    expect(preview.language).toBe("en");
+  });
+
+  it("keeps a native preview temporary and releases it exactly once when closed", async () => {
+    const preview = await prepareActivityCertificatePreview(data, "ja", mocks.renderNative);
+    expect(preview.image).toEqual({ uri: "file:///cache/generated.png", width: 1588, height: 2246 });
+    expect(mocks.renderNative).toHaveBeenCalledWith(preview.data, "ja");
+    for (const method of [mocks.permissions, mocks.create, mocks.copy, mocks.write, mocks.share, mocks.print, mocks.remove]) {
+      expect(method).not.toHaveBeenCalled();
+    }
+    await preview.dispose();
+    await preview.dispose();
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("file:///cache/generated.png", { idempotent: true });
+  });
+
+  it("retains preview pixels after cancelling or failing issuance so it can be retried", async () => {
+    const preview = await prepareActivityCertificatePreview(data, "ja", mocks.renderNative);
+    mocks.permissions.mockResolvedValueOnce({ granted: false });
+    expect((await exportPreparedActivityCertificate(preview)).status).toBe("cancelled");
+    expect(mocks.remove).not.toHaveBeenCalled();
+    mocks.write.mockRejectedValueOnce(new Error("disk full"));
+    await expect(exportPreparedActivityCertificate(preview)).rejects.toThrow("disk full");
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("content://chosen/certificate.png", { idempotent: true });
+    expect((await exportPreparedActivityCertificate(preview)).status).toBe("saved");
+    expect(mocks.renderNative).toHaveBeenCalledTimes(1);
+    expect(mocks.remove.mock.calls.map(([uri]) => uri)).not.toContain(preview.image.uri);
+    await preview.dispose();
+    expect(mocks.remove).toHaveBeenLastCalledWith("file:///cache/generated.png", { idempotent: true });
+  });
+
+  it("cleans a native image that cannot be decoded before showing the preview", async () => {
+    mocks.imageSize.mockRejectedValue(new Error("decode failed"));
+    await expect(prepareActivityCertificatePreview(data, "ja", mocks.renderNative)).rejects.toThrow("decode failed");
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("file:///cache/generated.png", { idempotent: true });
+    expect(mocks.permissions).not.toHaveBeenCalled();
+  });
+
+  it("cleans invalid native image dimensions and never exports them", async () => {
+    mocks.imageSize.mockResolvedValue({ width: 0, height: 2246 });
+    await expect(prepareActivityCertificatePreview(data, "ja", mocks.renderNative)).rejects.toThrow("証明書の画像を生成できませんでした。");
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    expect(mocks.write).not.toHaveBeenCalled();
+  });
+});
 
 describe("activity certificate export", () => {
   it("saves Android PNG bytes into the chosen directory and removes only its temporary source", async () => {

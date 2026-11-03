@@ -1,4 +1,4 @@
-import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAudioPlayer } from "expo-audio";
 import { AppState, Platform } from "react-native";
 import { settingsService } from "@/services/settingsService";
@@ -10,11 +10,16 @@ import { useLoopSleepTimer } from "./useLoopSleepTimer";
 import { useLoopMediaControls } from "./useLoopMediaControls";
 import { translateText } from "@/i18n";
 import { loopMediaTitle } from "./loopAudioLabels";
+import { loopAudioSources } from "./loopAudioSources";
+import { roomVoiceStore } from "./roomVoiceStore";
+import { voiceStorageService, type StoredVoice } from "@/services/voiceStorageService";
+import { useSessionAudioPlayer } from "./useSessionAudioPlayer";
+import type { RhythmVoicePlaybackState } from "./rhythmVoicePlayback";
 
 export type { RoomAudioScene } from "./roomAudio";
 
-type EffectName = "button" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
-export type LoopAudioName = "earLick" | "nippleScratch" | "ikunaSine" | "bokkisiro" | "sineW" | "dase" | "kousokusikosiko" | "kousokutikubikarikari" | "sikosiko";
+type EffectName = "button" | "rhythmBeat" | "dialogue" | "preparationLoop" | "defeatLoop" | "trainingStart" | "trainingRhythm" | "outsideEscape" | "outsideAttack" | "outsideEvade" | "outsideEarLick" | "outsideNipple" | "outsideLossRhythm" | "levelUp" | "punishmentHit" | "ejaculation" | "complete";
+export type LoopAudioName = "breath" | "earLick" | "nippleScratch" | "ikunaSine" | "bokkisiro" | "sineW" | "dase" | "kousokusikosiko" | "kousokutikubikarikari" | "sikosiko";
 export type BgmMode = "default" | "outsideBright" | "outsideTemptation" | "outsideBattle" | "outsideCharm";
 type AudioContextValue = {
   settings: AppSettings | null;
@@ -25,12 +30,15 @@ type AudioContextValue = {
   setBgmMode: (mode: BgmMode) => void;
   loopAudioNames: readonly LoopAudioName[];
   playLoopAudio: (name: LoopAudioName) => void;
-  stopLoopAudio: (name?: LoopAudioName) => void;
+  stopLoopAudio: (name?: LoopAudioName) => Promise<void>;
   loopSleepDeadline: number | null;
   setLoopSleepMinutes: (minutes: number | null) => void;
   setSessionAudioActive: (active: boolean) => void;
-  setRoomAudioScene: (scene: RoomAudioScene | null) => void;
+  setRoomAudioScene: (scene: RoomAudioScene | null, paused?: boolean, rhythmVoices?: RhythmVoicePlaybackState | null) => void;
+  setRoomAudioPaused: (paused: boolean, rhythmVoices?: RhythmVoicePlaybackState | null) => void;
   shouldMixVideoAudio: boolean;
+  setVoiceAudioActive: (active: boolean) => void;
+  registerVoiceAudioStop: (stop: () => void) => () => void;
 };
 
 const AudioContext = createContext<AudioContextValue>({
@@ -42,12 +50,15 @@ const AudioContext = createContext<AudioContextValue>({
   setBgmMode: () => {},
   loopAudioNames: [],
   playLoopAudio: () => {},
-  stopLoopAudio: () => {},
+  stopLoopAudio: async () => {},
   loopSleepDeadline: null,
   setLoopSleepMinutes: () => {},
   setSessionAudioActive: () => {},
   setRoomAudioScene: () => {},
+  setRoomAudioPaused: () => {},
   shouldMixVideoAudio: false,
+  setVoiceAudioActive: () => {},
+  registerVoiceAudioStop: () => () => {},
 });
 
 const bgmSource = require("../../assets/audio/kyouhunomori.m4a");
@@ -87,12 +98,15 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
     setBgmMode,
     loopAudioNames: [],
     playLoopAudio: () => {},
-    stopLoopAudio: () => {},
+    stopLoopAudio: async () => {},
     loopSleepDeadline: null,
     setLoopSleepMinutes: () => {},
     setSessionAudioActive: () => {},
     setRoomAudioScene: () => {},
+    setRoomAudioPaused: () => {},
     shouldMixVideoAudio: false,
+    setVoiceAudioActive: () => {},
+    registerVoiceAudioStop: () => () => {},
   }), [bgmMode, settings, updateAudioSettings]);
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
@@ -100,27 +114,83 @@ function SilentAudioProvider({ children }: PropsWithChildren) {
 
 function ActiveAudioProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const [voiceAudioActive, setVoiceAudioActive] = useState(false);
+  const stopVoiceAudio = useRef<(() => void) | null>(null);
+  const registerVoiceAudioStop = useCallback((stop: () => void) => {
+    stopVoiceAudio.current = stop;
+    return () => { if (stopVoiceAudio.current === stop) stopVoiceAudio.current = null; };
+  }, []);
   const [sessionAudioActive, setSessionAudioActive] = useState(false);
-  const [roomAudioScene, setRoomAudioScene] = useState<RoomAudioScene | null>(null);
+  const [roomAudioScene, setRoomAudioSceneState] = useState<RoomAudioScene | null>(null);
+  const [roomAudioPaused, setRoomAudioPausedState] = useState(false);
+  const [rhythmVoices, setRhythmVoices] = useState<RhythmVoicePlaybackState | null>(null);
+  const roomAudioPausedRef = useRef(false);
+  const activeRoomScene = useRef<RoomAudioScene | null>(null);
+  const setRoomAudioScene = useCallback((scene: RoomAudioScene | null, paused = false, rhythmState: RhythmVoicePlaybackState | null = null) => {
+    activeRoomScene.current = scene;
+    roomAudioPausedRef.current = scene === "rhythm" && paused;
+    setRoomAudioPausedState(roomAudioPausedRef.current);
+    setRoomAudioSceneState(scene);
+    setRhythmVoices(scene === "rhythm" ? rhythmState : null);
+  }, []);
+  const setRoomAudioPaused = useCallback((paused: boolean, rhythmState: RhythmVoicePlaybackState | null = null) => {
+    // Existing rooms keep their stop-on-pause behavior. Only a live rhythm
+    // session retains its players for a position-preserving pause.
+    if (activeRoomScene.current !== "rhythm") return;
+    roomAudioPausedRef.current = paused;
+    setRoomAudioPausedState(paused);
+    setRhythmVoices(rhythmState);
+  }, []);
+  const voicePreferences = useSyncExternalStore(roomVoiceStore.subscribe, roomVoiceStore.getSnapshot, roomVoiceStore.getSnapshot);
+  const [storedRoomVoices, setStoredRoomVoices] = useState<StoredVoice[]>([]);
   const [loopAudioNames, setLoopAudioNames] = useState<LoopAudioName[]>([]);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
-  const roomAudioTracks = getRoomAudioTracks(roomAudioScene, settings, appIsActive, loopAudioNames);
-  const roomAudioActive = roomAudioTracks.length > 0;
+  const appIsActiveRef = useRef(appIsActive);
+  const selectedRoom = roomAudioScene === "training" || roomAudioScene === "punishment" || roomAudioScene === "rhythm" ? roomAudioScene : null;
+  const sceneReady = !selectedRoom || voicePreferences.ready;
+  const roomAudioTracks = getRoomAudioTracks(voiceAudioActive || !sceneReady ? null : roomAudioScene, settings, appIsActive, loopAudioNames, voicePreferences.preferences, rhythmVoices);
+  const storedRoomTracks = selectedRoom && sceneReady && appIsActive && !voiceAudioActive && settings?.soundEnabled
+    ? storedRoomVoices.filter((voice) => voicePreferences.preferences.rooms[selectedRoom].storedIds.includes(voice.id))
+      .map(({ id, uri }) => ({ id, uri, volume: settings.soundVolume,
+        paused: selectedRoom === "rhythm" && rhythmVoices?.resting === true })) : [];
+  const roomAudioActive = roomAudioTracks.length > 0 || storedRoomTracks.length > 0;
+  useEffect(() => { roomVoiceStore.load().catch(console.error); }, []);
+  useEffect(() => {
+    if (!selectedRoom) return;
+    let active = true;
+    let generation = 0;
+    const refresh = () => {
+      const request = ++generation;
+      voiceStorageService.load().then((library) => {
+        if (active && generation === request) setStoredRoomVoices(library.voices);
+      }).catch((error) => {
+        if (active && generation === request) setStoredRoomVoices([]);
+        console.error(error);
+      });
+    };
+    refresh();
+    const unsubscribe = voiceStorageService.subscribe(refresh);
+    return () => { active = false; unsubscribe(); };
+  }, [selectedRoom]);
   // Keep videos from reclaiming audio focus while room audio still needs it,
   // including when the last manual loop stops and its room copy takes over.
-  const shouldMixVideoAudio = loopAudioNames.length > 0 || sessionAudioActive || roomAudioActive;
+  const shouldMixVideoAudio = voiceAudioActive || loopAudioNames.length > 0 || sessionAudioActive || roomAudioActive;
   const bgm = useAudioPlayer(bgmSource);
   const outsideBrightBgm = useAudioPlayer(outsideBrightBgmSource);
   const outsideTemptationBgm = useAudioPlayer(outsideTemptationBgmSource);
   const outsideBattleBgm = useAudioPlayer(outsideBattleBgmSource);
   const outsideCharmBgm = useAudioPlayer(outsideCharmBgmSource);
-  const button = useAudioPlayer(require("../../assets/audio/button.wav"));
+  const button = useSessionAudioPlayer(require("../../assets/audio/button.wav"));
+  const rhythmBeat = useSessionAudioPlayer(require("../../assets/audio/button.wav"));
+  const rhythmRequests = useRef({ rhythmBeat: 0, trainingRhythm: 0 });
   const dialogue = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const preparationLoop = useAudioPlayer(require("../../assets/audio/toiki.m4a"));
   const defeatLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
   const trainingStart = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
-  const trainingRhythm = useAudioPlayer(require("../../assets/audio/tekoki.m4a"));
+  const trainingRhythm = useSessionAudioPlayer(require("../../assets/audio/tekoki.m4a"));
   const outsideEscape = useAudioPlayer(require("../../assets/audio/dialogue-next.wav"));
   const outsideAttack = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
   const outsideEvade = useAudioPlayer(require("../../assets/audio/button.wav"));
@@ -131,16 +201,18 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   const punishmentHit = useAudioPlayer(require("../../assets/audio/punishment-hit.wav"));
   const ejaculation = useAudioPlayer(require("../../assets/audio/syasei.m4a"));
   const complete = useAudioPlayer(require("../../assets/audio/training-complete.wav"));
-  const earLickLoop = useAudioPlayer(require("../../assets/audio/miminame.m4a"));
-  const nippleScratchLoop = useAudioPlayer(require("../../assets/audio/tikubikarikariseme.m4a"));
-  const ikunaSineLoop = useAudioPlayer(require("../../assets/audio/ikuna-sine.m4a"));
-  const bokkisiroLoop = useAudioPlayer(require("../../assets/audio/bokkisiro.m4a"));
-  const sineWLoop = useAudioPlayer(require("../../assets/audio/sine-w.m4a"));
-  const daseLoop = useAudioPlayer(require("../../assets/audio/dase.m4a"));
-  const kousokusikosikoLoop = useAudioPlayer(require("../../assets/audio/kousokusikosiko.m4a"));
-  const kousokutikubikarikariLoop = useAudioPlayer(require("../../assets/audio/kousokutikubikarikari.m4a"));
-  const sikosikoLoop = useAudioPlayer(require("../../assets/audio/sikosiko.m4a"));
+  const breathLoop = useAudioPlayer(loopAudioSources.breath);
+  const earLickLoop = useAudioPlayer(loopAudioSources.earLick);
+  const nippleScratchLoop = useAudioPlayer(loopAudioSources.nippleScratch);
+  const ikunaSineLoop = useAudioPlayer(loopAudioSources.ikunaSine);
+  const bokkisiroLoop = useAudioPlayer(loopAudioSources.bokkisiro);
+  const sineWLoop = useAudioPlayer(loopAudioSources.sineW);
+  const daseLoop = useAudioPlayer(loopAudioSources.dase);
+  const kousokusikosikoLoop = useAudioPlayer(loopAudioSources.kousokusikosiko);
+  const kousokutikubikarikariLoop = useAudioPlayer(loopAudioSources.kousokutikubikarikari);
+  const sikosikoLoop = useAudioPlayer(loopAudioSources.sikosiko);
   const loopPlayers = useMemo(() => ({
+    breath: breathLoop,
     earLick: earLickLoop,
     nippleScratch: nippleScratchLoop,
     ikunaSine: ikunaSineLoop,
@@ -150,7 +222,7 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     kousokusikosiko: kousokusikosikoLoop,
     kousokutikubikarikari: kousokutikubikarikariLoop,
     sikosiko: sikosikoLoop,
-  } satisfies Record<LoopAudioName, typeof earLickLoop>), [bokkisiroLoop, daseLoop, earLickLoop, ikunaSineLoop, kousokusikosikoLoop, kousokutikubikarikariLoop, nippleScratchLoop, sikosikoLoop, sineWLoop]);
+  } satisfies Record<LoopAudioName, typeof earLickLoop>), [bokkisiroLoop, breathLoop, daseLoop, earLickLoop, ikunaSineLoop, kousokusikosikoLoop, kousokutikubikarikariLoop, nippleScratchLoop, sikosikoLoop, sineWLoop]);
   const manualLoopPlayers = useMemo(() => Object.values(loopPlayers), [loopPlayers]);
   const loopPlayback = useMemo(() => createLoopPlayback(manualLoopPlayers), [manualLoopPlayers]);
   const stopLoopAudioRef = useRef<(name?: LoopAudioName) => void>(() => {});
@@ -189,6 +261,7 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       outsideBattleBgm,
       outsideCharmBgm,
       button,
+      rhythmBeat,
       dialogue,
       preparationLoop,
       defeatLoop,
@@ -207,13 +280,16 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     ];
     const subscription = AppState.addEventListener("change", (nextState) => {
       const active = nextState === "active";
+      appIsActiveRef.current = active;
       setAppIsActive(active);
       if (!active) {
+        rhythmRequests.current.rhythmBeat += 1;
+        rhythmRequests.current.trainingRhythm += 1;
         backgroundPausedPlayers.forEach((player) => player.pause());
       }
     });
     return () => subscription.remove();
-  }, [bgm, button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, outsideTemptationBgm, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+  }, [bgm, button, rhythmBeat, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, outsideTemptationBgm, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
 
   useEffect(() => {
     if (!settings) return;
@@ -229,21 +305,32 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       player.loop = true;
       player.volume = mode === "outsideCharm" ? Math.min(1, settings.musicVolume * 1.35) : settings.musicVolume;
     });
-    if (appIsActive && settings.backgroundMusicEnabled && !sessionAudioActive && !roomAudioActive && loopAudioNames.length === 0) {
+    if (appIsActive && settings.backgroundMusicEnabled && !voiceAudioActive && !sessionAudioActive && !roomAudioActive && loopAudioNames.length === 0) {
       bgms[bgmMode].play();
     }
-  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, roomAudioActive, sessionAudioActive, settings]);
+  }, [appIsActive, bgm, bgmMode, loopAudioNames, outsideBattleBgm, outsideBrightBgm, outsideCharmBgm, outsideTemptationBgm, roomAudioActive, sessionAudioActive, settings, voiceAudioActive]);
 
   const updateAudioSettings = useCallback(async (partial: Partial<AppSettings>) => {
     if (!settings) return;
     const next = { ...settings, ...partial };
+    settingsRef.current = next;
     setSettings(next);
     await settingsService.save(next);
   }, [settings]);
 
   const playEffect = useCallback((name: EffectName) => {
     if (!settings?.soundEnabled) return;
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
+    const tracked = name === "rhythmBeat" || name === "trainingRhythm" ? name : null;
+    const stillAllowed = () => {
+      if (!tracked) return true;
+      const preferences = roomVoiceStore.getSnapshot();
+      const room = tracked === "rhythmBeat" ? "rhythm" : "training";
+      return appIsActiveRef.current && settingsRef.current?.soundEnabled && preferences.ready
+        && activeRoomScene.current === room && !roomAudioPausedRef.current
+        && preferences.preferences.rooms[room].builtin.includes(tracked);
+    };
+    if (!stillAllowed()) return;
+    const player = { button, rhythmBeat, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
     player.loop = name === "preparationLoop"
       || name === "defeatLoop"
       || name === "trainingStart"
@@ -251,14 +338,23 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       || name === "outsideNipple"
       || name === "outsideLossRhythm";
     player.volume = settings.soundVolume;
-    player.seekTo(0).then(() => player.play()).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
+    const request = tracked ? ++rhythmRequests.current[tracked] : null;
+    player.seekTo(0).then(() => {
+      if ((!tracked || rhythmRequests.current[tracked] === request) && stillAllowed()) player.play();
+    }).catch(console.error);
+  }, [button, rhythmBeat, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, settings, trainingRhythm, trainingStart]);
 
   const stopEffect = useCallback((name: EffectName) => {
-    const player = { button, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideNipple, outsideLossRhythm, levelUp, punishmentHit, ejaculation, complete }[name];
+    if (name === "rhythmBeat" || name === "trainingRhythm") rhythmRequests.current[name] += 1;
+    const player = { button, rhythmBeat, dialogue, preparationLoop, defeatLoop, trainingStart, trainingRhythm, outsideEscape, outsideAttack, outsideEvade, outsideEarLick, outsideLossRhythm, outsideNipple, levelUp, punishmentHit, ejaculation, complete }[name];
     player.pause();
     player.seekTo(0).catch(console.error);
-  }, [button, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+  }, [button, rhythmBeat, complete, defeatLoop, dialogue, ejaculation, levelUp, outsideAttack, outsideEarLick, outsideEscape, outsideEvade, outsideLossRhythm, outsideNipple, preparationLoop, punishmentHit, trainingRhythm, trainingStart]);
+
+  useEffect(() => {
+    if (!appIsActive || roomAudioPaused || !settings?.soundEnabled || roomAudioScene !== "rhythm" || !voicePreferences.preferences.rooms.rhythm.builtin.includes("rhythmBeat")) stopEffect("rhythmBeat");
+    if (!appIsActive || !settings?.soundEnabled || roomAudioScene !== "training" || !voicePreferences.preferences.rooms.training.builtin.includes("trainingRhythm")) stopEffect("trainingRhythm");
+  }, [appIsActive, roomAudioScene, roomAudioPaused, settings?.soundEnabled, stopEffect, voicePreferences]);
 
   const stopLoopAudio = useCallback((name?: LoopAudioName) => {
     // Update intent before pause/seek emits status events. A local single-stop
@@ -267,11 +363,13 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     if (!name) loopSleepTimer.cancel();
     loopPlayback.stop(name ? loopPlayers[name] : undefined);
     setLoopAudioNames((current) => name ? current.filter((item) => item !== name) : []);
+    return loopMediaControls.settled();
   }, [loopMediaControls, loopPlayback, loopPlayers, loopSleepTimer]);
   stopLoopAudioRef.current = stopLoopAudio;
 
   const playLoopAudio = useCallback((name: LoopAudioName) => {
     if (!settings?.soundEnabled) return;
+    stopVoiceAudio.current?.();
     setLoopAudioNames((current) => current.includes(name) ? current : [...current, name]);
     loopMediaControls.start(loopPlayers[name], () => loopPlayback.play(loopPlayers[name], settings.soundVolume));
   }, [loopMediaControls, loopPlayback, loopPlayers, settings]);
@@ -302,13 +400,17 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
       setLoopSleepMinutes,
       setSessionAudioActive,
       setRoomAudioScene,
+      setRoomAudioPaused,
       shouldMixVideoAudio,
+      setVoiceAudioActive,
+      registerVoiceAudioStop,
     }),
-    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, playEffect, playLoopAudio, settings, shouldMixVideoAudio, stopEffect, stopLoopAudio, updateAudioSettings],
+    [bgmMode, loopAudioNames, loopSleepDeadline, setLoopSleepMinutes, setRoomAudioScene, setRoomAudioPaused, playEffect, playLoopAudio, settings, shouldMixVideoAudio, stopEffect, stopLoopAudio, updateAudioSettings, registerVoiceAudioStop],
   );
   return (
     <AudioContext.Provider value={value}>
-      <RoomAudioPlayback tracks={roomAudioTracks} />
+      <RoomAudioPlayback tracks={roomAudioTracks} storedTracks={storedRoomTracks}
+        paused={roomAudioScene === "rhythm" && roomAudioPaused && !rhythmVoices?.resting} />
       {children}
     </AudioContext.Provider>
   );

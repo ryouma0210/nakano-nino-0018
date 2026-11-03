@@ -8,9 +8,13 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Screen } from "@/components/Screen";
 import { DesktopDisplaySettings } from "@/components/DesktopDisplaySettings";
-import { execute } from "@/database/client";
+import { execute, transaction } from "@/database/client";
+import { pointRepository } from "@/repositories/rewardRepository";
+import { pointMilestoneRepository } from "@/repositories/pointMilestoneRepository";
 import { clearSugoroku } from "@/features/sugoroku/storage";
 import { clearOthelloHistory } from "@/features/othello/storage";
+import { rhythmChallengeService } from "@/services/rhythmChallengeService";
+import { roomVoiceStore } from "@/audio/roomVoiceStore";
 import { clearEndurance } from "@/features/endurance/service";
 import { MANAGEMENT_ROULETTE_KEY } from "@/services/managementRouletteStorage";
 import { disposalHistoryService } from "@/services/disposalHistoryService";
@@ -21,6 +25,7 @@ import { notificationService } from "@/services/notificationService";
 import { defaultSettings, settingsService } from "@/services/settingsService";
 import { slaveContractService } from "@/services/slaveContractService";
 import { useAppAudio } from "@/audio/AudioProvider";
+import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
 import { contractService, dailyOrderService } from "@/services/gameRoomService";
 import { useAppModal } from "@/components/AppModalProvider";
 import { toDateTimeKey } from "@/utils/date";
@@ -31,18 +36,20 @@ type PartialResetKey =
   | "points"
   | "contract"
   | "settings"
-  | "files";
+  | "files"
+  | "voices";
 
 const partialResetItems: {
   key: PartialResetKey;
   label: string;
   description: string;
 }[] = [
-  { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置き・すごろく・オセロ・ゴミ汁廃棄履歴・貞操帯管理の全記録と添付画像・命令の閲覧履歴" },
+  { key: "records", label: "調教日記・各部屋の記録", description: "敗北・準備・本日の命令・射精管理・調教・お仕置き・すごろく・オセロ・耐久チャレンジ・ゴミ汁廃棄履歴・貞操帯管理の全記録と添付画像・命令の閲覧履歴" },
   { key: "points", label: "実績・ポイント・獲得済みご褒美", description: "ポイント残高・交換履歴・コレクションのご褒美" },
   { key: "contract", label: "契約書・契約ルール", description: "署名・契約日・解約日・契約後の追加ルール" },
-  { key: "settings", label: "サウンド設定", description: "BGM・効果音の設定を初期値へ戻します" },
-  { key: "files", label: "格納ファイル", description: "調教用・お仕置き用の画像と動画・貞操帯管理の添付画像" },
+  { key: "settings", label: "サウンド設定", description: "BGM・効果音・各部屋のボイス選択を初期値へ戻します" },
+  { key: "files", label: "格納ファイル", description: "格納した画像と動画・貞操帯管理の添付画像・耐久チャレンジの画像設定" },
+  { key: "voices", label: "ボイス格納", description: "格納した音声・表示名・再生順・再生モード" },
 ];
 
 async function disposeBackup(backup: PickedBackup | null) {
@@ -55,6 +62,7 @@ async function disposeBackup(backup: PickedBackup | null) {
 
 export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   const { settings, updateAudioSettings } = useAppAudio();
+  const { clearVoices, stop: stopVoices } = useVoiceLibrary();
   const { showNotice, showError } = useAppModal();
   const [cacheSize, setCacheSize] = useState(0);
   const [resetConfirmation, setResetConfirmation] = useState(false);
@@ -175,8 +183,11 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
     pendingRestoreRef.current = null;
     setPendingRestore(null);
     try {
+      if ("voiceLibrary" in pending && pending.voiceLibrary) stopVoices();
       const kind = await backupService.restore(pending);
+      pointRepository.notifyChanged();
       await updateAudioSettings(await settingsService.load());
+      await roomVoiceStore.load();
       if (!mountedRef.current) return;
       loadSize();
       showNotice(
@@ -193,6 +204,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   async function executeReset() {
     if (!beginOperation()) return;
     try {
+      await clearVoices();
       await fileStorageService.withExclusiveFiles(async () => {
         execute("DELETE FROM timer_histories");
         execute("DELETE FROM management_daily_tasks");
@@ -210,10 +222,13 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
         execute("DELETE FROM habits");
         execute("DELETE FROM timer_presets");
         execute("DELETE FROM app_settings");
+        pointRepository.notifyChanged();
         await settingsService.reset();
         await dailyOrderService.clearAll();
         await clearSugoroku();
         await clearOthelloHistory();
+        await rhythmChallengeService.clear();
+        await roomVoiceStore.reset();
         clearEndurance(true);
         await disposalHistoryService.clear();
         await chastityHistoryService.clear();
@@ -243,6 +258,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
   async function executePartialReset() {
     if (!beginOperation()) return;
     try {
+      if (partialSelection.includes("voices")) await clearVoices();
       await fileStorageService.withExclusiveFiles(async () => {
         const selected = new Set(partialSelection);
         if (selected.has("records")) {
@@ -256,6 +272,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           await dailyOrderService.clearOrders();
           await clearSugoroku();
           await clearOthelloHistory();
+          await rhythmChallengeService.clearHistory();
           clearEndurance();
           await disposalHistoryService.clear();
           await chastityHistoryService.clear();
@@ -265,14 +282,26 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           customCommandService.clearRecords();
         }
         if (selected.has("points")) {
-          execute("DELETE FROM reward_redemptions");
-          execute("DELETE FROM point_transactions");
+          const resetAt = toDateTimeKey();
+          transaction(() => {
+            execute("DELETE FROM reward_redemptions");
+            execute("DELETE FROM point_transactions");
+            pointMilestoneRepository.clear();
+            execute(
+              `INSERT INTO app_settings(setting_key, setting_value, updated_at)
+               VALUES('points_reset_at', ?, ?)
+               ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
+              [resetAt, resetAt],
+            );
+          });
+          pointRepository.notifyChanged();
         }
         if (selected.has("contract")) {
           await contractService.clear();
           await slaveContractService.clear();
         }
         if (selected.has("settings")) {
+          await roomVoiceStore.reset();
           await updateAudioSettings({
             backgroundMusicEnabled: defaultSettings.backgroundMusicEnabled,
             soundEnabled: defaultSettings.soundEnabled,
@@ -282,15 +311,9 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           });
           await notificationService.cancelAll();
         }
-        if (selected.has("files")) await fileStorageService.clear();
-        if (selected.has("points")) {
-          const resetAt = toDateTimeKey();
-          execute(
-            `INSERT INTO app_settings(setting_key, setting_value, updated_at)
-             VALUES('points_reset_at', ?, ?)
-             ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=excluded.updated_at`,
-            [resetAt, resetAt],
-          );
+        if (selected.has("files")) {
+          await fileStorageService.clear();
+          await rhythmChallengeService.clearImages();
         }
         execute("DELETE FROM journal_tags WHERE journal_id NOT IN (SELECT id FROM journals)");
         execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM journal_tags)");
@@ -409,6 +432,8 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
           onPress={() => exportBackup("complete")}
         />
         <AppText variant="muted">セーブデータに加えて、格納した画像・動画・音声も保存します。</AppText>
+        <AppText variant="muted">ボイス格納の音声・名前・フォルダー・再生順も、完全バックアップに含まれます。</AppText>
+        <AppText variant="muted">ボイスを含まない旧バックアップとセーブデータのみの復元では、現在のボイスを残します。</AppText>
         <AppText variant="muted">完全バックアップはZIP形式、セーブデータのみはJSON形式で保存します。</AppText>
         <AppText variant="muted">貞操帯管理の添付画像も保存する場合は、完全バックアップを選んでください。</AppText>
         <PrimaryButton
@@ -525,7 +550,7 @@ export function AppSettings({ fromStart = false }: { fromStart?: boolean }) {
       <ConfirmModal
         visible={resetConfirmation}
         title="全データを初期化しますか？"
-        message="次のデータをすべて削除します。\n\n・調教日記と準備・敗北記録\n・本日の命令・自分で追加した命令・命令の閲覧履歴\n・お仕置きと射精管理の履歴\n・すごろくとオセロの記録\n・ゴミ汁廃棄履歴・貞操帯管理記録と添付画像\n・実績・ポイント・獲得済みご褒美\n・契約書と契約ルール\n・名前とサウンド設定\n・格納ファイル\n\nこの操作は元に戻せません。"
+        message="次のデータをすべて削除します。\n\n・調教日記と準備・敗北記録\n・本日の命令・自分で追加した命令・命令の閲覧履歴\n・お仕置きと射精管理の履歴\n・すごろくとオセロの記録\n・耐久チャレンジの記録と画像設定\n・ゴミ汁廃棄履歴・貞操帯管理記録と添付画像\n・実績・ポイント・獲得済みご褒美\n・契約書と契約ルール\n・名前とサウンド設定・各部屋のボイス選択\n・格納ファイルとボイス\n\nこの操作は元に戻せません。"
         confirmLabel="削除を実行"
         confirmTone="danger"
         onCancel={() => setResetConfirmation(false)}

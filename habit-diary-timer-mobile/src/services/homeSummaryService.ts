@@ -82,6 +82,7 @@ const taskDisplayOrder: Record<string, number> = {
   sugoroku: 11,
   othello: 12,
   endurance: 13,
+  rhythm: 14,
 };
 const outsideDailyPointLimit = 100;
 // Match the three 10-point daily rewards and dated claim flags in outside/quests.ts.
@@ -171,6 +172,7 @@ export function buildHomeSummary(snapshot: HomeSnapshot): HomeSummary {
     { id: "sugoroku", title: "すごろく", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/sugoroku" },
     { id: "endurance", title: "勃起我慢", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/endurance" },
     { id: "othello", title: "オセロ", detail: "初回クリア報酬（難易度共通）", href: "/(tabs)/othello" },
+    { id: "rhythm", title: "耐久チャレンジ", detail: "初回クリア報酬（寸止め10回以上）", href: "/(tabs)/rhythm-challenge" },
   ];
   tasks.push(...gameTasks.map((game) => {
     const completed = completedGames.has(game.id);

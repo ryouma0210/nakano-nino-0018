@@ -1,6 +1,7 @@
 import { execute, queryOne, transaction } from "@/database/client";
 import { dailyGameRewardService } from "@/services/dailyGameRewardService";
 import { pointRepository } from "@/repositories/rewardRepository";
+import { GAME_UNLOCK_PASSWORD } from "@nino/shared/gamePassword";
 import type { EnduranceResult } from "./game";
 import { addEnduranceResult, ENDURANCE_CURRENT_KEY, ENDURANCE_HISTORY_KEY, ENDURANCE_UNLOCK_KEY, parseEnduranceCurrent, parseEnduranceHistory, parseEnduranceUnlock, type EnduranceSession } from "./storage";
 
@@ -56,7 +57,7 @@ export function saveEnduranceResult(result: EnduranceResult) {
   return next;
 }
 export function unlockEndurance(password: string): boolean {
-  if (password !== "NinoLave20260505") return false;
+  if (password !== GAME_UNLOCK_PASSWORD) return false;
   transaction(() => write(ENDURANCE_UNLOCK_KEY, true));
   return true;
 }

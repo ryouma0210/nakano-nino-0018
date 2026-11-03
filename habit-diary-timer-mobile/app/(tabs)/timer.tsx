@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Image, Modal, StyleSheet, View } from "react-native";
+import { Image, Modal, ScrollView, StyleSheet, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { AppText } from "@/components/AppText";
 import { PageTitle } from "@/components/PageTitle";
+import { useRoomVoicePlayback } from "@/audio/useRoomVoicePlayback";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { RoomConversation } from "@/components/RoomConversation";
@@ -97,8 +98,6 @@ export default function TimerScreen() {
   const nextSpeedChangeAt = useRef(0);
   const {
     playEffect,
-    setRoomAudioScene,
-    setSessionAudioActive,
     settings,
   } = useAppAudio();
   const { showNotice } = useAppModal();
@@ -109,17 +108,7 @@ export default function TimerScreen() {
   const unsaved = saveState.pending !== null;
   const exitGuard = usePendingResultGuard(unsaved, resultSave.hasPending, resultSave.discard);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!running) return;
-      setSessionAudioActive(true);
-      setRoomAudioScene("punishment");
-      return () => {
-        setRoomAudioScene(null);
-        setSessionAudioActive(false);
-      };
-    }, [running, setRoomAudioScene, setSessionAudioActive]),
-  );
+  useRoomVoicePlayback("punishment", running);
   useEffect(() => {
     contractService.load().then((contract) => {
       const minimum = contract.signedAt ? 30 : 1;
@@ -362,8 +351,9 @@ export default function TimerScreen() {
         statusBarTranslucent
         onRequestClose={() => {}}
       >
-        <View
-          style={[
+        <ScrollView
+          style={styles.fullscreenScroll}
+          contentContainerStyle={[
             styles.fullscreenWrap,
             {
               paddingTop: Math.max(12, insets.top),
@@ -427,15 +417,16 @@ export default function TimerScreen() {
             </View>
           </View>
           <PrimaryButton title="ギブアップ" tone="danger" onPress={stop} />
-        </View>
+        </ScrollView>
       </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  fullscreenWrap: { flex: 1, gap: 8, paddingHorizontal: 10, backgroundColor: "#000" },
-  fullscreenMediaFrame: { flex: 1, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#000" },
+  fullscreenScroll: { flex: 1, backgroundColor: "#000" },
+  fullscreenWrap: { flexGrow: 1, gap: 8, paddingHorizontal: 10 },
+  fullscreenMediaFrame: { flex: 1, minHeight: 76, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#000" },
   mediaChoices: { flexDirection: "row", gap: 8 },
   mediaChoice: { flex: 1 },
   punishmentComment: {

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { AppState, Platform } from "react-native";
-import { setAudioModeAsync, type AudioPlayer } from "expo-audio";
+import { type AudioPlayer } from "expo-audio";
+import { setBackgroundAudioMode } from "./backgroundAudioMode";
 import { createLoopMediaControls } from "./loopMediaControls";
 import { createBrowserLoopMediaSession } from "./loopMediaSession";
 
@@ -15,11 +16,7 @@ export function useLoopMediaControls(
   const callbacks = useRef({ onExternalStop, onUnexpectedPlayback, onStartFailure });
   callbacks.current = { onExternalStop, onUnexpectedPlayback, onStartFailure };
   const controls = useMemo(() => createLoopMediaControls(players, {
-    setMode: (interruptionMode) => setAudioModeAsync({
-      interruptionMode,
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-    }),
+    setMode: setBackgroundAudioMode,
     onExternalStop: () => callbacks.current.onExternalStop(),
     onUnexpectedPlayback: (player) => callbacks.current.onUnexpectedPlayback(player),
     onStartFailure: (player) => callbacks.current.onStartFailure(player),

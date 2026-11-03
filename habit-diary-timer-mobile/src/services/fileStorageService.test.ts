@@ -51,6 +51,7 @@ beforeEach(async () => {
   mocks.platform.OS = "android";
   mocks.info.mockResolvedValue({ exists: true, isDirectory: true });
   mocks.mkdir.mockResolvedValue(undefined);
+  mocks.list.mockResolvedValue([]);
   nativeFiles = new Map();
   mocks.copy.mockImplementation(async ({ from, to }) => {
     nativeFiles.set(to, from);
@@ -163,7 +164,7 @@ describe("native file imports", () => {
     const onProgress = vi.fn();
 
     await expect(fileStorageService.pickAndStore("punishment", onProgress))
-      .resolves.toEqual({ stored: 3, failed: [] });
+      .resolves.toEqual({ stored: 3, skipped: [], failed: [] });
 
     expect(mocks.pick).toHaveBeenCalledWith({ copyToCacheDirectory: true, multiple: true });
     expect([...nativeFiles.values()]).toEqual(assets.map((asset) => asset.uri));
@@ -188,6 +189,10 @@ describe("native file imports", () => {
   });
 
   it("keeps identically named files distinct even when imported in the same millisecond", async () => {
+    installNativeRestoreFileSystem();
+    nativeFiles.clear();
+    nativeFiles.set("file:///cache/a.mp4", "aaa");
+    nativeFiles.set("file:///cache/b.mp4", "bbb");
     vi.spyOn(Date, "now").mockReturnValue(123456789);
     mocks.pick.mockResolvedValue({
       canceled: false,
@@ -197,10 +202,9 @@ describe("native file imports", () => {
       ],
     });
 
-    await expect(fileStorageService.pickAndStore()).resolves.toEqual({ stored: 2, failed: [] });
+    await expect(fileStorageService.pickAndStore()).resolves.toEqual({ stored: 2, skipped: [], failed: [] });
 
-    expect(nativeFiles.size).toBe(2);
-    expect([...nativeFiles.values()]).toEqual(["file:///cache/a.mp4", "file:///cache/b.mp4"]);
+    expect((await fileStorageService.list()).map((file) => nativeFiles.get(file.uri))).toEqual(["aaa", "bbb"]);
   });
 
   it("cleans up a failed partial copy while retaining successes and continuing the batch", async () => {
@@ -225,7 +229,7 @@ describe("native file imports", () => {
     const onProgress = vi.fn();
 
     await expect(fileStorageService.pickAndStore("training", onProgress))
-      .resolves.toEqual({ stored: 2, failed: ["broken.mp4"] });
+      .resolves.toEqual({ stored: 2, skipped: [], failed: ["broken.mp4"] });
 
     expect([...nativeFiles.values()]).toEqual([
       "existing data", "file:///cache/first.mp4", "file:///cache/last.mp4",
@@ -272,10 +276,10 @@ describe("native file imports", () => {
       });
 
       finishSecondCopy.resolve(undefined);
-      await expect(result).resolves.toEqual({ stored: 2, failed: ["broken.mp4"] });
+      await expect(result).resolves.toEqual({ stored: 2, skipped: [], failed: ["broken.mp4"] });
 
       expect(fileStorageService.getImportState()).toEqual({
-        importing: false, progress: null, result: { stored: 2, failed: ["broken.mp4"] },
+        importing: false, progress: null, result: { stored: 2, skipped: [], failed: ["broken.mp4"] },
       });
       expect(returnedScreen).toHaveBeenCalled();
       expect(originalScreen).toHaveBeenCalledTimes(notificationsBeforeLeaving);
@@ -284,7 +288,7 @@ describe("native file imports", () => {
       leaveReturnedScreen();
     }
     // The result is kept by the service even after the last screen leaves.
-    expect(fileStorageService.getImportState().result).toEqual({ stored: 2, failed: ["broken.mp4"] });
+    expect(fileStorageService.getImportState().result).toEqual({ stored: 2, skipped: [], failed: ["broken.mp4"] });
   });
 
   it("opens only one picker at a time and allows a new import after cancellation", async () => {
@@ -603,7 +607,7 @@ describe("web file imports", () => {
     ];
     await web.emit("change");
 
-    await expect(result).resolves.toEqual({ stored: 2, failed: [] });
+    await expect(result).resolves.toEqual({ stored: 2, skipped: [], failed: [] });
     const allFiles = await fileStorageService.list();
     expect(allFiles).toHaveLength(3);
     const imported = await fileStorageService.list("punishment");
@@ -650,7 +654,7 @@ describe("web file imports", () => {
 
     await web.emit("change");
 
-    await expect(result).resolves.toEqual({ stored: 2, failed: ["too-large.mp4"] });
+    await expect(result).resolves.toEqual({ stored: 2, skipped: [], failed: ["too-large.mp4"] });
     const remaining = await fileStorageService.list();
     const contents = await Promise.all(remaining.map(async (file) => (await fileStorageService.getBlob(file))?.text()));
     expect(contents.sort()).toEqual(["old", "one", "two"]);
@@ -673,6 +677,201 @@ describe("web file imports", () => {
     expect(remaining.map(({ name, purpose }) => ({ name, purpose }))).toEqual(expect.arrayContaining([
       { name: sameRoom.name, purpose: sameRoom.purpose }, { name: otherRoom.name, purpose: otherRoom.purpose },
     ]));
+  });
+});
+
+describe("content-aware file imports", () => {
+  it("skips native identical content across usages and within a batch, preserving changed and differently named files", async () => {
+    installNativeRestoreFileSystem();
+    const timestamp = 1_800_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(timestamp);
+    const name = `${timestamp}_0_clip.mp4`;
+    await fileStorageService.restoreFromBackup([
+      { name, size: 3, purpose: "training", usages: ["endurance"], mimeType: "video/mp4", data: "b2xk" },
+    ]);
+    const [original] = await fileStorageService.list();
+    const sources = [
+      { name: "clip.mp4", content: "old" },
+      { name: "clip.mp4", content: "new" },
+      { name: "clip.mp4", content: "new" },
+      { name: "renamed.mp4", content: "old" },
+      { name: "clip.mp4", content: "longer" },
+    ];
+    const assets = sources.map((source, index) => {
+      const uri = `file:///cache/${index}.mp4`;
+      nativeFiles.set(uri, source.content);
+      return { name: source.name, uri };
+    });
+    mocks.pick.mockResolvedValue({ canceled: false, assets });
+    const onProgress = vi.fn();
+    await expect(fileStorageService.pickAndStore("training", onProgress)).resolves.toEqual({
+      stored: 3, skipped: ["clip.mp4", "clip.mp4"], failed: [],
+    });
+    const files = await fileStorageService.list();
+    expect(files).toHaveLength(4);
+    expect(files.find((file) => file.uri === original.uri)).toEqual(original);
+    expect(nativeFiles.get(original.uri)).toBe("old");
+    expect(new Set(files.map((file) => file.uri)).size).toBe(4);
+    expect(files.map((file) => nativeFiles.get(file.uri)).sort()).toEqual(["longer", "new", "old", "old"]);
+    expect(onProgress.mock.calls.map(([progress]) => progress.completed)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(await fileStorageService.list("endurance")).toEqual([original]);
+  });
+
+  it("recognizes legacy native root files and old timestamp prefixes after reload", async () => {
+    installNativeRestoreFileSystem();
+    nativeFiles.set(`${nativeDirectory}1600000000000_old.mp4`, "old");
+    nativeFiles.set("file:///cache/legacy.mp4", "old");
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [
+      { name: "legacy.mp4", uri: "file:///cache/legacy.mp4" },
+      { name: "old.mp4", uri: "file:///cache/legacy.mp4" },
+    ] });
+    vi.resetModules();
+    ({ fileStorageService } = await import("./fileStorageService"));
+    await expect(fileStorageService.pickAndStore("punishment")).resolves.toEqual({
+      stored: 0, skipped: ["legacy.mp4", "old.mp4"], failed: [],
+    });
+    expect(mocks.copy).not.toHaveBeenCalled();
+  });
+
+  it("excludes native private attachments from library comparisons", async () => {
+    const { directories } = installNativeRestoreFileSystem();
+    directories.add(`${nativeDirectory}chastity/`);
+    nativeFiles.set(`${nativeDirectory}chastity/1700000000000_0_photo.png`, "image");
+    nativeFiles.set("file:///cache/photo.png", "image");
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: "photo.png", uri: "file:///cache/photo.png" }] });
+    await expect(fileStorageService.pickAndStore()).resolves.toEqual({ stored: 1, skipped: [], failed: [] });
+    expect(await fileStorageService.list("chastity")).toHaveLength(1);
+    expect((await fileStorageService.list("training")).filter((file) => file.name.endsWith("photo.png"))).toHaveLength(1);
+  });
+
+  it("reports native comparison failures and continues without altering the existing file", async () => {
+    const { oldFile } = installNativeRestoreFileSystem();
+    nativeFiles.set("file:///cache/duplicate.mp4", "old");
+    nativeFiles.set("file:///cache/new.mp4", "new");
+    const read = mocks.read.getMockImplementation()!;
+    mocks.read.mockImplementation(async (uri, options) => {
+      if (uri === oldFile) throw new Error("Cannot read existing file");
+      return read(uri, options);
+    });
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [
+      { name: "legacy.mp4", uri: "file:///cache/duplicate.mp4" },
+      { name: "new.mp4", uri: "file:///cache/new.mp4" },
+    ] });
+    await expect(fileStorageService.pickAndStore()).resolves.toEqual({ stored: 1, skipped: [], failed: ["legacy.mp4"] });
+    expect(nativeFiles.get(oldFile)).toBe("old");
+    expect(mocks.copy).toHaveBeenCalledOnce();
+  });
+
+  it("does not treat a failed partial native copy as an imported duplicate later in the batch", async () => {
+    installNativeRestoreFileSystem();
+    nativeFiles.set("file:///cache/first.mp4", "new");
+    nativeFiles.set("file:///cache/second.mp4", "new");
+    const copy = mocks.copy.getMockImplementation()!;
+    mocks.copy.mockImplementation(async (paths) => {
+      await copy(paths);
+      if (paths.from.endsWith("first.mp4")) throw new Error("Interrupted copy");
+    });
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [
+      { name: "changed.mp4", uri: "file:///cache/first.mp4" },
+      { name: "changed.mp4", uri: "file:///cache/second.mp4" },
+    ] });
+    await expect(fileStorageService.pickAndStore()).resolves.toEqual({ stored: 1, skipped: [], failed: ["changed.mp4"] });
+    expect((await fileStorageService.list()).filter((file) => file.name.endsWith("changed.mp4"))).toHaveLength(1);
+  });
+
+  it("skips matching browser blobs across usages and within a batch while preserving same-size changes", async () => {
+    const web = createWebPicker();
+    const timestamp = 1_800_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(timestamp);
+    await fileStorageService.restoreFromBackup([
+      { name: `${timestamp}_0_clip.mp4`, size: 3, purpose: "training", usages: ["endurance"], mimeType: "video/mp4", data: "b2xk" },
+    ]);
+    const [original] = await fileStorageService.list();
+    const result = fileStorageService.pickAndStore("training");
+    expect(web.input.click).toHaveBeenCalledOnce();
+    web.input.files = [
+      new File(["old"], "clip.mp4", { type: "video/mp4" }),
+      new File(["new"], "clip.mp4", { type: "video/mp4" }),
+      new File(["new"], "clip.mp4", { type: "video/mp4" }),
+      new File(["old"], "renamed.mp4", { type: "video/mp4" }),
+      new File(["longer"], "clip.mp4", { type: "video/mp4" }),
+    ];
+    await web.emit("change");
+    await expect(result).resolves.toEqual({ stored: 3, skipped: ["clip.mp4", "clip.mp4"], failed: [] });
+    const files = await fileStorageService.list();
+    expect(files).toHaveLength(4);
+    expect(files.find((file) => file.name === original.name)).toEqual(original);
+    expect(await (await fileStorageService.getBlob(original))?.text()).toBe("old");
+    expect(new Set(files.map((file) => file.name)).size).toBe(4);
+    expect(await fileStorageService.list("endurance")).toEqual([original]);
+    expect(web.input.remove).toHaveBeenCalledOnce();
+  });
+
+  it("compares migrated browser files and names that already contain a timestamp", async () => {
+    const web = createWebPicker();
+    web.storage.set(webStorageKey, JSON.stringify([
+      { name: "1600000000000_old.mp4", uri: "data:video/mp4;base64,b2xk", size: 3, purpose: "punishment" },
+      { name: "1700000000000_2_1600000000000_7_named.mp4", uri: "data:video/mp4;base64,b2xk", size: 3, purpose: "training" },
+    ]));
+    const result = fileStorageService.pickAndStore();
+    web.input.files = [new File(["old"], "old.mp4"), new File(["old"], "1600000000000_7_named.mp4")];
+    await web.emit("change");
+    await expect(result).resolves.toEqual({ stored: 0, skipped: ["old.mp4", "1600000000000_7_named.mp4"], failed: [] });
+    expect(await fileStorageService.list()).toHaveLength(2);
+  });
+
+  it("excludes browser private attachments from library comparisons", async () => {
+    const web = createWebPicker();
+    await fileStorageService.restoreFromBackup([
+      { name: "1700000000000_0_photo.png", size: 3, purpose: "chastity", mimeType: "image/png", data: "b2xk" },
+    ]);
+    const result = fileStorageService.pickAndStore();
+    web.input.files = [new File(["old"], "photo.png", { type: "image/png" })];
+    await web.emit("change");
+    await expect(result).resolves.toEqual({ stored: 1, skipped: [], failed: [] });
+    expect(await fileStorageService.list("chastity")).toHaveLength(1);
+    expect(await fileStorageService.list("training")).toHaveLength(1);
+  });
+
+  it("reports browser comparison failures without claiming a duplicate and continues with other files", async () => {
+    const web = createWebPicker();
+    await fileStorageService.restoreFromBackup([
+      { name: "same.mp4", size: 3, purpose: "training", mimeType: "video/mp4", data: "b2xk" },
+    ]);
+    const failedFile = new File(["old"], "same.mp4");
+    vi.spyOn(failedFile, "slice").mockImplementation(() => { throw new Error("Read failed"); });
+    const result = fileStorageService.pickAndStore();
+    web.input.files = [failedFile, new File(["new"], "new.mp4")];
+    await web.emit("change");
+    await expect(result).resolves.toEqual({ stored: 1, skipped: [], failed: ["same.mp4"] });
+    const files = await fileStorageService.list();
+    expect(files).toHaveLength(2);
+    expect(await (await fileStorageService.getBlob(files.find((file) => file.name === "same.mp4")!))?.text()).toBe("old");
+  });
+
+  it("cleans up the browser picker and releases importing when the candidate list cannot be loaded", async () => {
+    const web = createWebPicker();
+    const { webFileStorage } = await import("./webFileStorage");
+    vi.spyOn(webFileStorage, "list").mockRejectedValueOnce(new Error("Storage unavailable"));
+    const result = fileStorageService.pickAndStore();
+    const rejected = expect(result).rejects.toThrow("Storage unavailable");
+    web.input.files = [new File(["new"], "new.mp4")];
+    await web.emit("change");
+    await rejected;
+    expect(web.input.remove).toHaveBeenCalledOnce();
+    expect(fileStorageService.getImportState()).toEqual({ importing: false, progress: null, result: null });
+  });
+
+  it("does not add failed browser writes to the duplicate candidates", async () => {
+    const web = createWebPicker();
+    const { webFileStorage } = await import("./webFileStorage");
+    const put = webFileStorage.put;
+    vi.spyOn(webFileStorage, "put").mockRejectedValueOnce(new Error("QuotaExceededError")).mockImplementation(put);
+    const result = fileStorageService.pickAndStore();
+    web.input.files = [new File(["new"], "same.mp4"), new File(["new"], "same.mp4")];
+    await web.emit("change");
+    await expect(result).resolves.toEqual({ stored: 1, skipped: [], failed: ["same.mp4"] });
+    expect(await fileStorageService.list()).toHaveLength(1);
   });
 });
 

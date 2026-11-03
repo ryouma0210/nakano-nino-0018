@@ -151,6 +151,7 @@ export function createLoopMediaControls<Player extends LoopMediaPlayer>(players:
     checkPlayer,
     check() { players.forEach((player) => checkPlayer(player)); },
     hasRequests() { return requested.size > 0; },
+    settled() { return modeQueue; },
     updateTitle(title: string) {
       metadata = { title, artist: "" };
       if (representative) {

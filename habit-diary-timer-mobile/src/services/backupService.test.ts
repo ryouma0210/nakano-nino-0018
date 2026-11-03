@@ -7,9 +7,12 @@ import { loadOthello, loadOthelloHistory, OTHELLO_STORAGE_KEY, saveOthelloCurren
 import { createGame, playMove } from "../features/othello/game";
 import { createGame as createSugorokuGame } from "../features/sugoroku/game";
 import { loadSugoroku, SUGOROKU_STORAGE_KEY } from "../features/sugoroku/storage";
+import { RHYTHM_STORAGE_KEY, rhythmChallengeService, type RhythmHistoryEntry } from "./rhythmChallengeService";
+import { ROOM_VOICE_PREFERENCES_KEY, defaultRoomVoicePreferences } from "../audio/roomVoiceSelection";
 import { createEnduranceGame, failEnduranceSlide, finishEndurance } from "../features/endurance/game";
 import { createEnduranceSession, ENDURANCE_CURRENT_KEY } from "../features/endurance/storage";
 import { createCountdown } from "../features/sugoroku/countdown";
+import type { VoiceLibrary } from "../features/voices/library";
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, storage: new Map<string, string>(), sources: new Map<string, Uint8Array>(),
@@ -18,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(), getBlob: vi.fn(), prepare: vi.fn(), activate: vi.fn(), rollback: vi.fn(), finalize: vi.fn(),
   execute: vi.fn(), query: vi.fn(), exclusive: vi.fn(), pick: vi.fn(), source: vi.fn(),
   sourceRead: vi.fn(), close: vi.fn(), stage: vi.fn(), dispose: vi.fn(),
+  voiceSnapshot: vi.fn(), voicePrepare: vi.fn(), voiceActivate: vi.fn(), voiceRollback: vi.fn(), voiceFinalize: vi.fn(),
 }));
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
@@ -35,6 +39,9 @@ vi.mock("@/services/fileStorageService", () => ({
   mimeTypeForName: () => "video/mp4",
   fileStorageService: { list: mocks.list, getBlob: mocks.getBlob, prepareRestore: mocks.prepare, withExclusiveFiles: mocks.exclusive },
 }));
+vi.mock("./voiceStorageService", () => ({ voiceStorageService: {
+  withExclusiveBackup: async (operation: (access: unknown) => Promise<unknown>) => operation({ snapshot: mocks.voiceSnapshot, prepareRestore: mocks.voicePrepare }),
+} }));
 vi.mock("./backupIO", () => ({
   invalidBackupMessage: "バックアップファイルが壊れているか、対応していない形式です。",
   openBackupSource: mocks.source,
@@ -109,6 +116,8 @@ beforeEach(() => {
   mocks.list.mockResolvedValue([]); mocks.query.mockReturnValue([]);
   mocks.getBlob.mockResolvedValue(undefined);
   mocks.prepare.mockResolvedValue({ activate: mocks.activate, rollback: mocks.rollback, finalize: mocks.finalize });
+  mocks.voiceSnapshot.mockResolvedValue({ library: { version: 3, voices: [], folders: [], mode: "one", scope: "all" }, files: [] });
+  mocks.voicePrepare.mockResolvedValue({ activate: mocks.voiceActivate, rollback: mocks.voiceRollback, finalize: mocks.voiceFinalize });
   mocks.exclusive.mockImplementation(async (operation: () => Promise<unknown>) => operation());
   mocks.stage.mockResolvedValue({ uri: "file:///stage/", dispose: mocks.dispose });
   mocks.source.mockImplementation(async (uri: string, blob?: Blob) => {
@@ -126,6 +135,72 @@ beforeEach(() => {
 });
 
 describe("bounded backup export and import", () => {
+  function voiceFixture(bytes: Uint8Array): VoiceLibrary {
+    return { version: 3, folders: [{ id: "folder-a", name: "Person A" }, { id: "folder-b", name: "Bedtime" }], scope: "folder-a", mode: "all",
+      voices: [{ id: "voice-one", fileName: "voice-one.mp3", name: "Custom name", originalName: "Original.mp3", size: bytes.length, mimeType: "audio/mpeg", folderIds: ["folder-a", "folder-b"] }] };
+  }
+
+  it.each(["android", "web"])("exports each shared voice only once and stages its original bytes on %s", async (platform) => {
+    mocks.platform.OS = platform;
+    const audio = Uint8Array.from({ length: 900_013 }, (_, index) => (index * 17) % 251);
+    const library = voiceFixture(audio);
+    mocks.sources.set("file:///voice-one", audio);
+    mocks.voiceSnapshot.mockResolvedValue({ library, files: [{ id: "voice-one", uri: "file:///voice-one", ...(platform === "web" ? { blob: new Blob([audio], { type: "audio/mpeg" }) } : {}) }] });
+    await backupService.export("complete");
+    const archive = join(mocks.chunks); const entries = await readBackupArchive(reader(archive));
+    expect(entries.map((entry) => entry.name)).toEqual(["manifest.json", "voices/000000"]);
+    const manifest = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
+    expect(manifest).toMatchObject({ version: 3, voiceLibrary: library });
+    select(archive);
+    const picked = (await backupService.pick())!;
+    expect(picked.voiceLibrary).toEqual(library); expect(picked.voices).toHaveLength(1);
+    const stagedBytes = platform === "web" ? new Uint8Array(await picked.voices![0].blob!.arrayBuffer()) : join(mocks.staged.get(picked.voices![0].uri!)!);
+    expect(Buffer.compare(stagedBytes, audio)).toBe(0);
+    await backupService.restore(picked);
+    expect(mocks.voicePrepare).toHaveBeenCalledWith(library, picked.voices);
+    expect(mocks.voiceActivate).toHaveBeenCalledOnce(); expect(mocks.voiceFinalize).toHaveBeenCalledOnce();
+    expect(mocks.voiceRollback).not.toHaveBeenCalled();
+    expect(mocks.sourceRead.mock.calls.every(([, , length]) => length <= 256 * 1024)).toBe(true);
+  });
+
+  it("cancels a selected voice backup by disposing staging without replacing anything", async () => {
+    const bytes = new Uint8Array([4, 5, 6]); const library = voiceFixture(bytes);
+    mocks.sources.set("file:///voice", bytes); mocks.voiceSnapshot.mockResolvedValue({ library, files: [{ id: "voice-one", uri: "file:///voice" }] });
+    await backupService.export("complete"); select(join(mocks.chunks));
+    const picked = (await backupService.pick())!;
+    expect(picked.voices).toHaveLength(1);
+    await picked.dispose();
+    expect(mocks.dispose).toHaveBeenCalledOnce(); expect(mocks.voicePrepare).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("discards prepared media if staging voice files fails before activation", async () => {
+    const payload = await savePayload(); payload.kind = "complete"; payload.files = [];
+    const picked: PickedBackup = { kind: "complete", payload, voiceLibrary: voiceFixture(new Uint8Array([1])), voices: [{ id: "voice-one", uri: "file:///stage/voice" }], dispose: mocks.dispose };
+    mocks.voicePrepare.mockRejectedValue(new Error("voice staging failed"));
+    await expect(backupService.restore(picked)).rejects.toThrow("voice staging failed");
+    expect(mocks.rollback).toHaveBeenCalledOnce(); expect(mocks.activate).not.toHaveBeenCalled(); expect(mocks.voiceActivate).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back both media sets if voice activation fails and retries a temporarily blocked voice rollback", async () => {
+    const payload = await savePayload(); payload.kind = "complete"; payload.files = [];
+    const picked: PickedBackup = { kind: "complete", payload, voiceLibrary: voiceFixture(new Uint8Array([1])), voices: [{ id: "voice-one", uri: "file:///stage/voice" }], dispose: mocks.dispose };
+    mocks.voiceActivate.mockRejectedValue(new Error("voice activation failed"));
+    mocks.voiceRollback.mockRejectedValueOnce(new Error("temporary rollback failure")).mockResolvedValue(undefined);
+    await expect(backupService.restore(picked)).rejects.toThrow("voice activation failed");
+    expect(mocks.rollback).toHaveBeenCalledOnce(); expect(mocks.voiceRollback).toHaveBeenCalledTimes(2);
+    expect(mocks.finalize).not.toHaveBeenCalled(); expect(mocks.voiceFinalize).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not access the voice library for save-only export or legacy restore", async () => {
+    mocks.voiceSnapshot.mockRejectedValue(new Error("voice storage unavailable"));
+    const payload = await savePayload();
+    expect(mocks.voiceSnapshot).not.toHaveBeenCalled();
+    await backupService.restore(payload);
+    payload.kind = "complete"; payload.files = [];
+    await backupService.restore(payload);
+    expect(mocks.voicePrepare).not.toHaveBeenCalled();
+  });
   it.each(["android", "web"])("round-trips profile rankings, unselected candidates and its private image in complete backups on %s", async (platform) => {
     mocks.platform.OS = platform;
     const saved = JSON.stringify({ weaknesses: ["a", "b", "c", "d", "e", "f"], topWeaknesses: ["f", "a"],
@@ -448,6 +523,47 @@ describe("bounded backup export and import", () => {
     }
   });
 
+  it("round-trips rhythm history, stable image references and room voice choices", async () => {
+    const result: RhythmHistoryEntry = { id: "rhythm-one", startedAt: "2026-11-03T00:00:00.000Z", completedAt: "2026-11-03T00:05:00.000Z", interruptions: 2, elapsedSeconds: 150 };
+    await rhythmChallengeService.saveResult(result);
+    await rhythmChallengeService.saveResult({ ...result, id: "rhythm-clear", interruptions: 10, dailyRewardEligible: true });
+    await rhythmChallengeService.saveImages({ normal: { name: "picture.png", purpose: "training" }, paused: null, finished: null });
+    const voices = defaultRoomVoicePreferences(); voices.rooms.rhythm = { builtin: [], storedIds: ["stored-voice"] };
+    mocks.storage.set(ROOM_VOICE_PREFERENCES_KEY, JSON.stringify(voices));
+    const original = await rhythmChallengeService.load();
+    const payload = await savePayload();
+    expect(JSON.parse(payload.asyncStorage[RHYTHM_STORAGE_KEY])).toEqual(original);
+    expect(JSON.parse(payload.asyncStorage[ROOM_VOICE_PREFERENCES_KEY])).toEqual(voices);
+    await rhythmChallengeService.saveResult({ ...result, id: "after-backup" });
+    mocks.storage.delete(ROOM_VOICE_PREFERENCES_KEY);
+    await backupService.restore(payload);
+    expect(await rhythmChallengeService.load()).toEqual(original);
+    expect(JSON.parse(mocks.storage.get(ROOM_VOICE_PREFERENCES_KEY)!)).toEqual(voices);
+  });
+
+  it.each([
+    [RHYTHM_STORAGE_KEY, { version: 1, images: { normal: null, paused: null, finished: null }, history: [{ id: "broken" }] }],
+    [RHYTHM_STORAGE_KEY, { version: 1, images: { normal: { purpose: "profile", name: "private.png" }, paused: null, finished: null }, history: [] }],
+    [ROOM_VOICE_PREFERENCES_KEY, { version: 2, rooms: defaultRoomVoicePreferences().rooms }],
+    [ROOM_VOICE_PREFERENCES_KEY, { version: 1, rooms: { ...defaultRoomVoicePreferences().rooms, rhythm: { builtin: ["unknown"], storedIds: [] } } }],
+  ])("rejects invalid rhythm or room voice data in %s before any restore mutation", async (key, invalid) => {
+    const payload = await savePayload(); payload.asyncStorage[key as string] = JSON.stringify(invalid);
+    const original = new Map(mocks.storage);
+    await expect(backupService.restore(payload)).rejects.toThrow();
+    expect(mocks.storage).toEqual(original);
+    expect(mocks.multiSet).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it("restores legacy backups without rhythm or voice settings by removing later values", async () => {
+    const payload = await savePayload();
+    mocks.storage.set(RHYTHM_STORAGE_KEY, JSON.stringify({ version: 1, images: { normal: null, paused: null, finished: null }, history: [] }));
+    mocks.storage.set(ROOM_VOICE_PREFERENCES_KEY, JSON.stringify(defaultRoomVoicePreferences()));
+    await backupService.restore(payload);
+    expect(mocks.storage.has(RHYTHM_STORAGE_KEY)).toBe(false);
+    expect(mocks.storage.has(ROOM_VOICE_PREFERENCES_KEY)).toBe(false);
+  });
+
   it("round-trips completed and surrendered Othello results without stale cached history", async () => {
     const result: OthelloHistoryEntry = {
       id: "othello-1", startedAt: "2026-10-06T00:00:00.000Z", completedAt: "2026-10-06T00:05:00.000Z",
@@ -561,7 +677,7 @@ describe("bounded backup export and import", () => {
     const entries = await readBackupArchive(reader(archive));
     expect(entries.map((entry) => entry.name)).toEqual(["manifest.json", "files/000000"]);
     const manifest = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
-    expect(manifest.version).toBe(2);
+    expect(manifest.version).toBe(3);
     expect(manifest.files[0]).toEqual({ name: "動画.mp4", size: video.length, purpose: "training", mimeType: "video/mp4", path: "files/000000" });
     expect(mocks.sourceRead.mock.calls.every(([, , length]) => length <= 256 * 1024)).toBe(true);
     select(archive);

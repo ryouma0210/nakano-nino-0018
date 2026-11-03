@@ -22,7 +22,7 @@ const cycle = (id: number, overrides = {}) => ({
 const task = (id: number, cycleId: number, overrides = {}) => ({
   id, cycle_id: cycleId, record_date: today, instruction: "本日の指示", completed_at: null, ...overrides,
 });
-const gameTaskIds: DailyRewardGame[] = ["succubus", "sugoroku", "othello", "endurance"];
+const gameTaskIds: DailyRewardGame[] = ["succubus", "sugoroku", "othello", "endurance", "rhythm"];
 const dailyQuestIds = ["slime", "purify", "escape"];
 const dailyTaskIds = ["login-bonus", "brainwash", "preparation", "daily-order", "training", "outside-daily", "outside", ...gameTaskIds];
 const defaultTaskIds = [...dailyTaskIds, "defeat", "management", "punishment"];
@@ -62,7 +62,7 @@ describe("home daily progress", () => {
     });
     expect(summary.tasks.map((item) => item.id)).toEqual(defaultTaskIds);
     expect(summary.tasks.filter((item) => item.eligible).map((item) => item.id)).toEqual(dailyTaskIds);
-    expect(summary.eligibleCount).toBe(11);
+    expect(summary.eligibleCount).toBe(12);
     expect(summary.completedCount).toBe(0);
     expect(summary.tasks.find((item) => item.id === "daily-order")?.status).toBe("未抽選");
     expect(summary.tasks.slice(-3)).toEqual([
@@ -72,7 +72,7 @@ describe("home daily progress", () => {
     ]);
   });
 
-  it("can finish all eleven eligible tasks while keeping the three unavailable destinations", () => {
+  it("can finish all twelve eligible tasks while keeping the three unavailable destinations", () => {
     const summary = buildHomeSummary({
       ...baseSnapshot(), loginClaimed: true, outsideEarnedPoints: 100,
       outsideDailyQuests: { date: today, claimedQuestIds: dailyQuestIds },
@@ -88,8 +88,8 @@ describe("home daily progress", () => {
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
     expect(summary.tasks.map((item) => item.id)).toEqual(defaultTaskIds);
-    expect(summary.completedCount).toBe(11);
-    expect(summary.eligibleCount).toBe(11);
+    expect(summary.completedCount).toBe(12);
+    expect(summary.eligibleCount).toBe(12);
     expect(summary.tasks.filter((item) => !item.eligible).every((item) => !item.completed)).toBe(true);
   });
 
@@ -112,7 +112,7 @@ describe("home daily progress", () => {
       .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 100 } });
     expect(summary.tasks.find((item) => item.id === "succubus"))
       .toMatchObject({ title: "館の外", detail: "サキュバス討伐", completed: false, pointProgress: { earned: 0, limit: 100 } });
-    expect(summary.eligibleCount).toBe(11);
+    expect(summary.eligibleCount).toBe(12);
     expect(summary.completedCount).toBe(completed ? 1 : 0);
   });
 
@@ -139,9 +139,9 @@ describe("home daily progress", () => {
       eligible: true, completed, status: completed ? "完了済み" : "未完了",
       pointProgress: { earned, limit: 100 },
     });
-    expect(summary.eligibleCount).toBe(11);
+    expect(summary.eligibleCount).toBe(12);
     expect(summary.completedCount).toBe(completed ? 1 : 0);
-    expect(summary.completedCount / summary.eligibleCount).toBe(completed ? 1 / 11 : 0);
+    expect(summary.completedCount / summary.eligibleCount).toBe(completed ? 1 / 12 : 0);
   });
 
   it.each([
@@ -159,6 +159,7 @@ describe("home daily progress", () => {
     { game: "endurance", title: "勃起我慢", href: "/(tabs)/endurance", limit: 50 },
     { game: "othello", title: "オセロ", href: "/(tabs)/othello", limit: 50 },
     { game: "succubus", title: "館の外", href: "/(tabs)/outside", limit: 100 },
+    { game: "rhythm", title: "耐久チャレンジ", href: "/(tabs)/rhythm-challenge", limit: 50 },
   ] as const)("counts only $game's first daily reward as its own task", ({ game, title, href, limit }) => {
     const summary = buildHomeSummary({
       ...baseSnapshot(), dailyGameRewards: { date: today, completedGames: [game, game] },
@@ -172,7 +173,7 @@ describe("home daily progress", () => {
     expect(summary.tasks.find((item) => item.id === "outside-daily"))
       .toMatchObject({ completed: false, pointProgress: { earned: 0, limit: 30 } });
     expect(summary.completedCount).toBe(1);
-    expect(summary.eligibleCount).toBe(11);
+    expect(summary.eligibleCount).toBe(12);
   });
 
   it.each(["2026-09-15", "2026-09-17"])("ignores first-clear rewards for a different day: %s", (date) => {
@@ -207,15 +208,15 @@ describe("home daily progress", () => {
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
     const expectedOrder = ["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "management:1", "punishment",
-      "outside-daily", "outside", "succubus", "sugoroku", "othello", "endurance"];
+      "outside-daily", "outside", "succubus", "sugoroku", "othello", "endurance", "rhythm"];
     expect(pending.tasks.map((item) => item.id)).toEqual(expectedOrder);
     expect(completed.tasks.map((item) => item.id)).toEqual(expectedOrder);
     expect(completed.tasks.map(({ id, href }) => ({ id, href })))
       .toEqual(pending.tasks.map(({ id, href }) => ({ id, href })));
-    expect(pending.eligibleCount).toBe(14);
-    expect(completed.eligibleCount).toBe(14);
+    expect(pending.eligibleCount).toBe(15);
+    expect(completed.eligibleCount).toBe(15);
     expect(pending.completedCount).toBe(1);
-    expect(completed.completedCount).toBe(14);
+    expect(completed.completedCount).toBe(15);
   });
 
   it("moves a locked high-priority room behind every eligible task without losing its link", () => {
@@ -227,7 +228,7 @@ describe("home daily progress", () => {
     expect(summary.tasks.at(-1))
       .toMatchObject({ eligible: false, completed: false, status: "未契約", href: "/(tabs)/contract" });
     expect(summary.tasks.slice(0, -1).every((item) => item.eligible)).toBe(true);
-    expect(summary.eligibleCount).toBe(13);
+    expect(summary.eligibleCount).toBe(14);
     expect(summary.completedCount).toBe(1);
   });
 
@@ -241,7 +242,7 @@ describe("home daily progress", () => {
       .toEqual(["login-bonus", "defeat", "brainwash", "preparation", "daily-order", "training", "management", "management", "punishment", "outside-daily", "outside", ...gameTaskIds]);
     expect(summary.tasks.filter((item) => item.id.startsWith("management:")).map((item) => item.id).sort())
       .toEqual(["management:1", "management:2"]);
-    expect(summary.eligibleCount).toBe(15);
+    expect(summary.eligibleCount).toBe(16);
     expect(summary.completedCount).toBe(2);
   });
 
@@ -265,8 +266,8 @@ describe("home daily progress", () => {
       managementTasks: [task(1, 1, { completed_at: `${today} 12:00:00` })],
     });
     expect(summary.completedCount).toBe(3);
-    expect(summary.eligibleCount).toBe(12);
-    expect(summary.tasks).toHaveLength(14);
+    expect(summary.eligibleCount).toBe(13);
+    expect(summary.tasks).toHaveLength(15);
     expect(summary.tasks.find((item) => item.id === "management:1"))
       .toMatchObject({ eligible: true, dayProgress: { currentDay: 1, totalDays: 1 } });
   });
@@ -302,7 +303,7 @@ describe("home daily progress", () => {
     const summary = buildHomeSummary({ ...baseSnapshot(), cycles: [cycle(1), cycle(2)] });
     expect(summary.tasks.map((item) => item.id))
       .toEqual(["login-bonus", "brainwash", "preparation", "daily-order", "training", "management:2", "outside-daily", "outside", ...gameTaskIds, "defeat", "punishment"]);
-    expect(summary.eligibleCount).toBe(12);
+    expect(summary.eligibleCount).toBe(13);
     expect(summary.tasks.find((item) => item.id === "management:2"))
       .toMatchObject({ title: "射精管理部屋", eligible: true, completed: false, href: "/(tabs)/management" });
   });
@@ -343,7 +344,7 @@ describe("home daily progress", () => {
     expect(summary.tasks.map((item) => item.id)).toEqual(defaultTaskIds);
     expect(summary.tasks.find((item) => item.id === "management"))
       .toMatchObject({ eligible: false, status: "管理期間外" });
-    expect(summary.eligibleCount).toBe(11);
+    expect(summary.eligibleCount).toBe(12);
   });
 
   it("counts each completed room once using its actual saved records", () => {
@@ -359,8 +360,8 @@ describe("home daily progress", () => {
       punishmentHistories: [punishment(), punishment()],
     });
     expect(summary.completedCount).toBe(5);
-    expect(summary.eligibleCount).toBe(13);
-    expect(summary.tasks).toHaveLength(14);
+    expect(summary.eligibleCount).toBe(14);
+    expect(summary.tasks).toHaveLength(15);
     expect(summary.tasks.filter((item) => item.completed).map((item) => item.id))
       .toEqual(["defeat", "brainwash", "preparation", "training", "punishment"]);
   });
@@ -408,8 +409,8 @@ describe("home daily progress", () => {
       expect(summary.tasks.find((item) => item.id === "defeat")).toMatchObject({
         eligible: contractSigned, completed, href, status,
       });
-      expect(summary.tasks).toHaveLength(14);
-      expect(summary.eligibleCount).toBe(contractSigned ? 12 : 11);
+      expect(summary.tasks).toHaveLength(15);
+      expect(summary.eligibleCount).toBe(contractSigned ? 13 : 12);
       expect(summary.completedCount).toBe(completed ? 1 : 0);
     }
   });
@@ -507,24 +508,26 @@ describe("home daily progress", () => {
     const afterSuccess = summary([firstFailure, secondFailure, success], [firstCompletion, secondCompletion]);
     expect(afterSuccess.tasks.find((item) => item.id === "punishment"))
       .toMatchObject({ eligible: false, completed: false, status: "対象外", href: "/(tabs)/timer" });
-    expect(afterSuccess.tasks).toHaveLength(14);
-    expect(afterSuccess.eligibleCount).toBe(11);
+    expect(afterSuccess.tasks).toHaveLength(15);
+    expect(afterSuccess.eligibleCount).toBe(12);
     expect(afterSuccess.completedCount).toBe(1);
   });
 });
 
 describe("saved point progress on every daily task", () => {
-  it("shows zero and each current reward limit on all fourteen tasks, including unavailable rooms", () => {
+  it("shows zero and each current reward limit on all fifteen tasks, including unavailable rooms", () => {
     const summary = buildHomeSummary(baseSnapshot());
     expect(Object.fromEntries(summary.tasks.map(({ id, pointProgress }) => [id, pointProgress]))).toEqual({
       "login-bonus": { earned: 0, limit: 1 }, defeat: { earned: 0, limit: 5 }, brainwash: { earned: 0, limit: 5 },
       preparation: { earned: 0, limit: 5 }, "daily-order": { earned: 0, limit: 5 }, training: { earned: 0, limit: 25 },
       management: { earned: 0, limit: 25 }, punishment: { earned: 0, limit: 1 }, "outside-daily": { earned: 0, limit: 30 },
       outside: { earned: 0, limit: 100 }, succubus: { earned: 0, limit: 100 }, sugoroku: { earned: 0, limit: 50 },
-      othello: { earned: 0, limit: 50 }, endurance: { earned: 0, limit: 50 },
+      othello: { earned: 0, limit: 50 }, endurance: { earned: 0, limit: 50 }, rhythm: { earned: 0, limit: 50 },
     });
     expect(summary.tasks.find(({ id }) => id === "training")?.title).toBe("調教部屋（初回のみ）");
     expect(summary.tasks.find(({ id }) => id === "punishment")?.title).toBe("お仕置き部屋（初回のみ）");
+    expect(summary.tasks.find(({ id }) => id === "rhythm"))
+      .toMatchObject({ title: "耐久チャレンジ", detail: "初回クリア報酬（寸止め10回以上）", href: "/(tabs)/rhythm-challenge" });
   });
 
   it("uses actual received amounts independently of completion and preserves historical reward rates", () => {
@@ -622,7 +625,7 @@ describe("management details on today's tasks", () => {
     });
     expect(summary.tasks.find((item) => item.id === "management:1")?.management).toEqual({ mode: "release", deadlineAt: release.deadlineAt, rouletteSpins: 3, rouletteRequired: 2 });
     expect(summary.tasks.find((item) => item.id === "management:2")?.management).toEqual({ mode: "chastity", deadlineAt: chastity.deadlineAt, rouletteSpins: 1, rouletteRequired: 2 });
-    expect(summary.eligibleCount).toBe(13); expect(summary.completedCount).toBe(0);
+    expect(summary.eligibleCount).toBe(14); expect(summary.completedCount).toBe(0);
   });
 
   it("keeps an unspun new day at zero without carrying over yesterday's count", () => {
@@ -690,8 +693,8 @@ describe("loading a home summary without changing saved data", () => {
     expect(summary.availablePoints).toBe(165);
     expect(summary.todayEarnedPoints).toBe(45);
     expect(summary.completedCount).toBe(2);
-    expect(summary.eligibleCount).toBe(12);
-    expect(summary.tasks).toHaveLength(14);
+    expect(summary.eligibleCount).toBe(13);
+    expect(summary.tasks).toHaveLength(15);
     expect(storage.getItem).toHaveBeenCalledWith(`nino-room:daily-order:${today}`);
     expect(database.execute).not.toHaveBeenCalled();
     expect(database.transaction).not.toHaveBeenCalled();
@@ -952,11 +955,11 @@ describe("loading a home summary without changing saved data", () => {
       const savedBefore = [...saved.entries()];
 
       const summary = await homeSummaryService.load(today);
-      expect(summary.availablePoints).toBe(981);
-      expect(summary.todayEarnedPoints).toBe(456);
-      expect(summary.completedCount).toBe(14);
-      expect(summary.eligibleCount).toBe(14);
-      expect(summary.tasks).toHaveLength(14);
+      expect(summary.availablePoints).toBe(1031);
+      expect(summary.todayEarnedPoints).toBe(506);
+      expect(summary.completedCount).toBe(15);
+      expect(summary.eligibleCount).toBe(15);
+      expect(summary.tasks).toHaveLength(15);
       expect(summary.tasks.find((item) => item.id === "outside-daily"))
         .toMatchObject({ completed: true, pointProgress: { earned: 30, limit: 30 } });
       expect(summary.tasks.find((item) => item.id === "outside"))

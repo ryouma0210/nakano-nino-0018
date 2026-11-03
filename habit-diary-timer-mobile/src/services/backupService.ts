@@ -5,6 +5,8 @@ import appConfig from "../../app.json";
 import { execute, query, transaction } from "@/database/client";
 import { OTHELLO_STORAGE_KEY, parseOthelloHistory } from "../features/othello/storage";
 import { SUGOROKU_STORAGE_KEY, parseSugorokuSave } from "../features/sugoroku/storage";
+import { RHYTHM_STORAGE_KEY, parseRhythmSave } from "./rhythmChallengeService";
+import { ROOM_VOICE_PREFERENCES_KEY, parseRoomVoicePreferences } from "../audio/roomVoiceSelection";
 import { CHASTITY_STORAGE_KEY, parseChastityHistory } from "./chastityHistoryStorage";
 import { validateCustomCommandSettings } from "./customCommandStorage";
 import { isFilePurpose, isValidFileUsages } from "../features/files/usages";
@@ -13,13 +15,17 @@ import { isProfilePhotoMetadata } from "../features/files/profilePhoto";
 import { validateEnduranceSettings } from "../features/endurance/storage";
 import { validateManagementRouletteSettings } from "./managementRouletteStorage";
 import { validateDailyGameRewardSettings } from "./dailyGameRewardStorage";
+import { validatePointMilestoneSettings } from "../features/points/milestones";
+import { validateCollectionSeenSettings } from "../features/collection/model";
 import { fileStorageService, mimeTypeForName, type BackupStoredFile, type RestoreStoredFile } from "@/services/fileStorageService";
+import { voiceStorageService, type VoiceBackupAccess, type VoiceBackupFile, type PreparedVoiceRestore } from "./voiceStorageService";
+import { parseVoiceLibrary, type VoiceLibrary } from "../features/voices/library";
 import { readBackupArchive, writeBackupArchive, type RandomAccessReader } from "./backupArchive";
 import { backupEntryBlob, copyBackupEntry, createBackupOutput, createBackupStaging, invalidBackupMessage, openBackupSource, openNativeBackupWriter, readSmallBackup, type BackupSource } from "./backupIO";
 
 const BACKUP_FORMAT = "nino-room-backup";
 const BACKUP_VERSION = 1;
-const ARCHIVE_VERSION = 2;
+const ARCHIVE_VERSION = 3;
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 const MAX_NATIVE_LEGACY_BYTES = 16 * 1024 * 1024;
 const BACKUP_HISTORY_KEY = "nino-room:backup-export-info";
@@ -44,7 +50,8 @@ type BackupPayload = {
   asyncStorage: Record<string, string>;
   files?: BackupStoredFile[];
 };
-type PickedBackup = { kind: BackupKind; payload: BackupPayload; files?: RestoreStoredFile[]; dispose: () => Promise<void> };
+type PickedBackup = { kind: BackupKind; payload: BackupPayload; files?: RestoreStoredFile[];
+  voiceLibrary?: VoiceLibrary; voices?: VoiceBackupFile[]; dispose: () => Promise<void> };
 type ArchiveFile = Omit<BackupStoredFile, "data"> & { path: string };
 
 function safeFileDate() {
@@ -82,9 +89,10 @@ function memorySource(bytes: Uint8Array): RandomAccessReader {
   return { size: bytes.length, read: async (offset, length) => bytes.subarray(offset, offset + length) };
 }
 
-async function exportFile(kind: BackupKind) {
+async function exportFile(kind: BackupKind, voiceAccess?: VoiceBackupAccess) {
   const payload = await createPayload(kind);
   const files = kind === "complete" ? await fileStorageService.list() : [];
+  const voices = kind === "complete" ? await voiceAccess!.snapshot() : null;
   const manifestFiles: ArchiveFile[] = [];
   for (const [index, file] of files.entries()) {
     const blob = await fileStorageService.getBlob(file);
@@ -97,7 +105,9 @@ async function exportFile(kind: BackupKind) {
     } finally { source.close(); }
   }
   if (kind === "complete") validateArchiveFiles(manifestFiles);
-  const metadata = metadataBytes(kind === "complete" ? { ...payload, version: ARCHIVE_VERSION, files: manifestFiles } : payload);
+  if (manifestFiles.length + (voices?.files.length ?? 0) > 9999) throw new Error(invalidBackupMessage);
+  const metadata = metadataBytes(kind === "complete"
+    ? { ...payload, version: ARCHIVE_VERSION, files: manifestFiles, voiceLibrary: voices!.library } : payload);
   const output = await createBackupOutput(`nino-room-${kind}-${safeFileDate()}.${kind === "complete" ? "zip" : "json"}`,
     kind === "complete" ? "application/zip" : "application/json");
   let current: BackupSource | null = null;
@@ -107,14 +117,20 @@ async function exportFile(kind: BackupKind) {
     if (kind === "save") {
       await copyBackupEntry(memorySource(metadata), output.writer);
     } else {
+      const sources = [
+        ...manifestFiles.map((file, index) => ({ name: file.path, size: file.size,
+          open: async () => openBackupSource(files[index].uri, await fileStorageService.getBlob(files[index])) })),
+        ...voices!.library.voices.map((voice, index) => ({ name: `voices/${String(index).padStart(6, "0")}`, size: voice.size,
+          open: async () => openBackupSource(voices!.files[index].uri ?? "", voices!.files[index].blob) })),
+      ];
       await writeBackupArchive([
         { name: "manifest.json", ...memorySource(metadata) },
-        ...manifestFiles.map((file, index) => ({
-          name: file.path, size: file.size,
+        ...sources.map((file, index) => ({
+          name: file.name, size: file.size,
           async read(offset: number, length: number) {
             if (currentIndex !== index) {
               closeCurrent();
-              current = await openBackupSource(files[index].uri, await fileStorageService.getBlob(files[index]));
+              current = await file.open();
               currentIndex = index;
               if (current.size !== file.size) throw new Error(invalidBackupMessage);
             }
@@ -154,6 +170,12 @@ function validatePayload(value: unknown): BackupPayload {
   if (Object.hasOwn(payload.asyncStorage, SUGOROKU_STORAGE_KEY)) {
     parseSugorokuSave(payload.asyncStorage[SUGOROKU_STORAGE_KEY]);
   }
+  if (Object.hasOwn(payload.asyncStorage, RHYTHM_STORAGE_KEY)) {
+    parseRhythmSave(payload.asyncStorage[RHYTHM_STORAGE_KEY]);
+  }
+  if (Object.hasOwn(payload.asyncStorage, ROOM_VOICE_PREFERENCES_KEY)) {
+    parseRoomVoicePreferences(payload.asyncStorage[ROOM_VOICE_PREFERENCES_KEY]);
+  }
   if (Object.hasOwn(payload.asyncStorage, CHASTITY_STORAGE_KEY)) {
     parseChastityHistory(payload.asyncStorage[CHASTITY_STORAGE_KEY]);
   }
@@ -169,6 +191,8 @@ function validatePayload(value: unknown): BackupPayload {
   validateEnduranceSettings(payload.database.app_settings);
   validateManagementRouletteSettings(payload.database.app_settings);
   validateDailyGameRewardSettings(payload.database.app_settings);
+  validatePointMilestoneSettings(payload.database.app_settings);
+  validateCollectionSeenSettings(payload.database.app_settings);
   if (payload.files?.some((file) => !file || typeof file.name !== "string" || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
     || typeof file.mimeType !== "string" || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
     || typeof file.data !== "string" || typeof file.size !== "number")) {
@@ -197,17 +221,25 @@ async function readArchive(source: BackupSource): Promise<PickedBackup> {
   if (!manifestEntry || manifestEntry.size > MAX_MANIFEST_BYTES) throw new Error(invalidBackupMessage);
   await manifestEntry.verify();
   const manifest = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readSmallBackup(manifestEntry, MAX_MANIFEST_BYTES)));
-  if (!manifest || manifest.version !== ARCHIVE_VERSION || manifest.kind !== "complete") throw new Error(invalidBackupMessage);
+  if (!manifest || (manifest.version !== 2 && manifest.version !== ARCHIVE_VERSION) || manifest.kind !== "complete") throw new Error(invalidBackupMessage);
   validateArchiveFiles(manifest.files);
-  const payload = validatePayload({ ...manifest, version: BACKUP_VERSION, files: [] });
-  if (entries.length !== manifest.files.length + 1) throw new Error(invalidBackupMessage);
+  const { voiceLibrary: rawVoiceLibrary, ...saveManifest } = manifest;
+  // Version 2 predates voices. Version 3 explicitly includes even an empty library.
+  if (manifest.version === 2 && rawVoiceLibrary !== undefined) throw new Error(invalidBackupMessage);
+  const voiceLibrary = manifest.version === ARCHIVE_VERSION ? parseVoiceLibrary(rawVoiceLibrary) : undefined;
+  const payload = validatePayload({ ...saveManifest, version: BACKUP_VERSION, files: [] });
+  if (entries.length !== manifest.files.length + (voiceLibrary?.voices.length ?? 0) + 1) throw new Error(invalidBackupMessage);
   const archiveFiles = manifest.files as ArchiveFile[];
   const entryMap = new Map(entries.map((entry) => [entry.name, entry]));
   for (const file of archiveFiles) {
     if (entryMap.get(file.path)?.size !== file.size) throw new Error(invalidBackupMessage);
   }
+  for (const [index, voice] of (voiceLibrary?.voices ?? []).entries()) {
+    if (entryMap.get(`voices/${String(index).padStart(6, "0")}`)?.size !== voice.size) throw new Error(invalidBackupMessage);
+  }
   const stage = Platform.OS === "web" ? null : await createBackupStaging();
   const restored: RestoreStoredFile[] = [];
+  const restoredVoices: VoiceBackupFile[] = [];
   try {
     for (const [index, file] of archiveFiles.entries()) {
       const entry = entryMap.get(file.path)!;
@@ -222,7 +254,20 @@ async function readArchive(source: BackupSource): Promise<PickedBackup> {
         restored.push({ ...metadata, blob: await backupEntryBlob(entry, file.mimeType) });
       }
     }
-    return { kind: payload.kind, payload, files: restored, dispose: stage?.dispose ?? (async () => {}) };
+    for (const [index, voice] of (voiceLibrary?.voices ?? []).entries()) {
+      const entry = entryMap.get(`voices/${String(index).padStart(6, "0")}`)!;
+      await entry.verify();
+      if (stage) {
+        const uri = `${stage.uri}voice-${index}`;
+        const output = openNativeBackupWriter(uri);
+        try { await copyBackupEntry(entry, output); } finally { output.close(); }
+        restoredVoices.push({ id: voice.id, uri });
+      } else {
+        restoredVoices.push({ id: voice.id, blob: await backupEntryBlob(entry, voice.mimeType) });
+      }
+    }
+    return { kind: payload.kind, payload, files: restored,
+      ...(voiceLibrary ? { voiceLibrary, voices: restoredVoices } : {}), dispose: stage?.dispose ?? (async () => {}) };
   } catch (error) {
     await stage?.dispose().catch((cleanupError) => console.warn("Could not discard backup staging", cleanupError));
     throw error;
@@ -286,7 +331,8 @@ export const backupService = {
   },
 
   async export(kind: BackupKind) {
-    await fileStorageService.withExclusiveFiles(() => exportFile(kind));
+    await fileStorageService.withExclusiveFiles(() => kind === "complete"
+      ? voiceStorageService.withExclusiveBackup((access) => exportFile(kind, access)) : exportFile(kind));
     const info: BackupExportInfo = { exportedAt: new Date().toISOString(), kind };
     try {
       await AsyncStorage.setItem(BACKUP_HISTORY_KEY, JSON.stringify(info));
@@ -303,18 +349,24 @@ export const backupService = {
     const picked = "payload" in backup ? backup : null;
     try {
       const payload = validatePayload(picked ? picked.payload : backup);
-      return await fileStorageService.withExclusiveFiles(async () => {
+      if (picked?.voiceLibrary !== undefined && (payload.kind !== "complete" || !picked.voices)) throw new Error(invalidBackupMessage);
+      const restore = async (voiceAccess?: VoiceBackupAccess) => {
         const previous = await createPayload("save");
-        const prepared = payload.kind === "complete" ? await fileStorageService.prepareRestore(picked?.files ?? payload.files ?? []) : null;
+        let prepared: Awaited<ReturnType<typeof fileStorageService.prepareRestore>> | null = null;
+        let preparedVoices: PreparedVoiceRestore | null = null;
         let changingStorage = false;
         let databaseChanged = false;
         try {
+          prepared = payload.kind === "complete" ? await fileStorageService.prepareRestore(picked?.files ?? payload.files ?? []) : null;
+          if (picked?.voiceLibrary) preparedVoices = await voiceAccess!.prepareRestore(picked.voiceLibrary, picked.voices!);
           await prepared?.activate();
+          await preparedVoices?.activate();
           changingStorage = true;
           await replaceStorage(payload.asyncStorage);
           databaseChanged = true;
           restoreDatabase(payload.database);
           await prepared?.finalize();
+          await preparedVoices?.finalize();
           return payload.kind;
         } catch (error) {
           const rollbackErrors: unknown[] = [];
@@ -325,6 +377,7 @@ export const backupService = {
             async () => { if (changingStorage) await replaceStorage(previous.asyncStorage); },
             async () => { if (databaseChanged) restoreDatabase(previous.database); },
             async () => { await prepared?.rollback(); },
+            async () => { await preparedVoices?.rollback(); },
           ]) {
             try { await rollback(); } catch { retry.push(rollback); }
           }
@@ -338,7 +391,9 @@ export const backupService = {
           }
           throw error;
         }
-      });
+      };
+      return await fileStorageService.withExclusiveFiles(() => picked?.voiceLibrary
+        ? voiceStorageService.withExclusiveBackup(restore) : restore());
     } finally {
       await picked?.dispose().catch((error) => console.warn("Could not remove restored backup staging", error));
     }
