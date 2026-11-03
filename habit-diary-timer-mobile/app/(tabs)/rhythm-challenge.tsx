@@ -217,7 +217,7 @@ export default function RhythmChallengeScreen() {
   }
 
   return <Screen desktopLayout="single">
-    <PageTitle>耐久チャレンジ</PageTitle>
+    <PageTitle>寸止め耐久チャレンジ</PageTitle>
     {!session ? <View style={styles.content}>
       <View style={styles.preview}>
         <RhythmImage state="normal" images={images} files={files} loading={loadingFiles}
@@ -328,7 +328,7 @@ export default function RhythmChallengeScreen() {
     return (
       <View style={[styles.backdrop, { paddingTop: Math.max(16, insets.top), paddingBottom: Math.max(16, insets.bottom) }]}>
         <View style={styles.dialog} testID="rhythm-history-dialog" accessibilityViewIsModal>
-          <AppText variant="subtitle">耐久チャレンジの履歴</AppText>
+          <AppText variant="subtitle">寸止め耐久チャレンジの履歴</AppText>
           <AppText variant="muted">最新100件の記録を表示します。</AppText>
           <ScrollView contentContainerStyle={styles.history}>
             {history.length === 0 ? <AppText variant="muted">まだプレイ記録がありません。</AppText> : history.map((entry) => <View key={entry.id} style={styles.historyEntry} testID={`rhythm-history-${entry.id}`}>
