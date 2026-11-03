@@ -1,4 +1,4 @@
-export const DAILY_GAME_POINTS = { sugoroku: 50, endurance: 50, othello: 50, succubus: 100 } as const;
+export const DAILY_GAME_POINTS = { sugoroku: 50, endurance: 50, othello: 50, succubus: 100, rhythm: 50 } as const;
 export type DailyRewardGame = keyof typeof DAILY_GAME_POINTS;
 
 export const GAME_REWARD_RECEIPT_PREFIX = "daily-game-reward-result:";

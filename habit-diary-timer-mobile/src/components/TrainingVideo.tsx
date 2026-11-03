@@ -18,6 +18,9 @@ import { useAppAudio } from "@/audio/AudioProvider";
 import type { StoredFile } from "@/services/fileStorageService";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { trainingLevels as modes } from "@/features/training/trainingOutcome";
+import { RoomVoiceButton } from "./RoomVoiceButton";
+import { RoomRhythmGauge } from "./RoomRhythmGauge";
+import { useRoomVoicePlayback } from "@/audio/useRoomVoicePlayback";
 
 const defaultVideos = [
   require("../../assets/videos/habits_1.mp4"),
@@ -99,7 +102,6 @@ export function TrainingVideo({
   const [gaugeProgress, setGaugeProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
-  const [trackWidth, setTrackWidth] = useState(1);
   const [markerOffsets, setMarkerOffsets] = useState(() => createRandomMarkerOffsets(markerCount));
   const [mode, setMode] = useState<TrainingMode>("normal");
   const [slideIndex, setSlideIndex] = useState(() =>
@@ -115,7 +117,8 @@ export function TrainingVideo({
   const lastCommentSlot = useRef(-1);
   const videoLoopCount = useRef(0);
   const handledStoredVideoEndUri = useRef<string | null>(null);
-  const { playEffect, stopEffect, setSessionAudioActive, settings } = useAppAudio();
+  const { playEffect, stopEffect, settings } = useAppAudio();
+  useRoomVoicePlayback("training", started && !disabled);
   const storedMode = slides.length > 0;
   const currentStoredFile = slides[slideIndex % Math.max(1, slides.length)];
   const showingStoredVideo = storedMode && isStoredVideo(currentStoredFile);
@@ -145,14 +148,6 @@ export function TrainingVideo({
       }, 180);
     }
   }, [player]);
-
-  useEffect(
-    () => () => {
-      stopEffect("trainingStart");
-      setSessionAudioActive(false);
-    },
-    [setSessionAudioActive, stopEffect],
-  );
 
   const showRandomComment = useCallback((elapsedSeconds = elapsedMilliseconds.current / 1000) => {
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
@@ -334,8 +329,6 @@ export function TrainingVideo({
     lastCommentSlot.current = 0;
     videoLoopCount.current = 0;
     showRandomComment(0);
-    setSessionAudioActive(true);
-    playEffect("trainingStart");
     setStarted(true);
     if (!storedMode) {
       const firstVideoIndex = selectRandomVideoIndex();
@@ -357,8 +350,7 @@ export function TrainingVideo({
     if (!storedMode || showingStoredVideo) player.pause();
     setPlaying(false);
     setStarted(false);
-    stopEffect("trainingStart");
-    setSessionAudioActive(false);
+    stopEffect("trainingRhythm");
     playEffect("ejaculation");
     const selected = modes.find((item) => item.key === mode) ?? modes[1];
     onComplete({
@@ -384,57 +376,27 @@ export function TrainingVideo({
       style={started ? styles.fullscreenMedia : styles.video}
       nativeControls={false}
       contentFit="contain"
+      surfaceType="textureView"
+      pointerEvents="none"
     />
+  );
+
+  const voiceControl = (
+    <View pointerEvents="box-none" style={styles.voiceOverlay}>
+      <RoomVoiceButton room="training" />
+    </View>
   );
 
   const rhythmGauge = (
     <View style={[styles.rhythmWrap, started && styles.fullscreenRhythm]}>
-      <View style={styles.rhythmFrame}>
-        <View style={styles.rhythmTitle}>
-          <View style={styles.rhythmTitleGroup}>
-            <AppText style={styles.rhythmTitleText}>RHYTHM</AppText>
-            <AppText style={styles.rhythmElapsedText}>
-              経過時間 {secondsToClock(sessionElapsedSeconds)}
-            </AppText>
-          </View>
-          <AppText style={styles.rhythmSubText}>ピンクのポイントで消滅</AppText>
-        </View>
-        <View
-          accessibilityLabel="動画に同期したリズムゲージ"
-          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-          style={styles.track}
-        >
-          <View style={styles.line} />
-          <View style={styles.hitPoint} />
-          {Array.from({ length: markerCount }, (_, index) => {
-            const offset = markerOffsets[index];
-            if (started && !gaugeStarted) return null;
-            if (started && gaugeElapsed < offset * 5) return null;
-            const phase = (gaugeProgress - offset + 1) % 1;
-            const markerWidth = started ? 74 : 52;
-            const markerCenter = markerWidth / 2;
-            const travelWidth = Math.max(0, trackWidth - markerWidth - 4);
-            const left = markerCenter + (1 - phase) * travelWidth;
-            const opacity = phase > 0.92 ? Math.max(0, (1 - phase) / 0.08) : 1;
-            return (
-              <View
-                key={index}
-                style={[
-                  styles.rhythmMarker,
-                  started && styles.fullscreenRhythmMarker,
-                  { left, opacity },
-                ]}
-              >
-                <Image
-                  source={require("../../assets/ui/rhythm-heart.png")}
-                  style={styles.rhythmMarkerImage}
-                  resizeMode="contain"
-                />
-              </View>
-            );
-          })}
-        </View>
-      </View>
+      <RoomRhythmGauge
+        elapsedSeconds={sessionElapsedSeconds}
+        expanded={started}
+        markers={markerOffsets.map((offset) => ({
+          phase: (gaugeProgress - offset + 1) % 1,
+          visible: !started || (gaugeStarted && gaugeElapsed >= offset * 5),
+        }))}
+      />
     </View>
   );
 
@@ -455,7 +417,10 @@ export function TrainingVideo({
             },
           ]}
         >
-          <View style={styles.fullscreenMediaFrame}>{media}</View>
+          <View style={styles.fullscreenMediaFrame} testID="training-media-frame">
+            {media}
+            {voiceControl}
+          </View>
           <View style={styles.trainingComment}>
             <AppText style={styles.trainingCommentName}>ニノ</AppText>
             <AppText style={styles.trainingCommentText}>
@@ -480,13 +445,16 @@ export function TrainingVideo({
 
   return (
     <View style={styles.wrap}>
-      {media}
-      <View style={styles.mediaBadge}>
-        <AppText style={styles.mediaBadgeText}>
-          {storedMode
-            ? `格納ファイル ${slideIndex + 1}/${slides.length}`
-            : `DEFAULT VIDEO ${defaultVideoIndex + 1}/${defaultVideos.length}`}
-        </AppText>
+      <View style={styles.previewMediaFrame} testID="training-media-frame">
+        {media}
+        <View style={styles.mediaBadge}>
+          <AppText style={styles.mediaBadgeText}>
+            {storedMode
+              ? `格納ファイル ${slideIndex + 1}/${slides.length}`
+              : `DEFAULT VIDEO ${defaultVideoIndex + 1}/${defaultVideos.length}`}
+          </AppText>
+        </View>
+        {voiceControl}
       </View>
       <View style={styles.modePanel}>
         <AppText style={styles.modeLabel}>MODE / GAUGE SPEED</AppText>
@@ -554,6 +522,8 @@ export function TrainingVideo({
 }
 
 const styles = StyleSheet.create({
+  voiceOverlay: { position: "absolute", top: 10, right: 10, zIndex: 20, elevation: 20 },
+  previewMediaFrame: { position: "relative" },
   wrap: {
     overflow: "hidden",
     borderWidth: 1,
@@ -564,6 +534,7 @@ const styles = StyleSheet.create({
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
   fullscreenWrap: { flex: 1, backgroundColor: "#000" },
   fullscreenMediaFrame: {
+    position: "relative",
     flex: 1,
     overflow: "hidden",
     alignItems: "center",
@@ -640,71 +611,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 14,
   },
-  rhythmFrame: {
-    // Keep the travel distance readable without changing the rhythm timing.
-    width: "100%",
-    maxWidth: 430,
-    alignSelf: "center",
-    borderWidth: 1,
-    borderColor: "#777",
-    backgroundColor: "#151515",
-  },
   fullscreenRhythm: { marginTop: 8, marginHorizontal: 10 },
-  rhythmTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 9,
-    paddingTop: 6,
-  },
-  rhythmTitleText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
-  rhythmTitleGroup: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rhythmElapsedText: { color: lightTheme.muted, fontSize: 8, fontWeight: "800" },
-  rhythmSubText: { color: lightTheme.muted, fontSize: 9 },
-  track: {
-    overflow: "hidden",
-    height: 58,
-    justifyContent: "center",
-    marginHorizontal: 8,
-  },
-  line: {
-    position: "absolute",
-    right: 10,
-    left: 20,
-    height: 3,
-    backgroundColor: "#ddd",
-  },
-  hitPoint: {
-    position: "absolute",
-    left: 15,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 4,
-    borderColor: "#ff69b4",
-    backgroundColor: "transparent",
-    zIndex: 3,
-  },
-  rhythmMarker: {
-    position: "absolute",
-    width: 52,
-    height: 58,
-    marginLeft: -26,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
-  },
-  fullscreenRhythmMarker: {
-    width: 74,
-    height: 82,
-    marginLeft: -37,
-  },
-  rhythmMarkerImage: { width: "100%", height: "100%" },
   waitingTime: {
     alignItems: "flex-end",
     paddingHorizontal: 14,

@@ -4,6 +4,7 @@ import { useEventListener } from "expo";
 import { VideoView } from "expo-video";
 import { useAppVideoPlayer } from "@/audio/useAppVideoPlayer";
 import { AppText } from "@/components/AppText";
+import { RoomVoiceButton } from "./RoomVoiceButton";
 import type { StoredFile } from "@/services/fileStorageService";
 
 const defaultVideos = [
@@ -139,11 +140,11 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
   ]);
 
   return (
-    <View style={fullscreen ? styles.fullscreenFrame : styles.frame}>
+    <View style={fullscreen ? styles.fullscreenFrame : styles.frame} testID="punishment-media-frame">
       {useStored && currentFile && !showingStoredVideo ? (
         <Image source={{ uri: currentFile.uri }} style={[styles.media, fullscreen && styles.fullscreenMedia]} resizeMode="contain" />
       ) : (
-        <VideoView player={player} style={[styles.media, fullscreen && styles.fullscreenMedia]} nativeControls={false} contentFit="contain" />
+        <VideoView player={player} style={[styles.media, fullscreen && styles.fullscreenMedia]} nativeControls={false} contentFit="contain" surfaceType="textureView" pointerEvents="none" />
       )}
       {!fullscreen ? (
         <View style={styles.badge}>
@@ -154,16 +155,23 @@ export function PunishmentMedia({ active, files, useStored, fullscreen = false }
           </AppText>
         </View>
       ) : null}
+      <View pointerEvents="box-none" style={styles.voiceOverlay}>
+        <RoomVoiceButton room="punishment" />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: { overflow: "hidden", borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
+  frame: { position: "relative", overflow: "hidden", borderWidth: 1, borderColor: "#fff", backgroundColor: "#000" },
+  voiceOverlay: { position: "absolute", top: 10, right: 10, zIndex: 20, elevation: 20 },
   media: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
   fullscreenFrame: {
-    flex: 1,
-    width: "100%",
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

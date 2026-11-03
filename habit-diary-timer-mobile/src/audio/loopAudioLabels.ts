@@ -2,6 +2,7 @@ import type { LoopAudioName } from "./AudioProvider";
 
 export const loopAudioLabels: Record<LoopAudioName, string> = {
   bokkisiro: "勃起しろ",
+  breath: "吐息",
   earLick: "耳舐め",
   sikosiko: "シコシコ",
   kousokusikosiko: "高速シコシコ",

@@ -1,25 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { createManualFavoriteId, favoriteCatalog, favoriteDisplayName, type FavoriteCandidate } from "./catalog";
+import { createManualFavoriteId, favoriteCatalog, favoriteCategories, favoriteDisplayName, type FavoriteCandidate } from "./catalog";
 import { addManualFavorite, favoritePickerCandidates, favoritePickerSections } from "./favoritePickerModel";
 
 describe("fixed and manual favorite picker", () => {
-  it("always offers all 163 fixed suggestions alongside saved and new manual items, deduplicated by ID", () => {
+  it("always offers the entire catalog alongside saved and new manual items, deduplicated by ID", () => {
     expect(favoritePickerCandidates([], [], "")).toEqual(favoriteCatalog);
     const manual = createManualFavoriteId("Sample Person");
     expect(favoritePickerCandidates(["anime-002", manual], ["anime-002"], "").map((candidate) => candidate.id))
       .toEqual([...favoriteCatalog.map((candidate) => candidate.id), manual]);
     const combined = favoritePickerCandidates([manual, "unknown-saved"], [manual, "anime-002", "unknown-saved"], "");
-    expect(combined).toHaveLength(165);
-    expect(new Set(combined.map((candidate) => candidate.id)).size).toBe(165);
+    expect(combined.map((candidate) => candidate.id)).toEqual([...favoriteCatalog.map((candidate) => candidate.id), manual, "unknown-saved"]);
+    expect(new Set(combined.map((candidate) => candidate.id)).size).toBe(combined.length);
     expect(combined.filter((candidate) => candidate.name === "ラム").map((candidate) => candidate.work))
       .toEqual(["うる星やつら", "Re:ゼロから始める異世界生活"]);
   });
 
   it("filters fixed categories while leaving manually added items available under all", () => {
     const manual = createManualFavoriteId("Sample Person");
-    expect(favoritePickerCandidates([manual], [manual], "", "anime")).toHaveLength(70);
-    expect(favoritePickerCandidates([manual], [manual], "", "actress")).toHaveLength(45);
-    expect(favoritePickerCandidates([manual], [manual], "", "performer")).toHaveLength(48);
+    for (const { value } of favoriteCategories) {
+      expect(favoritePickerCandidates([manual], [manual], "", value))
+        .toEqual(favoriteCatalog.filter((candidate) => candidate.category === value));
+    }
     expect(favoritePickerCandidates([manual], [manual], "sample", "anime")).toEqual([]);
     expect(favoritePickerCandidates([manual], [manual], "sample", "all").map((candidate) => candidate.id)).toEqual([manual]);
   });
@@ -70,8 +71,11 @@ describe("fixed and manual favorite picker", () => {
     expect(favoritePickerCandidates(ids, ids, "ＳＡＭＰＬＥ　person").map((candidate) => candidate.id)).toEqual([ids[0]]);
     expect(favoritePickerCandidates(ids, ids, "OLD-FAVORITE").map((candidate) => candidate.name)).toEqual(["old-favorite"]);
     expect(favoritePickerCandidates(ids, ids, "五等分").map((candidate) => candidate.id)).toEqual([
-      "anime-001", "anime-002", "anime-003", "anime-004", "anime-005",
+      "anime-001", "anime-002", "anime-003", "anime-004", "anime-005", "anime-295",
     ]);
+    expect(favoritePickerCandidates(ids, ids, "アスナ ポケット", "game").map((candidate) => candidate.id)).toEqual(["game-014"]);
+    expect(favoritePickerCandidates(ids, ids, "ときのそら ホロライブ", "vtuber").map((candidate) => candidate.id)).toEqual(["vtuber-001"]);
+    expect(favoritePickerCandidates(ids, ids, "ホロライブ", "game")).toEqual([]);
   });
 
   it("offers saved manual candidates after deselection and reopening with no active selection", () => {
@@ -98,24 +102,27 @@ describe("fixed and manual favorite picker", () => {
 });
 
 describe("favorite category sections", () => {
-  it("orders existing categories and keeps two-column rows within each section", () => {
+  it("orders all categories and keeps two-column rows within each section", () => {
     const candidates: FavoriteCandidate[] = [
       { id: "custom-one", category: "custom", name: "Custom One" },
+      { id: "game-one", category: "game", name: "Game One" },
       { id: "actress-one", category: "actress", name: "Actress One" },
       { id: "anime-one", category: "anime", name: "Anime One" },
+      { id: "vtuber-one", category: "vtuber", name: "VTuber One" },
       { id: "performer-one", category: "performer", name: "Performer One" },
       { id: "anime-two", category: "anime", name: "Anime Two" },
+      { id: "game-two", category: "game", name: "Game Two" },
       { id: "anime-three", category: "anime", name: "Anime Three" },
     ];
     const sections = favoritePickerSections(candidates);
     expect(sections.map(({ key, title }) => [key, title])).toEqual([
-      ["anime", "アニメ"], ["actress", "女優"], ["performer", "成人作品出演者"], ["custom", "手入力"],
+      ["anime", "アニメ"], ["game", "ゲーム"], ["vtuber", "VTuber"], ["actress", "女優"], ["performer", "成人作品出演者"], ["custom", "手入力"],
     ]);
     expect(sections.map(({ data }) => data.map((row) => row.map(({ id }) => id)))).toEqual([
-      [["anime-one", "anime-two"], ["anime-three"]], [["actress-one"]], [["performer-one"]], [["custom-one"]],
+      [["anime-one", "anime-two"], ["anime-three"]], [["game-one", "game-two"]], [["vtuber-one"]], [["actress-one"]], [["performer-one"]], [["custom-one"]],
     ]);
     expect(candidates.map(({ id }) => id)).toEqual([
-      "custom-one", "actress-one", "anime-one", "performer-one", "anime-two", "anime-three",
+      "custom-one", "game-one", "actress-one", "anime-one", "vtuber-one", "performer-one", "anime-two", "game-two", "anime-three",
     ]);
   });
 
@@ -123,13 +130,15 @@ describe("favorite category sections", () => {
     const manual = createManualFavoriteId("Sample Person");
     const selected = [manual, "actress-001"];
     const saved = [...selected];
-    expect(favoritePickerSections(favoritePickerCandidates(selected, saved, "", "actress")).map(({ key }) => key))
-      .toEqual(["actress"]);
+    for (const { value } of favoriteCategories) {
+      expect(favoritePickerSections(favoritePickerCandidates(selected, saved, "", value)).map(({ key }) => key))
+        .toEqual([value]);
+    }
     expect(favoritePickerSections(favoritePickerCandidates(selected, saved, "sample")).map(({ key }) => key))
       .toEqual(["custom"]);
     expect(favoritePickerSections(favoritePickerCandidates(selected, saved, "no-matching-name"))).toEqual([]);
     const reopened = favoritePickerSections(favoritePickerCandidates([], saved, ""));
-    expect(reopened.map(({ key }) => key)).toEqual(["anime", "actress", "performer", "custom"]);
+    expect(reopened.map(({ key }) => key)).toEqual(["anime", "game", "vtuber", "actress", "performer", "custom"]);
     expect(reopened.at(-1)?.data.flat().map(({ id }) => id)).toEqual([manual]);
     expect(selected).toEqual([manual, "actress-001"]);
     expect(saved).toEqual(selected);

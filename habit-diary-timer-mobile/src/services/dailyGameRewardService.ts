@@ -11,7 +11,7 @@ export { DAILY_GAME_POINTS, type DailyRewardGame } from "./dailyGameRewardStorag
 
 export type DailyGameReward = { awarded: boolean; points: number; date: string };
 const GAME_NAMES: Record<DailyRewardGame, string> = {
-  sugoroku: "すごろく", endurance: "勃起我慢", othello: "オセロ", succubus: "サキュバス討伐",
+  sugoroku: "すごろく", endurance: "勃起我慢", othello: "オセロ", succubus: "サキュバス討伐", rhythm: "耐久チャレンジ",
 };
 
 function readSetting(key: string): string | null {
