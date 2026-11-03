@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("react-native", () => ({ Platform: mocks.platform }));
 vi.mock("expo-document-picker", () => ({ getDocumentAsync: mocks.pick }));
 vi.mock("expo-file-system/legacy", () => ({
+  EncodingType: { Base64: "base64" },
   documentDirectory: "file:///documents/", getInfoAsync: mocks.info, makeDirectoryAsync: mocks.mkdir,
   copyAsync: mocks.copy, moveAsync: mocks.move, readAsStringAsync: mocks.read, writeAsStringAsync: mocks.write, deleteAsync: mocks.remove,
 }));
@@ -25,7 +26,7 @@ let blobs: Map<string, Blob>;
 let localStorageWrite: ReturnType<typeof vi.fn>;
 
 function asset(name: string, data = "audio", mimeType = "audio/mpeg"): DocumentPickerAsset {
-  const uri = `file:///picked/${name}`;
+  const uri = `file:///picked/${nativeFiles.size}/${name}`;
   nativeFiles.set(uri, data);
   return { name, uri, size: data.length, mimeType, lastModified: 0 };
 }
@@ -79,7 +80,15 @@ beforeEach(async () => {
     nativeFiles.set(to, nativeFiles.get(from)!);
     nativeFiles.delete(from);
   });
-  mocks.read.mockImplementation(async (uri: string) => nativeFiles.get(uri));
+  mocks.read.mockImplementation(async (uri: string, options?: { encoding?: string; position?: number; length?: number }) => {
+    const value = nativeFiles.get(uri);
+    if (options?.encoding === "base64") {
+      if (value === undefined) throw new Error("missing source");
+      const bytes = Buffer.from(value);
+      return bytes.subarray(options.position ?? 0, (options.position ?? 0) + (options.length ?? bytes.length)).toString("base64");
+    }
+    return value;
+  });
   mocks.write.mockImplementation(async (uri: string, value: string) => { nativeFiles.set(uri, value); });
   mocks.remove.mockImplementation(async (uri: string) => {
     for (const path of nativeFiles.keys()) if (path === uri || (uri.endsWith("/") && path.startsWith(uri))) nativeFiles.delete(path);
@@ -182,6 +191,18 @@ describe.each(["android", "web"])("%s voice backup transactions", (platform) => 
     expect(await Promise.all(restored.files.map(sourceText))).toEqual(["second clip", "original audio bytes"]);
     for (const voice of current.voices) expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(voice.uri);
     expect(listener).not.toHaveBeenCalled(); unsubscribe();
+  });
+
+  it("compares restored audio using its original filename while preserving restored names and shared folders", async () => {
+    const { snapshot } = await seed();
+    await service.withExclusiveBackup(async (access) => {
+      const prepared = await access.prepareRestore(snapshot.library, snapshot.files);
+      await prepared.activate(); await prepared.finalize();
+    });
+    const restored = await service.load();
+    select(platform === "web" ? webAsset("shared.mp3", "original audio bytes") : asset("shared.mp3", "original audio bytes"));
+    expect(await service.importVoices()).toEqual({ added: 0, skipped: 1, failed: 0, canceled: false });
+    expect(await service.load()).toEqual(restored);
   });
 
   it("rejects invalid metadata, missing audio, wrong size and duplicate IDs without changing the library", async () => {
@@ -424,6 +445,111 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe.each(["android", "web"])("%s voice import content comparison", (platform) => {
+  beforeEach(() => { mocks.platform.OS = platform; });
+  const makeAsset = (name: string, data = "audio", type = "audio/mpeg") => platform === "web" ? webAsset(name, data, type) : asset(name, data, type);
+  const content = async (voice: { uri: string }) => platform === "web" ? blobs.get(voice.uri)!.text() : nativeFiles.get(voice.uri);
+
+  it("skips identical originals across folders without changing names, membership, order, playback URLs or notifications", async () => {
+    const firstFolder = await service.createFolder("First");
+    const secondFolder = await service.createFolder("Second");
+    select(makeAsset("shared.mp3", "same bytes"), makeAsset("other.mp3", "other"));
+    await service.importVoices(firstFolder.id);
+    const [first, second] = (await service.load()).voices;
+    await service.rename(first.id, "Custom display name");
+    await service.reorder([second.id, first.id]);
+    await service.setMode("all");
+    await service.setScope(secondFolder.id);
+    const original = await service.load();
+    const listener = vi.fn(); const unsubscribe = service.subscribe(listener);
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    const add = vi.spyOn(IDBObjectStore.prototype, "add");
+    mocks.write.mockClear(); mocks.copy.mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+    select(makeAsset("shared.mp3", "same bytes"));
+    expect(await service.importVoices(secondFolder.id)).toEqual({ added: 0, skipped: 1, failed: 0, canceled: false });
+    expect(await service.load()).toEqual(original);
+    expect(await content(first)).toBe("same bytes");
+    expect(listener).not.toHaveBeenCalled(); unsubscribe();
+    expect(mocks.write).not.toHaveBeenCalled(); expect(mocks.copy).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled(); expect(add).not.toHaveBeenCalled();
+    for (const voice of original.voices) expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(voice.uri);
+  });
+
+  it("retains same-name files with different bytes even when sizes match, then skips each matching version", async () => {
+    select(makeAsset("same.mp3", "first")); await service.importVoices();
+    const first = (await service.load()).voices[0];
+    select(makeAsset("same.mp3", "later"));
+    expect(await service.importVoices()).toEqual({ added: 1, skipped: 0, failed: 0, canceled: false });
+    const original = await service.load();
+    expect(original.voices).toHaveLength(2);
+    expect(original.voices[0]).toEqual(first);
+    expect(await Promise.all(original.voices.map(content))).toEqual(["first", "later"]);
+    select(makeAsset("same.mp3", "later"), makeAsset("same.mp3", "first"));
+    expect(await service.importVoices()).toEqual({ added: 0, skipped: 2, failed: 0, canceled: false });
+    expect(await service.load()).toEqual(original);
+  });
+
+  it("compares all chunks including the final byte instead of assuming equal names and sizes are duplicates", async () => {
+    const prefix = "a".repeat(600_000);
+    select(makeAsset("long.mp3", `${prefix}x`)); await service.importVoices();
+    select(makeAsset("long.mp3", `${prefix}y`), makeAsset("long.mp3", `${prefix}x`));
+    expect(await service.importVoices()).toEqual({ added: 1, skipped: 1, failed: 0, canceled: false });
+    expect(await Promise.all((await service.load()).voices.map(content))).toEqual([`${prefix}x`, `${prefix}y`]);
+  });
+
+  it("adds different original filenames even when bytes match and distinguishes duplicates within one selection", async () => {
+    select(makeAsset("same.mp3", "first"), makeAsset("same.mp3", "first"), makeAsset("same.mp3", "later"),
+      makeAsset("same.mp3", "longer"), makeAsset("different.mp3", "first"), makeAsset("Same.mp3", "first"),
+      makeAsset("same.mp3", "later"), makeAsset("invalid.txt", "plain", "text/plain"));
+    expect(await service.importVoices()).toEqual({ added: 5, skipped: 2, failed: 1, canceled: false });
+    const stored = await service.load();
+    expect(stored.voices.map((voice) => voice.originalName)).toEqual(["same.mp3", "same.mp3", "same.mp3", "different.mp3", "Same.mp3"]);
+    expect(await Promise.all(stored.voices.map(content))).toEqual(["first", "later", "longer", "first", "first"]);
+  });
+
+  it("recognizes pre-existing legacy metadata after a restart without adding a new content index", async () => {
+    select(makeAsset("legacy.mp3", "legacy audio")); await service.importVoices();
+    const saved = await service.withExclusiveBackup((access) => access.snapshot());
+    const legacy = { version: 1, mode: "one", voices: saved.library.voices.map(({ folderIds: _folders, ...voice }) => voice) };
+    if (platform === "web") await webData((transaction) => { transaction.objectStore("metadata").put(legacy, "library"); }, "readwrite");
+    else nativeFiles.set(current, JSON.stringify(legacy));
+    vi.resetModules(); ({ voiceStorageService: service } = await import("./voiceStorageService"));
+    const original = await service.load();
+    select(makeAsset("legacy.mp3", "legacy audio"));
+    expect(await service.importVoices()).toEqual({ added: 0, skipped: 1, failed: 0, canceled: false });
+    expect(await service.load()).toEqual(original);
+  });
+
+  it("reports content read failures as failed, preserves the original and continues with later files", async () => {
+    select(makeAsset("existing.mp3", "audio")); await service.importVoices();
+    const original = (await service.load()).voices[0];
+    if (platform === "web") vi.spyOn(Blob.prototype, "arrayBuffer").mockRejectedValueOnce(new Error("read failed"));
+    else {
+      const read = mocks.read.getMockImplementation()!;
+      mocks.read.mockImplementation(async (uri: string, options?: { encoding?: string }) => {
+        if (options?.encoding === "base64") throw new Error("read failed");
+        return read(uri, options);
+      });
+    }
+    select(makeAsset("existing.mp3", "audio"), makeAsset("new.mp3", "other"));
+    expect(await service.importVoices()).toEqual({ added: 1, skipped: 0, failed: 1, canceled: false });
+    const saved = await service.load();
+    expect(saved.voices[0]).toEqual(original);
+    expect(saved.voices.map((voice) => voice.originalName)).toEqual(["existing.mp3", "new.mp3"]);
+    expect(await content(original)).toBe("audio");
+  });
+
+  it("reports missing stored bytes as a comparison failure rather than silently counting them as a duplicate", async () => {
+    select(makeAsset("missing.mp3")); await service.importVoices();
+    const original = (await service.load()).voices[0];
+    if (platform === "web") await webData((transaction) => { transaction.objectStore("voices").delete(original.id); }, "readwrite");
+    else nativeFiles.delete(original.uri);
+    select(makeAsset("missing.mp3"));
+    expect(await service.importVoices()).toEqual({ added: 0, skipped: 0, failed: 1, canceled: false });
+  });
+});
+
 describe("native voice library", () => {
   it("clears its dedicated storage and repeat preference without deleting original imports or other app files", async () => {
     const imported = asset("first.mp3");
@@ -445,7 +571,7 @@ describe("native voice library", () => {
   it("copies multiple audio imports into durable storage and preserves order, rename, repeat, and bytes after reload", async () => {
     expect(await service.load()).toEqual({ voices: [], mode: "one", folders: [], scope: "all" });
     select(asset("first.mp3", "first"), asset("second.wav", "second", ""));
-    expect(await service.importVoices()).toEqual({ added: 2, failed: 0, canceled: false });
+    expect(await service.importVoices()).toEqual({ added: 2, skipped: 0, failed: 0, canceled: false });
     expect(mocks.pick).toHaveBeenCalledWith(expect.objectContaining({ multiple: true, copyToCacheDirectory: true, base64: false }));
     const [first, second] = (await service.load()).voices;
     expect(first.uri).toMatch(/^file:\/\/\/documents\/voices\/voice-.+\.mp3$/);
@@ -467,7 +593,7 @@ describe("native voice library", () => {
       await copy(paths);
       if (paths.from.endsWith("broken.mp3")) throw new Error("copy interrupted");
     });
-    expect(await service.importVoices()).toEqual({ added: 2, failed: 2, canceled: false });
+    expect(await service.importVoices()).toEqual({ added: 2, skipped: 0, failed: 2, canceled: false });
     expect((await service.load()).voices.map(({ name }) => name)).toEqual(["first.mp3", "last.mp3"]);
     expect([...nativeFiles.keys()].filter((uri) => uri.startsWith(directory) && !uri.includes(".metadata/"))).toHaveLength(2);
   });
@@ -542,6 +668,124 @@ describe("native voice library", () => {
   });
 });
 
+describe.each(["android", "web"])("%s bulk voice removal", (platform) => {
+  beforeEach(() => { mocks.platform.OS = platform; });
+
+  async function seed() {
+    const firstFolder = await service.createFolder("First folder");
+    const otherFolder = await service.createFolder("Other folder");
+    const create = platform === "web" ? webAsset : asset;
+    select(create("one.mp3"), create("two.mp3"), create("three.mp3"), create("four.mp3"));
+    await service.importVoices(firstFolder.id);
+    let snapshot = await service.load();
+    await service.setVoiceFolders(snapshot.voices[1].id, [firstFolder.id, otherFolder.id]);
+    await service.setVoiceFolders(snapshot.voices[3].id, [otherFolder.id]);
+    await service.setScope(firstFolder.id);
+    await service.setMode("all");
+    snapshot = await service.load();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+    return snapshot;
+  }
+
+  it("removes selected IDs once while retaining survivor order, folder memberships and playback settings", async () => {
+    const original = await seed();
+    const [first, second, third, fourth] = original.voices;
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    expect(await service.removeMany([third.id, first.id, third.id])).toEqual({ removed: [third.id, first.id], failed: [] });
+    expect(await service.load()).toEqual({ ...original, voices: [second, fourth] });
+    expect(listener).toHaveBeenCalledOnce();
+    if (platform === "web") {
+      expect(vi.mocked(URL.revokeObjectURL).mock.calls).toEqual([[third.uri], [first.uri]]);
+      await webData((transaction) => {
+        const keys = transaction.objectStore("voices").getAllKeys();
+        keys.onsuccess = () => expect(new Set(keys.result)).toEqual(new Set([second.id, fourth.id]));
+      });
+    } else {
+      expect(nativeFiles.has(first.uri)).toBe(false);
+      expect(nativeFiles.has(third.uri)).toBe(false);
+      expect(nativeFiles.has(second.uri)).toBe(true);
+      expect(nativeFiles.has(fourth.uri)).toBe(true);
+    }
+    unsubscribe();
+  });
+
+  it("reports missing IDs without removing anything or notifying on empty/failed-only batches", async () => {
+    const original = await seed();
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    mocks.write.mockClear();
+    expect(await service.removeMany([])).toEqual({ removed: [], failed: [] });
+    expect(await service.removeMany(["missing", "missing"])).toEqual({ removed: [], failed: ["missing"] });
+    expect(await service.load()).toEqual(original);
+    expect(listener).not.toHaveBeenCalled();
+    expect(mocks.write).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("preserves a failed item's bytes and metadata, continues later items, then supports retry", async () => {
+    const original = await seed();
+    const [first, second, third, fourth] = original.voices;
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
+    let restore: (() => void) | undefined;
+    if (platform === "web") {
+      const put = IDBObjectStore.prototype.put;
+      let rejectNext = true;
+      const abort = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+        const request = put.call(this, value, key);
+        if (this.name === "metadata" && rejectNext) {
+          rejectNext = false;
+          request.addEventListener("success", () => this.transaction.abort(), { once: true });
+        }
+        return request;
+      });
+      restore = () => abort.mockRestore();
+    } else mocks.write.mockRejectedValueOnce(new Error("disk full"));
+    expect(await service.removeMany([first.id, second.id, "missing", third.id]))
+      .toEqual({ removed: [second.id, third.id], failed: [first.id, "missing"] });
+    restore?.();
+    expect(await service.load()).toEqual({ ...original, voices: [first, fourth] });
+    expect(listener).toHaveBeenCalledOnce();
+    expect(platform === "web" ? await blobs.get(first.uri)!.text() : nativeFiles.get(first.uri)).toBe("audio");
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(first.uri);
+    expect(await service.removeMany([first.id])).toEqual({ removed: [first.id], failed: [] });
+    expect(await service.load()).toEqual({ ...original, voices: [fourth] });
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+
+  it("keeps the entire batch ahead of queued mutations", async () => {
+    const original = await seed();
+    const [first, second] = original.voices;
+    const removing = service.removeMany([first.id, second.id]);
+    const renaming = service.rename(second.id, "Should run after both removals");
+    const [removed, renamed] = await Promise.allSettled([removing, renaming]);
+    expect(removed).toEqual({ status: "fulfilled", value: { removed: [first.id, second.id], failed: [] } });
+    expect(renamed.status).toBe("rejected");
+    expect((await service.load()).voices).toEqual(original.voices.slice(2));
+  });
+
+  it("copies the caller's selection before queued work begins", async () => {
+    const original = await seed();
+    const [first, second] = original.voices;
+    const selected = [first.id];
+    const removing = service.removeMany(selected);
+    selected[0] = second.id;
+    expect(await removing).toEqual({ removed: [first.id], failed: [] });
+    expect((await service.load()).voices).toEqual(original.voices.slice(1));
+  });
+
+  it("rejects malformed selections before making any changes", async () => {
+    const original = await seed();
+    await expect(service.removeMany([original.voices[0].id, ""])).rejects.toThrow("保存データが不正");
+    await expect(service.removeMany(null as unknown as string[])).rejects.toThrow("保存データが不正");
+    expect(await service.load()).toEqual(original);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+});
+
 describe("voice import concurrency and notifications", () => {
   it("opens the picker immediately, rejects a second picker, and merges changes made while it is open", async () => {
     select(asset("first.mp3"));
@@ -581,11 +825,11 @@ describe("voice import concurrency and notifications", () => {
 
   it("releases the import lock after cancellation or picker failure", async () => {
     mocks.pick.mockResolvedValueOnce({ canceled: true, assets: null });
-    expect(await service.importVoices()).toEqual({ added: 0, failed: 0, canceled: true });
+    expect(await service.importVoices()).toEqual({ added: 0, skipped: 0, failed: 0, canceled: true });
     mocks.pick.mockRejectedValueOnce(new Error("picker unavailable"));
     await expect(service.importVoices()).rejects.toThrow("picker unavailable");
     select(asset("first.mp3"));
-    expect(await service.importVoices()).toEqual({ added: 1, failed: 0, canceled: false });
+    expect(await service.importVoices()).toEqual({ added: 1, skipped: 0, failed: 0, canceled: false });
   });
 
   it("notifies after committed changes only and supports unsubscribe", async () => {
@@ -632,7 +876,7 @@ describe("web binary voice library", () => {
     const bytes = new Uint8Array(6 * 1024 * 1024 + 9).fill(41);
     bytes[bytes.length - 1] = 17;
     select(webAsset("large.mp3", bytes), webAsset("second.wav", "second", ""));
-    expect(await service.importVoices()).toEqual({ added: 2, failed: 0, canceled: false });
+    expect(await service.importVoices()).toEqual({ added: 2, skipped: 0, failed: 0, canceled: false });
     const original = await service.load();
     expect(mocks.pick.mock.calls[0][0].type).toContain(".mp3");
     expect(mocks.pick.mock.calls[0][0].base64).toBe(false);
@@ -667,7 +911,7 @@ describe("web binary voice library", () => {
       return request;
     });
     select(webAsset("first.mp3"));
-    expect(await service.importVoices()).toEqual({ added: 0, failed: 1, canceled: false });
+    expect(await service.importVoices()).toEqual({ added: 0, skipped: 0, failed: 1, canceled: false });
     abort.mockRestore();
     expect((await service.load()).voices).toEqual([]);
     await webData((transaction) => {
@@ -747,6 +991,31 @@ describe("web binary voice library", () => {
     const other = (await import("./voiceStorageService")).voiceStorageService;
     await Promise.all([service.rename(voice.id, "Latest"), other.setMode("all")]);
     expect(await service.load()).toMatchObject({ mode: "all", voices: [{ name: "Latest" }] });
+  });
+
+  it("rechecks comparison candidates if another service imports matching bytes while comparison is pending", async () => {
+    select(webAsset("shared.mp3", "first")); await service.importVoices();
+    const first = (await service.load()).voices[0];
+    vi.resetModules();
+    const other = (await import("./voiceStorageService")).voiceStorageService;
+    const entered = deferred<void>(); const finish = deferred<void>();
+    const read = Blob.prototype.arrayBuffer;
+    const comparison = vi.spyOn(Blob.prototype, "arrayBuffer").mockImplementationOnce(async function(this: Blob) {
+      entered.resolve(); await finish.promise;
+      return read.call(this);
+    });
+    select(webAsset("shared.mp3", "later"));
+    const importing = service.importVoices();
+    await entered.promise;
+    select(webAsset("shared.mp3", "later"));
+    expect(await other.importVoices()).toEqual({ added: 1, skipped: 0, failed: 0, canceled: false });
+    finish.resolve();
+    expect(await importing).toEqual({ added: 0, skipped: 1, failed: 0, canceled: false });
+    comparison.mockRestore();
+    const stored = await service.load();
+    expect(stored.voices).toHaveLength(2);
+    expect(stored.voices[0]).toEqual(first);
+    expect(await Promise.all(stored.voices.map((voice) => blobs.get(voice.uri)!.text()))).toEqual(["first", "later"]);
   });
 });
 
@@ -965,7 +1234,7 @@ describe.each(["android", "web"])("%s voice folders", (platform) => {
     expect(mocks.pick).toHaveBeenCalledOnce();
     await service.setScope(other.id);
     picked.resolve({ canceled: false, assets: [folderAsset("first.mp3")] });
-    expect(await importing).toEqual({ added: 1, failed: 0, canceled: false });
+    expect(await importing).toEqual({ added: 1, skipped: 0, failed: 0, canceled: false });
     expect(await service.load()).toMatchObject({ scope: other.id, voices: [{ folderIds: [folder.id] }] });
   });
 

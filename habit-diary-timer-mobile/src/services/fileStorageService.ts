@@ -5,6 +5,8 @@ import { base64ToBlob, webFileStorage } from "./webFileStorage";
 import { fileHasPurpose, fileUsageKey, isFilePurpose, isValidFileUsages, getFileUsages, type FilePurpose, type FileUsage } from "../features/files/usages";
 import { readNativeFileUsages, writeNativeFileUsages } from "./nativeFileUsages";
 import { invalidProfilePhotoMessage, isProfilePhotoMetadata, PROFILE_PHOTO_TYPES, profilePhotoMatchesSignature } from "../features/files/profilePhoto";
+import { displayedFileName } from "../features/files/fileList";
+import { sameBlobContent, sameNativeFileContent } from "./fileContentComparison";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
 export type { FilePurpose, FileUsage } from "../features/files/usages";
@@ -37,7 +39,7 @@ export type PreparedFileRestore = {
   rollback: () => Promise<void>;
   finalize: () => Promise<void>;
 };
-export type FileImportResult = { stored: number; failed: string[] };
+export type FileImportResult = { stored: number; skipped: string[]; failed: string[] };
 export type FileImportProgress = { completed: number; total: number };
 export type FileDeleteResult = { removed: StoredFile[]; failed: StoredFile[] };
 type ProgressHandler = (progress: FileImportProgress) => void;
@@ -68,23 +70,47 @@ function updateMaintenanceState(active: boolean) {
 
 let importSequence = 0;
 
+function safeImportName(name: string) {
+  return name.replace(/[\\/:*?"<>|]/g, "_");
+}
+
 function storedFileName(name: string) {
-  const safeName = name.replace(/[\\/:*?"<>|]/g, "_");
-  return `${Date.now()}_${importSequence++}_${safeName}`;
+  return `${Date.now()}_${importSequence++}_${safeImportName(name)}`;
+}
+
+function importFileIndex(files: StoredFile[]) {
+  const byName = new Map<string, StoredFile[]>();
+  const storedNames = new Set(files.map((file) => file.name));
+  const add = (file: StoredFile, originalName = displayedFileName(file)) => {
+    const matches = byName.get(originalName) ?? [];
+    matches.push(file);
+    byName.set(originalName, matches);
+  };
+  for (const file of files) add(file);
+  return {
+    matches: (name: string) => byName.get(safeImportName(name)) ?? [],
+    add: (file: StoredFile, originalName: string) => add(file, safeImportName(originalName)),
+    nextName(name: string) {
+      let storedName: string;
+      do { storedName = storedFileName(name); } while (storedNames.has(storedName));
+      storedNames.add(storedName);
+      return storedName;
+    },
+  };
 }
 
 async function storeSelectedFiles<T extends { name: string }>(
   files: readonly T[],
-  storeFile: (file: T) => Promise<void>,
+  storeFile: (file: T) => Promise<"stored" | "skipped">,
   onProgress?: ProgressHandler,
 ): Promise<FileImportResult> {
-  const result: FileImportResult = { stored: 0, failed: [] };
+  const result: FileImportResult = { stored: 0, skipped: [], failed: [] };
   onProgress?.({ completed: 0, total: files.length });
   // Copy one at a time to avoid loading several large videos into memory.
   for (const [index, file] of files.entries()) {
     try {
-      await storeFile(file);
-      result.stored++;
+      if (await storeFile(file) === "skipped") result.skipped.push(file.name);
+      else result.stored++;
     } catch {
       result.failed.push(file.name);
     }
@@ -172,16 +198,26 @@ function webPickFiles(purpose: FilePurpose, onProgress?: ProgressHandler): Promi
         finish(null);
         return;
       }
-      const result = await storeSelectedFiles(selectedFiles, async (file) => {
-        await webFileStorage.put({
-          name: storedFileName(file.name),
-          blob: file,
-          mimeType: file.type || mimeTypeForName(file.name),
-          size: file.size,
-          purpose,
-        });
-      }, onProgress);
-      finish(result);
+      try {
+        const compareContent = getFileUsages({ purpose }).length > 0;
+        const index = importFileIndex(compareContent
+          ? (await webFileStorage.list()).filter((file) => getFileUsages(file).length > 0) : []);
+        const result = await storeSelectedFiles(selectedFiles, async (file) => {
+          if (compareContent) for (const existing of index.matches(file.name)) {
+            if (existing.size === file.size && await sameBlobContent(file, await webFileStorage.getBlob(existing))) return "skipped";
+          }
+          const name = index.nextName(file.name);
+          await webFileStorage.put({ name, blob: file, mimeType: file.type || mimeTypeForName(file.name), size: file.size, purpose });
+          index.add({ name, uri: "", size: file.size, purpose }, file.name);
+          return "stored";
+        }, onProgress);
+        finish(result);
+      } catch (error) {
+        if (settled) return;
+        settled = true;
+        input.remove();
+        reject(error);
+      }
     }, { once: true });
 
     // Keep the picker within the button's user activation on the web.
@@ -491,8 +527,21 @@ export const fileStorageService = {
         const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: true });
         if (result.canceled) return null;
         await ensurePurposeDirectory(purpose);
+        const compareContent = getFileUsages({ purpose }).length > 0;
+        // Private attachment directories do not participate in library deduplication.
+        const existingFiles = compareContent ? (await Promise.all([
+          readFiles(uploadDirectory, "training"),
+          readFiles(purposeDirectory("training"), "training"),
+          readFiles(purposeDirectory("punishment"), "punishment"),
+          readFiles(purposeDirectory("endurance"), "endurance"),
+        ])).flat() : [];
+        const index = importFileIndex(existingFiles);
         stored = await storeSelectedFiles(result.assets, async (asset) => {
-          const destination = `${purposeDirectory(purpose)}${storedFileName(asset.name)}`;
+          if (compareContent) for (const existing of index.matches(asset.name)) {
+            if (await sameNativeFileContent(asset.uri, existing.uri)) return "skipped";
+          }
+          const name = index.nextName(asset.name);
+          const destination = `${purposeDirectory(purpose)}${encodeURIComponent(name)}`;
           try {
             await FileSystem.copyAsync({ from: asset.uri, to: destination });
           } catch (error) {
@@ -500,6 +549,8 @@ export const fileStorageService = {
             await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => {});
             throw error;
           }
+          index.add({ name, uri: destination, size: asset.size ?? 0, purpose }, asset.name);
+          return "stored";
         }, reportProgress);
       }
       updateImportState({ result: stored });
