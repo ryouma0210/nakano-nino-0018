@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoredFile } from "../../services/fileStorageService";
-import { displayedFileName, filterAndSortFiles, filterFilesByName, selectedVisibleFiles, storedFileKey } from "./fileList";
+import { displayedFileName, filterAndSortFiles, filterFilesByName, originalFileName, selectedVisibleFiles, storedFileKey } from "./fileList";
 
 function file(name: string, purpose: StoredFile["purpose"] = "training", size = 10): StoredFile {
   return { name, purpose, size, uri: "data:video/mp4;base64,c2FtZQ==" };
@@ -74,6 +74,22 @@ describe("stored file list", () => {
     const tenth = file("1700000000000_1_clip10.mp4", "training", 30);
     expect(filterAndSortFiles([tenth, second], "all", "", "name")).toEqual([second, tenth]);
     expect(filterAndSortFiles([second, tenth], "all", "", "size")).toEqual([tenth, second]);
+  });
+
+  it("uses edited names for display and sorting while preserving original-name search and identity", () => {
+    const original = file("1700000000000_1_Summer.mp4");
+    const renamed = { ...original, displayName: "お気に入り 2" };
+    const other = { ...file("1700000000001_2_Autumn.mp4"), displayName: "お気に入り 10" };
+    expect(displayedFileName(renamed)).toBe("お気に入り 2");
+    expect(originalFileName(renamed)).toBe("Summer.mp4");
+    expect(storedFileKey(renamed)).toBe(storedFileKey(original));
+    expect(renamed.uri).toBe(original.uri);
+    expect(filterFilesByName([renamed, other], "ＳＵＭＭＥＲ")).toEqual([renamed]);
+    expect(filterFilesByName([renamed, other], "お気に入り")).toEqual([renamed, other]);
+    expect(filterAndSortFiles([other, renamed], "all", "", "name")).toEqual([renamed, other]);
+    expect(filterAndSortFiles([renamed, other], "all", "", "newest")).toEqual([other, renamed]);
+    expect(selectedVisibleFiles([renamed], new Set([storedFileKey(original)]))).toEqual([renamed]);
+    expect(originalFileName(file("legacy.jpg"))).toBe("legacy.jpg");
   });
 
   it("limits deletion targets to selected visible entries, keeping identical content separate", () => {

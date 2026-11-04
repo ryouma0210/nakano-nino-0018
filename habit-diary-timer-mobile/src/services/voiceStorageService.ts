@@ -2,8 +2,11 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import { sameBlobContent, sameNativeFileContent } from "./fileContentComparison";
+import { fingerprintVoiceBlob, fingerprintVoiceFile } from "./voiceSourceFingerprint";
+import { analyzeVoiceAudio, normalizeVoiceAudio } from "./voiceLoudnessProcessing";
+import { validateVoiceLoudnessTarget, type VoiceLoudnessAnalysis } from "../features/voices/loudness";
 import {
-  audioFileType, emptyVoiceLibrary, invalidVoiceLibraryMessage, invalidVoiceOrderMessage, moveVoice, normalizedVoiceFolderName, parseVoiceLibrary, reorderVoices,
+  audioFileType, emptyVoiceLibrary, invalidVoiceLibraryMessage, invalidVoiceOrderMessage, moveVoice, normalizedVoiceFolderName, parseVoiceLibrary, parseVoiceLoudness, reorderVoices,
   VOICE_FILE_EXTENSIONS, VOICE_NAME_LIMIT, voiceDisplayName, voiceFolderName,
   type StoredVoice, type VoiceFolder, type VoiceLibrary, type VoiceMetadata, type VoicePlaybackMode, type VoiceScope,
 } from "../features/voices/library";
@@ -25,9 +28,11 @@ const saveFailureMessage = "ボイスを保存できませんでした。";
 const unavailableMessage = "この環境ではボイスを保存できません。";
 const listeners = new Set<() => void>();
 const objectUrls = new Map<string, string>();
+const objectUrlSources = new Map<string, string>();
 let queue: Promise<unknown> = Promise.resolve();
 let databasePromise: Promise<IDBDatabase> | null = null;
 let importing = false;
+let processing = false;
 let backupBusy = false;
 let sequence = 0;
 
@@ -215,7 +220,9 @@ async function storeWebAsset(asset: DocumentPicker.DocumentPickerAsset, folderId
   if (!(asset.file instanceof Blob)) throw new Error(saveFailureMessage);
   const voice = newMetadata(asset, asset.file.size, folderId);
   const blob = asset.file.type === voice.mimeType ? asset.file : asset.file.slice(0, asset.file.size, voice.mimeType);
-  const matching = (state: VoiceLibrary) => state.voices.filter((candidate) => candidate.originalName === asset.name && candidate.size === blob.size);
+  const matching = (state: VoiceLibrary) => state.voices.filter((candidate) => candidate.originalName === asset.name
+    && (candidate.size === blob.size || candidate.sourceFingerprint?.size === blob.size));
+  let originalHash: string | undefined;
   // Reading Blob bytes is asynchronous and must finish outside an IndexedDB
   // transaction. Recheck candidate IDs before committing so another window's
   // imports/deletions cannot make the comparison snapshot stale.
@@ -226,19 +233,23 @@ async function storeWebAsset(asset: DocumentPicker.DocumentPickerAsset, folderId
       return Promise.all(matching(state).map(async (candidate) => {
         const bytes: unknown = await requestResult(current.objectStore("voices").get(candidate.id));
         if (!(bytes instanceof Blob) || bytes.size !== candidate.size) throw new Error(invalidVoiceLibraryMessage);
-        return { id: candidate.id, blob: bytes };
+        return { id: candidate.id, fileName: candidate.fileName, blob: bytes, sourceFingerprint: candidate.sourceFingerprint };
       }));
     });
     let duplicate = false;
     for (const candidate of candidates) {
       if (await sameBlobContent(blob, candidate.blob)) { duplicate = true; break; }
+      if (candidate.sourceFingerprint?.size === blob.size) {
+        originalHash ??= (await fingerprintVoiceBlob(blob)).sha256;
+        if (originalHash === candidate.sourceFingerprint.sha256) { duplicate = true; break; }
+      }
     }
-    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+    const candidateIds = new Set(candidates.map((candidate) => `${candidate.id}:${candidate.fileName}`));
     const committed = await webTransaction(duplicate ? "readonly" : "readwrite", async (current) => {
       const state = await readWebLibrary(current);
       requireFolder(state, folderId);
       const latest = matching(state);
-      if (latest.length !== candidateIds.size || latest.some((candidate) => !candidateIds.has(candidate.id))) return false;
+      if (latest.length !== candidateIds.size || latest.some((candidate) => !candidateIds.has(`${candidate.id}:${candidate.fileName}`))) return false;
       if (!duplicate) {
         await requestResult(current.objectStore("voices").add(blob, voice.id));
         await writeWebLibrary(current, { ...state, voices: [...state.voices, voice] });
@@ -275,6 +286,7 @@ async function backupSnapshot(): Promise<VoiceBackupSnapshot> {
 function releaseObjectUrls() {
   objectUrls.forEach((uri) => URL.revokeObjectURL(uri));
   objectUrls.clear();
+  objectUrlSources.clear();
 }
 
 async function prepareVoiceRestore(input: VoiceLibrary, files: readonly VoiceBackupFile[]): Promise<PreparedVoiceRestore> {
@@ -408,6 +420,7 @@ async function removeStoredVoice(id: string): Promise<void> {
     });
     const uri = objectUrls.get(id);
     if (uri) { URL.revokeObjectURL(uri); objectUrls.delete(id); }
+    objectUrlSources.delete(id);
   } else {
     const state = await readNativeLibrary();
     const voice = state.voices.find((item) => item.id === id);
@@ -418,10 +431,106 @@ async function removeStoredVoice(id: string): Promise<void> {
   }
 }
 
+async function processStoredVoice(id: string, targetLufs?: number, signal?: AbortSignal): Promise<VoiceLoudnessAnalysis> {
+  if (importing || processing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
+  if (targetLufs !== undefined) validateVoiceLoudnessTarget(targetLufs);
+  processing = true;
+  try {
+    const result = await serialized(async () => {
+      const web = Platform.OS === "web";
+      const state = web ? await webTransaction("readonly", readWebLibrary) : await readNativeLibrary();
+      const voice = state.voices.find((item) => item.id === id);
+      if (!voice) throw new Error("ボイスが見つかりません。");
+      let originalBlob: Blob | undefined;
+      if (web) {
+        const bytes: unknown = await webTransaction("readonly", (current) => requestResult(current.objectStore("voices").get(id)));
+        if (!(bytes instanceof Blob) || bytes.size !== voice.size) throw new Error(invalidVoiceLibraryMessage);
+        originalBlob = bytes;
+      }
+      const sourceUri = originalBlob ? URL.createObjectURL(originalBlob) : `${nativeDirectory()}${voice.fileName}`;
+      let output: { uri?: string; blob?: Blob; format: "m4a"; analysis: VoiceLoudnessAnalysis } | undefined;
+      let destination: string | undefined;
+      let committed = false;
+      try {
+        if (signal?.aborted) throw new Error("音量の処理をキャンセルしました。");
+        // No decoder or native job is created until this explicit operation.
+        let fingerprint = voice.sourceFingerprint;
+        let analysis: VoiceLoudnessAnalysis;
+        if (targetLufs === undefined) analysis = await analyzeVoiceAudio(sourceUri, signal);
+        else {
+          fingerprint ??= originalBlob ? await fingerprintVoiceBlob(originalBlob) : await fingerprintVoiceFile(sourceUri);
+          output = await normalizeVoiceAudio(sourceUri, targetLufs, signal);
+          // Old native binaries must never have their WAV output relabeled as M4A.
+          if (output.format !== "m4a") throw new Error(saveFailureMessage);
+          analysis = output.analysis;
+        }
+        const loudness = parseVoiceLoudness({ analysis, targetLufs: targetLufs ?? voice.loudness?.targetLufs });
+        if (signal?.aborted) throw new Error("音量の処理をキャンセルしました。");
+        const fileName = targetLufs === undefined ? voice.fileName : `${voice.id}.loudness-${Date.now()}-${sequence++}.m4a`;
+        const update = (latest: VoiceLibrary, size: number) => {
+          if (signal?.aborted) throw new Error("音量の処理をキャンセルしました。");
+          const live = latest.voices.find((item) => item.id === id);
+          if (!live || live.fileName !== voice.fileName || live.size !== voice.size) {
+            throw new Error("ボイスが変更されました。詳細を開き直してください。");
+          }
+          return { ...latest, voices: latest.voices.map((item) => item.id !== id ? item : {
+            ...item, loudness, ...(output ? { fileName, size, mimeType: "audio/mp4", sourceFingerprint: fingerprint } : {}),
+          }) };
+        };
+        if (web) {
+          if (output && (!(output.blob instanceof Blob) || output.blob.type !== "audio/mp4" || output.blob.size <= 44)) throw new Error(saveFailureMessage);
+          await webTransaction("readwrite", async (current) => {
+            const latest = await readWebLibrary(current);
+            const next = update(latest, output?.blob?.size ?? voice.size);
+            if (output?.blob) await requestResult(current.objectStore("voices").put(output.blob, id));
+            await writeWebLibrary(current, next);
+          });
+          committed = true;
+          if (output) {
+            const old = objectUrls.get(id);
+            if (old) URL.revokeObjectURL(old);
+            objectUrls.delete(id);
+            objectUrlSources.delete(id);
+          }
+        } else {
+          let size = voice.size;
+          if (output) {
+            if (!output.uri || !output.uri.startsWith("file://") || output.uri === sourceUri) throw new Error(saveFailureMessage);
+            destination = `${nativeDirectory()}${fileName}`;
+            await FileSystem.copyAsync({ from: output.uri, to: destination });
+            const info = await FileSystem.getInfoAsync(destination);
+            if (!info.exists || info.isDirectory || !Number.isSafeInteger(info.size) || info.size <= 44) throw new Error(saveFailureMessage);
+            size = info.size;
+          }
+          // A unique destination keeps the old audio intact until metadata commits.
+          await writeNativeLibrary(update(await readNativeLibrary(), size));
+          committed = true;
+          if (output) await cleanupNative(sourceUri);
+        }
+        return loudness.analysis;
+      } finally {
+        if (originalBlob) URL.revokeObjectURL(sourceUri);
+        if (!committed && destination) await cleanupNative(destination);
+        if (output?.uri && output.uri !== sourceUri && FileSystem.cacheDirectory && output.uri.startsWith(FileSystem.cacheDirectory)) {
+          await cleanupNative(output.uri);
+        }
+      }
+    });
+    changed();
+    return result;
+  } finally { processing = false; }
+}
+
 export const voiceStorageService = {
+  analyzeLoudness(id: string, signal?: AbortSignal): Promise<VoiceLoudnessAnalysis> {
+    return processStoredVoice(id, undefined, signal);
+  },
+  normalizeLoudness(id: string, targetLufs: number, signal?: AbortSignal): Promise<VoiceLoudnessAnalysis> {
+    return processStoredVoice(id, targetLufs, signal);
+  },
   /** Hold the existing operation queue through the whole backup/restore transaction. */
   async withExclusiveBackup<T>(operation: (access: VoiceBackupAccess) => Promise<T>): Promise<T> {
-    if (importing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
+    if (importing || processing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
     backupBusy = true;
     try { return await serialized(() => operation({ snapshot: backupSnapshot, prepareRestore: prepareVoiceRestore })); }
     finally { backupBusy = false; }
@@ -430,8 +539,8 @@ export const voiceStorageService = {
     return serialized(async () => {
       if (Platform.OS !== "web") {
         const state = await readNativeLibrary();
-        return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, fileName, folderIds }) => ({
-          id, name, originalName, size, folderIds, uri: `${nativeDirectory()}${fileName}`,
+        return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, fileName, folderIds, loudness }) => ({
+          id, name, originalName, size, folderIds, uri: `${nativeDirectory()}${fileName}`, ...(loudness ? { loudness } : {}),
         })) };
       }
       const { state, blobs } = await webTransaction("readonly", async (current) => {
@@ -443,16 +552,18 @@ export const voiceStorageService = {
         }));
         return { state, blobs };
       });
-      return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, folderIds }, index) => {
+      return { mode: state.mode, folders: state.folders, scope: state.scope, voices: state.voices.map(({ id, name, originalName, size, fileName, folderIds, loudness }, index) => {
         let uri = objectUrls.get(id);
-        if (!uri) { uri = URL.createObjectURL(blobs[index]); objectUrls.set(id, uri); }
-        return { id, name, originalName, size, folderIds, uri };
+        const identity = `${fileName}:${size}`;
+        if (uri && objectUrlSources.get(id) !== identity) { URL.revokeObjectURL(uri); uri = undefined; }
+        if (!uri) { uri = URL.createObjectURL(blobs[index]); objectUrls.set(id, uri); objectUrlSources.set(id, identity); }
+        return { id, name, originalName, size, folderIds, uri, ...(loudness ? { loudness } : {}) };
       }) };
     });
   },
 
   async importVoices(folderId: string | null = null): Promise<VoiceImportResult> {
-    if (importing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
+    if (importing || processing || backupBusy) throw new Error("ボイスを処理中です。完了してからもう一度お試しください。");
     importing = true;
     let assets: DocumentPicker.DocumentPickerAsset[] = [];
     try {
@@ -477,8 +588,15 @@ export const voiceStorageService = {
               else result.skipped++;
             } else {
               let duplicate = false;
+              let fingerprint: Awaited<ReturnType<typeof fingerprintVoiceFile>> | undefined;
               for (const candidate of state.voices.filter((voice) => voice.originalName === asset.name)) {
                 if (await sameNativeFileContent(asset.uri, `${nativeDirectory()}${candidate.fileName}`)) { duplicate = true; break; }
+                if (candidate.sourceFingerprint) {
+                  fingerprint ??= await fingerprintVoiceFile(asset.uri);
+                  if (fingerprint.size === candidate.sourceFingerprint.size && fingerprint.sha256 === candidate.sourceFingerprint.sha256) {
+                    duplicate = true; break;
+                  }
+                }
               }
               if (duplicate) result.skipped++;
               else { state = await storeNativeAsset(asset, state, folderId); result.added++; }

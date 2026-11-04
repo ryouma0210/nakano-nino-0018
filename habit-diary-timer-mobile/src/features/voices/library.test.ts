@@ -6,6 +6,28 @@ const second: VoiceMetadata = { ...first, id: "voice-second", fileName: "voice-s
 const third: VoiceMetadata = { ...first, id: "voice-third", fileName: "voice-third.mp3", name: "Third" };
 
 describe("voice library metadata", () => {
+  it("preserves verified loudness, targets and source fingerprints through backup parsing", () => {
+    const loudness = { analysis: { integratedLufs: -24.12, samplePeak: 0.2, duration: 3, sampleRate: 48000, channels: 2 }, targetLufs: -24 };
+    const sourceFingerprint = { sha256: "a".repeat(64), size: 123 };
+    const voice = { ...first, fileName: "voice-first.loudness-123-1.wav", mimeType: "audio/wav", loudness, sourceFingerprint };
+    const result = parseVoiceLibrary({ ...emptyVoiceLibrary(), voices: [voice] });
+    expect(result.voices[0]).toEqual(voice);
+    result.voices[0].loudness!.analysis.integratedLufs = -25;
+    expect(loudness.analysis.integratedLufs).toBe(-24.12);
+  });
+
+  it("rejects invalid loudness/fingerprint data and unsafe normalized filenames", () => {
+    const analysis = { integratedLufs: -25, samplePeak: 0.2, duration: 3, sampleRate: 48000, channels: 1 };
+    for (const patch of [
+      { loudness: { analysis, targetLufs: -19 } }, { loudness: { analysis, targetLufs: 25 } },
+      { loudness: { analysis: { ...analysis, integratedLufs: Infinity } } },
+      { loudness: { analysis: { ...analysis, duration: 0 } } },
+      { loudness: { analysis: { ...analysis, channels: 6 } } },
+      { sourceFingerprint: { sha256: "bad", size: 1 } }, { sourceFingerprint: { sha256: "a".repeat(64), size: -1 } },
+      { fileName: "voice-first.loudness-../../other.wav" },
+    ]) expect(() => parseVoiceLibrary({ ...emptyVoiceLibrary(), voices: [{ ...first, ...patch }] })).toThrow("保存データが不正");
+  });
+
   it("starts with an empty library and single-voice repeat", () => {
     expect(emptyVoiceLibrary()).toEqual({ version: 3, voices: [], mode: "one", folders: [], scope: "all" });
   });

@@ -165,6 +165,30 @@ afterEach(() => {
 });
 
 describe("APP backups restored into Web IndexedDB", () => {
+  it("preserves file display names and shared usages through reload, complete export and restore", async () => {
+    const { backupService, fileStorageService } = await services();
+    await fileStorageService.restoreFromBackup([{ name: "original.png", displayName: "Favorite / evening image",
+      purpose: "training", usages: ["training", "punishment"], size: 4, mimeType: "image/png", data: "AQIDBA==" }]);
+    vi.resetModules();
+    const reloaded = await services();
+    const [original] = await reloaded.fileStorageService.list();
+    expect(original).toMatchObject({ name: "original.png", displayName: "Favorite / evening image", purpose: "training", usages: ["training", "punishment"] });
+    await reloaded.backupService.export("complete");
+    const entries = await readBackupArchive(source(new Uint8Array(await downloads[0].arrayBuffer())));
+    const manifest = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
+    expect(manifest.files).toEqual([{ name: "original.png", displayName: original.displayName, purpose: "training",
+      usages: original.usages, size: 4, mimeType: "image/png", path: "files/000000" }]);
+    await reloaded.fileStorageService.restoreFromBackup([{ name: "replacement.png", purpose: "endurance", size: 3, mimeType: "image/png", data: "BQYH" }]);
+    select(new File([downloads[0]], "files-complete.zip", { type: "application/zip" }));
+    await backupService.restore((await backupService.pick())!);
+    const restored = await reloaded.fileStorageService.list();
+    expect(restored).toEqual([expect.objectContaining({ name: "original.png", displayName: original.displayName,
+      purpose: original.purpose, usages: original.usages, size: 4 })]);
+    expect(await (await reloaded.fileStorageService.getBlob(restored[0]))!.arrayBuffer()).toEqual(new Uint8Array([1, 2, 3, 4]).buffer);
+    expect(await reloaded.fileStorageService.list("punishment")).toHaveLength(1);
+    expect(mocks.native).not.toHaveBeenCalled();
+  });
+
   it("round-trips large voice binaries, shared folders, names, order and playback settings through a complete ZIP", async () => {
     const audio = [Uint8Array.from({ length: 6 * 1024 * 1024 + 1 }, (_, index) => index % 251), new Uint8Array([9, 8, 7, 6])];
     const library = incomingLibrary(audio);

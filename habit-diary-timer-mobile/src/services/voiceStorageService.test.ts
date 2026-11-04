@@ -6,12 +6,15 @@ import type { VoiceLibrary } from "../features/voices/library";
 const mocks = vi.hoisted(() => ({
   platform: { OS: "android" }, pick: vi.fn(), info: vi.fn(), mkdir: vi.fn(), copy: vi.fn(), move: vi.fn(),
   read: vi.fn(), write: vi.fn(), remove: vi.fn(),
+  analyze: vi.fn(), normalize: vi.fn(),
 }));
 vi.mock("react-native", () => ({ Platform: mocks.platform }));
 vi.mock("expo-document-picker", () => ({ getDocumentAsync: mocks.pick }));
+vi.mock("./voiceLoudnessProcessing", () => ({ analyzeVoiceAudio: mocks.analyze, normalizeVoiceAudio: mocks.normalize }));
 vi.mock("expo-file-system/legacy", () => ({
   EncodingType: { Base64: "base64" },
   documentDirectory: "file:///documents/", getInfoAsync: mocks.info, makeDirectoryAsync: mocks.mkdir,
+  cacheDirectory: "file:///cache/",
   copyAsync: mocks.copy, moveAsync: mocks.move, readAsStringAsync: mocks.read, writeAsStringAsync: mocks.write, deleteAsync: mocks.remove,
 }));
 
@@ -20,6 +23,8 @@ const current = `${directory}.metadata/current.json`;
 const previous = `${directory}.metadata/previous.json`;
 const pending = `${directory}.metadata/pending.json`;
 const databaseName = "nino-room-voice-library-v1";
+
+const measured = { integratedLufs: -28, samplePeak: 0.15, duration: 2, sampleRate: 48000, channels: 1 };
 let nativeFiles: Map<string, string>;
 let service: typeof import("./voiceStorageService").voiceStorageService;
 let blobs: Map<string, Blob>;
@@ -39,6 +44,148 @@ function webAsset(name: string, data: BlobPart = "audio", mimeType = "audio/mpeg
 function select(...assets: DocumentPickerAsset[]) {
   mocks.pick.mockResolvedValueOnce({ canceled: false, assets });
 }
+
+describe.each(["android", "web"])("%s manual voice loudness", (platform) => {
+  beforeEach(() => {
+    mocks.platform.OS = platform;
+    mocks.analyze.mockResolvedValue(measured);
+    mocks.normalize.mockImplementation(async (_uri: string, target: number) => {
+      const bytes = "normalized audio".repeat(10);
+      const uri = "file:///cache/voice-loudness-output.m4a";
+      nativeFiles.set(uri, bytes);
+      return platform === "web"
+        ? { blob: new Blob([bytes], { type: "audio/mp4" }), format: "m4a", analysis: { ...measured, integratedLufs: target } }
+        : { uri, format: "m4a", analysis: { ...measured, integratedLufs: target } };
+    });
+  });
+  async function seed() {
+    select(platform === "web" ? webAsset("voice.mp3", "original audio") : asset("voice.mp3", "original audio"));
+    await service.importVoices();
+    return (await service.load()).voices[0];
+  }
+  const audioText = async (voice: { uri: string }) => platform === "web" ? blobs.get(voice.uri)!.text() : nativeFiles.get(voice.uri);
+
+  if (platform === "web") it("refreshes a cached playback URL after another tab replaces the voice", async () => {
+    const original = await seed();
+    const nextBytes = "other tab's normalized audio";
+    await webData((transaction) => {
+      const metadata = transaction.objectStore("metadata");
+      const request = metadata.get("library");
+      request.onsuccess = () => {
+        const state = request.result as VoiceLibrary;
+        state.voices[0] = { ...state.voices[0], size: nextBytes.length, fileName: `${original.id}.loudness-external.wav`,
+          mimeType: "audio/wav", loudness: { analysis: measured, targetLufs: -20 } };
+        metadata.put(state, "library");
+        transaction.objectStore("voices").put(new Blob([nextBytes], { type: "audio/wav" }), original.id);
+      };
+    }, "readwrite");
+    const refreshed = (await service.load()).voices[0];
+    expect(refreshed.uri).not.toBe(original.uri);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(original.uri);
+    expect(await audioText(refreshed)).toBe(nextBytes);
+  });
+
+  it("never analyzes during import/load, and explicitly checking only persists the measurement", async () => {
+    const voice = await seed();
+    expect(mocks.analyze).not.toHaveBeenCalled(); expect(mocks.normalize).not.toHaveBeenCalled();
+    expect(await service.analyzeLoudness(voice.id)).toEqual(measured);
+    expect(mocks.analyze).toHaveBeenCalledOnce(); expect(mocks.normalize).not.toHaveBeenCalled();
+    const current = (await service.load()).voices[0];
+    expect(current).toEqual({ ...voice, loudness: { analysis: measured } });
+    expect(await audioText(current)).toBe("original audio");
+  });
+
+  it("saves the selected target and actual measurement, preserving identity, folders and duplicate detection", async () => {
+    const original = await seed();
+    const folder = await service.createFolder("Person");
+    await service.setVoiceFolders(original.id, [folder.id]); await service.rename(original.id, "Custom name");
+    await service.normalizeLoudness(original.id, -24);
+    const current = (await service.load()).voices[0];
+    expect(current).toMatchObject({ id: original.id, name: "Custom name", originalName: "voice.mp3", folderIds: [folder.id],
+      loudness: { analysis: { ...measured, integratedLufs: -24 }, targetLufs: -24 } });
+    expect(current.uri).not.toBe(original.uri);
+    expect(await audioText(current)).toBe("normalized audio".repeat(10));
+    select(platform === "web" ? webAsset("voice.mp3", "original audio") : asset("voice.mp3", "original audio"));
+    expect(await service.importVoices()).toMatchObject({ added: 0, skipped: 1, failed: 0 });
+    select(platform === "web" ? webAsset("voice.mp3", "different data") : asset("voice.mp3", "different data"));
+    expect(await service.importVoices()).toMatchObject({ added: 1, skipped: 0, failed: 0 });
+    const snapshot = await service.withExclusiveBackup((access) => access.snapshot());
+    expect(snapshot.library.voices[0].sourceFingerprint).toMatchObject({ size: "original audio".length });
+    expect(snapshot.library.voices[0].sourceFingerprint?.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(snapshot.library.voices[0].mimeType).toBe("audio/mp4");
+    expect(snapshot.library.voices[0].fileName).toMatch(/\.loudness-.*\.m4a$/);
+    expect(snapshot.library.voices[0].loudness).toEqual(current.loudness);
+    expect(nativeFiles.has("file:///cache/voice-loudness-output.m4a")).toBe(platform === "web");
+  });
+
+  it("preserves the original fingerprint across repeat adjustments and backs up/restores the adjusted bytes", async () => {
+    if (platform !== "web") {
+      mocks.info.mockImplementation(async (uri: string) => nativeFiles.has(uri)
+        ? { exists: true, isDirectory: false, size: nativeFiles.get(uri)!.length }
+        : uri.endsWith("/") && [...nativeFiles.keys()].some((key) => key.startsWith(uri))
+          ? { exists: true, isDirectory: true } : { exists: false });
+      mocks.move.mockImplementation(async ({ from, to }: { from: string; to: string }) => {
+        const entries = [...nativeFiles].filter(([key]) => from.endsWith("/") ? key.startsWith(from) : key === from);
+        if (!entries.length) throw new Error("missing source");
+        for (const [key, value] of entries) { nativeFiles.set(`${to}${key.slice(from.length)}`, value); nativeFiles.delete(key); }
+      });
+    }
+    const original = await seed();
+    await service.normalizeLoudness(original.id, -30);
+    const first = await service.withExclusiveBackup((access) => access.snapshot());
+    await service.normalizeLoudness(original.id, -20);
+    const second = await service.withExclusiveBackup((access) => access.snapshot());
+    expect(second.library.voices[0].sourceFingerprint).toEqual(first.library.voices[0].sourceFingerprint);
+    await service.withExclusiveBackup(async (access) => {
+      const restored = await access.prepareRestore(second.library, second.files);
+      await restored.activate(); await restored.finalize();
+    });
+    const after = (await service.load()).voices[0];
+    expect(after.loudness?.targetLufs).toBe(-20);
+    expect(await audioText(after)).toBe("normalized audio".repeat(10));
+  });
+
+  it("rejects out-of-range targets, failed processing and missing voices without replacing audio", async () => {
+    const original = await seed();
+    for (const invalid of [-31, -19, 20, -25.5, NaN]) await expect(service.normalizeLoudness(original.id, invalid)).rejects.toThrow();
+    expect(mocks.normalize).not.toHaveBeenCalled();
+    await expect(service.analyzeLoudness("voice-missing")).rejects.toThrow("見つかりません");
+    mocks.normalize.mockRejectedValueOnce(new Error("decoder failed"));
+    await expect(service.normalizeLoudness(original.id, -20)).rejects.toThrow("decoder failed");
+    expect((await service.load()).voices[0]).toEqual(original);
+    expect(await audioText(original)).toBe("original audio");
+  });
+
+  it("rejects legacy WAV encoder output without relabeling it or changing the stored voice", async () => {
+    const original = await seed();
+    const uri = "file:///cache/legacy-normalized.wav";
+    nativeFiles.set(uri, "old WAV audio".repeat(10));
+    mocks.normalize.mockResolvedValueOnce({ uri, blob: new Blob(["old WAV audio".repeat(10)], { type: "audio/wav" }), analysis: measured });
+    await expect(service.normalizeLoudness(original.id, -20)).rejects.toThrow("保存できません");
+    expect((await service.load()).voices[0]).toEqual(original);
+    expect(await audioText(original)).toBe("original audio");
+    if (platform !== "web") expect(nativeFiles.has(uri)).toBe(false);
+  });
+
+  it("does not lose the old audio when committing normalized data fails", async () => {
+    const original = await seed();
+    let restore: (() => void) | undefined;
+    if (platform === "web") {
+      const put = IDBObjectStore.prototype.put;
+      const abort = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+        const request = put.call(this, value, key);
+        request.addEventListener("success", () => this.transaction.abort(), { once: true });
+        return request;
+      });
+      restore = () => abort.mockRestore();
+    } else mocks.write.mockRejectedValueOnce(new Error("disk full"));
+    await expect(service.normalizeLoudness(original.id, -20)).rejects.toThrow();
+    restore?.();
+    expect((await service.load()).voices[0]).toEqual(original);
+    expect(await audioText(original)).toBe("original audio");
+    if (platform !== "web") expect([...nativeFiles.keys()].some((key) => key.includes(".loudness-"))).toBe(false);
+  });
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
