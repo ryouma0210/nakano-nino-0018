@@ -30,23 +30,7 @@ function RoomLoop({ name, volume, paused }: RoomAudioTrack & { paused: boolean }
   return null;
 }
 
-export type StoredRoomAudioTrack = { id: string; uri: string; volume: number; paused?: boolean };
-function StoredRoomLoop({ uri, volume, paused }: StoredRoomAudioTrack & { paused: boolean }) {
-  const player = useSessionAudioPlayer({ uri });
-  const playback = useMemo(() => createRoomLoopPlayback(player), [player]);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- Expo audio players expose mutable native properties.
-    player.volume = volume;
-  }, [player, volume]);
-  useEffect(() => {
-    playback.setPaused(paused).catch(console.error);
-    return () => playback.cancelPending();
-  }, [paused, playback]);
-  return null;
-}
-
-export function RoomAudioPlayback({ tracks, storedTracks = [], paused = false }: { tracks: readonly RoomAudioTrack[]; storedTracks?: readonly StoredRoomAudioTrack[]; paused?: boolean }) {
+export function RoomAudioPlayback({ tracks, paused = false }: { tracks: readonly RoomAudioTrack[]; paused?: boolean }) {
   // Stable track keys keep the base voice playing while overlays change.
-  return <>{tracks.map((track) => <RoomLoop key={track.name} {...track} paused={paused || track.paused === true} />)}
-    {storedTracks.map((track) => <StoredRoomLoop key={`${track.id}:${track.uri}`} {...track} paused={paused || track.paused === true} />)}</>;
+  return <>{tracks.map((track) => <RoomLoop key={track.name} {...track} paused={paused || track.paused === true} />)}</>;
 }

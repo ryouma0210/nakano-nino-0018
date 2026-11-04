@@ -1,4 +1,8 @@
 {
+  "音割れを避けた調整の目安：": "Estimated loudness within the peak limit:",
+  "大きな音の部分が音割れ防止の上限に達するため、目標まで上げられません。目標値を上げても、この上限は変わりません。": "The loudest parts reach the peak limit, so this adjustment cannot reach the target without clipping. Raising the target does not change this limit.",
+  "圧縮保存後の実際の音量は、この目安より小さくなる場合があります。": "The actual loudness after compression may be lower than this estimate.",
+  "画像右上の丸いボイスボタンで、リズム音・ループ音声と共通の音源を選べます。音声の音量はアプリ設定に従います。": "Use the round voice button at the upper right of the image to select rhythm sounds or tracks shared with Loop Audio. Volume follows the app settings.",
   "順序変更": "Change order",
   "ボイスの順番を保存しました。": "Voice order saved.",
   "ボイスの一覧が変更されました。順序変更を開き直してください。": "The voice list has changed. Reopen Change order to try again.",

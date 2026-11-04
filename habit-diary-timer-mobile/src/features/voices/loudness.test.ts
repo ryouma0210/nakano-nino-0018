@@ -93,6 +93,30 @@ describe("voice integrated loudness", () => {
     expect(() => voiceNormalizationGain({ ...measured, integratedLufs: null }, -20)).toThrow();
   });
 
+  it("can stay near -27 LUFS across higher targets when a brief peak has no headroom", () => {
+    const rate = 48000;
+    const pcm = tone(1000, 0.0631, 3, rate);
+    pcm[rate] = VOICE_SAMPLE_PEAK_CEILING;
+    const measured = analyzeVoicePcm([pcm], rate);
+    expect(measured.integratedLufs!).toBeCloseTo(-27, 1);
+
+    for (const target of [-25, -20]) {
+      const normalization = voiceNormalizationGain(measured, target);
+      const output = Float32Array.from(pcm, (sample) => sample * normalization.gain);
+      const saved = analyzeVoicePcm([output], rate);
+      expect(normalization.peakLimited).toBe(true);
+      expect(normalization.appliedGainDb).toBeCloseTo(0, 5);
+      expect(saved.integratedLufs!).toBeCloseTo(measured.integratedLufs!, 5);
+      expect(saved.samplePeak).toBeLessThanOrEqual(VOICE_SAMPLE_PEAK_CEILING + 1e-7);
+    }
+
+    // Lowering the target still works: this is a peak ceiling, not a frozen meter.
+    const quieter = voiceNormalizationGain(measured, -30);
+    expect(quieter.peakLimited).toBe(false);
+    const attenuated = Float32Array.from(pcm, (sample) => sample * quieter.gain);
+    expect(analyzeVoicePcm([attenuated], rate).integratedLufs!).toBeCloseTo(-30, 5);
+  });
+
   it("writes a correctly sized little-endian PCM16 WAV header", () => {
     const header = voiceWaveHeader(48000, 48000, 2);
     const view = new DataView(header);

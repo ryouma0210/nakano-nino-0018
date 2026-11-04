@@ -9,6 +9,8 @@ export const ROOM_VOICE_BUILTINS = {
   punishment: [...loopVoiceNames],
   rhythm: [...loopVoiceNames, "rhythmBeat"],
 } as const;
+// Keep storedIds in the v1 schema for old saves/backups; room playback now uses
+// only built-in loops, and loading or saving discards these obsolete choices.
 export type RoomVoiceSelection = { builtin: string[]; storedIds: string[] };
 export type RoomVoicePreferences = { version: 1; rooms: Record<RoomVoiceRoom, RoomVoiceSelection> };
 
@@ -45,7 +47,11 @@ export function parseRoomVoicePreferences(raw: string | null): RoomVoicePreferen
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error("ボイス設定を読み込めませんでした。再試行してください。"); }
   if (!isRoomVoicePreferences(parsed)) throw new Error("ボイス設定を読み込めませんでした。再試行してください。");
-  return parsed;
+  return { ...parsed, rooms: {
+    training: { builtin: [...parsed.rooms.training.builtin], storedIds: [] },
+    punishment: { builtin: [...parsed.rooms.punishment.builtin], storedIds: [] },
+    rhythm: { builtin: [...parsed.rooms.rhythm.builtin], storedIds: [] },
+  } };
 }
 
 type Storage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<unknown> };
@@ -81,7 +87,7 @@ export function createRoomVoicePreferenceStore(storage: Storage) {
     }); },
     save(room: RoomVoiceRoom, selection: RoomVoiceSelection) {
       // Capture caller-owned arrays before entering the write queue.
-      const nextSelection = { builtin: [...selection.builtin], storedIds: [...selection.storedIds] };
+      const nextSelection = { builtin: [...selection.builtin], storedIds: [] };
       return run(async () => {
         if (!validRoomVoiceSelection(room, nextSelection)) throw new Error("ボイス設定を保存できませんでした。選択内容を確認してください。");
         const current = parseRoomVoicePreferences(await storage.getItem(ROOM_VOICE_PREFERENCES_KEY));
