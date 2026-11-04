@@ -2,7 +2,6 @@ import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
 import { roomVoiceStore } from "@/audio/roomVoiceStore";
 import { loopAudioOptions } from "@/audio/loopAudioLabels";
 import { ROOM_VOICE_BUILTINS, type RoomVoiceRoom, type RoomVoiceSelection } from "@/audio/roomVoiceSelection";
@@ -14,7 +13,6 @@ export function RoomVoiceButton({ room, onOpen, automaticBuiltin = [] }: {
   room: RoomVoiceRoom; onOpen?: () => void; automaticBuiltin?: readonly string[];
 }) {
   const insets = useSafeAreaInsets();
-  const library = useVoiceLibrary();
   const preferences = useSyncExternalStore(roomVoiceStore.subscribe, roomVoiceStore.getSnapshot, roomVoiceStore.getSnapshot);
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,26 +35,26 @@ export function RoomVoiceButton({ room, onOpen, automaticBuiltin = [] }: {
       await roomVoiceStore.load();
       if (operation.current === request) {
         const selection = roomVoiceStore.getSnapshot().preferences.rooms[room];
-        setDraft({ builtin: [...selection.builtin], storedIds: [...selection.storedIds] });
+        setDraft({ builtin: [...selection.builtin], storedIds: [] });
       }
     } catch { if (operation.current === request) setError("ボイス設定を読み込めませんでした。再試行してください。"); }
     finally { if (operation.current === request) setBusy(false); }
   }
 
   async function save() {
-    if (busy || !preferences.ready || library.loading || library.busy) return;
+    if (busy || !preferences.ready) return;
     const request = ++operation.current;
     setBusy(true); setError(null);
     try {
-      await roomVoiceStore.save(room, { ...draft, storedIds: library.error ? draft.storedIds : draft.storedIds.filter((id) => library.voices.some((voice) => voice.id === id)) });
+      await roomVoiceStore.save(room, { ...draft, storedIds: [] });
       if (operation.current === request) setVisible(false);
     } catch { if (operation.current === request) setError("ボイス設定を保存できませんでした。もう一度お試しください。"); }
     finally { if (operation.current === request) setBusy(false); }
   }
 
   const close = () => { if (!busy) { operation.current += 1; setVisible(false); } };
-  function toggle(kind: keyof RoomVoiceSelection, id: string) {
-    setDraft((current) => ({ ...current, [kind]: current[kind].includes(id) ? current[kind].filter((value) => value !== id) : [...current[kind], id] }));
+  function toggle(id: string) {
+    setDraft((current) => ({ ...current, builtin: current.builtin.includes(id) ? current.builtin.filter((value) => value !== id) : [...current.builtin, id] }));
   }
   const locked = busy || !preferences.ready;
   return <>
@@ -78,27 +76,14 @@ export function RoomVoiceButton({ room, onOpen, automaticBuiltin = [] }: {
             const label = loopAudioOptions.find(({ key }) => key === id)?.title ?? "リズム音";
             return <Pressable key={id} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled }}
               aria-checked={selected} aria-disabled={disabled}
-              accessibilityLabel={label} disabled={disabled} testID={`room-voice-builtin-${room}-${id}`} onPress={() => toggle("builtin", id)} style={[styles.choice, selected && styles.selected]}>
+              accessibilityLabel={label} disabled={disabled} testID={`room-voice-builtin-${room}-${id}`} onPress={() => toggle(id)} style={[styles.choice, selected && styles.selected]}>
               <AppText localize={false}>{selected ? "☑" : "☐"}</AppText><AppText style={styles.choiceLabel}>{label}</AppText>
               {autoSelected ? <AppText variant="muted">自動</AppText> : null}
             </Pressable>;
           })}
-          <AppText variant="label">格納したボイス</AppText>
-          {library.loading ? <AppText variant="muted">読み込み中…</AppText> : null}
-          {library.error ? <AppText accessibilityRole="alert">ボイス一覧を読み込めませんでした。ボイス格納で確認してください。</AppText> : null}
-          {!library.loading && !library.error && library.voices.length === 0 ? <AppText variant="muted">ボイス格納で音声を追加すると、ここから選べます。</AppText> : null}
-          {library.voices.map((voice) => {
-            const selected = draft.storedIds.includes(voice.id);
-            return <Pressable key={voice.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: locked || library.busy }}
-              aria-checked={selected} aria-disabled={locked || library.busy}
-              accessibilityLabel={voice.name} disabled={locked || library.busy} testID={`room-voice-stored-${room}-${voice.id}`}
-              onPress={() => toggle("storedIds", voice.id)} style={[styles.choice, selected && styles.selected]}>
-              <AppText localize={false}>{selected ? "☑" : "☐"}</AppText><AppText localize={false} style={styles.choiceLabel}>{voice.name}</AppText>
-            </Pressable>;
-          })}
           {error ? <AppText accessibilityRole="alert">{error}</AppText> : null}
           {!preferences.ready && !busy ? <PrimaryButton title="再試行" tone="secondary" onPress={() => void open()} /> : null}
-          <PrimaryButton title="設定する" tone="save" disabled={locked || library.loading || library.busy}
+          <PrimaryButton title="設定する" tone="save" disabled={locked}
             onPress={() => void save()} testID={`room-voice-confirm-${room}`} />
           <PrimaryButton title="キャンセル" tone="secondary" disabled={busy} onPress={close} testID={`room-voice-cancel-${room}`} />
         </View>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { useAppAudio } from "@/audio/AudioProvider";
 import { useVoiceLibrary } from "@/audio/VoiceLibraryProvider";
-import { DEFAULT_VOICE_LUFS, MAX_VOICE_LUFS, MIN_VOICE_LUFS, type VoiceLoudnessAnalysis } from "@/features/voices/loudness";
+import { DEFAULT_VOICE_LUFS, MAX_VOICE_LUFS, MIN_VOICE_LUFS, voiceNormalizationGain, type VoiceLoudnessAnalysis } from "@/features/voices/loudness";
 import type { StoredVoice } from "@/services/voiceStorageService";
 import { translateText } from "@/i18n";
 import { AppText } from "./AppText";
@@ -37,6 +37,11 @@ function LoudnessForm({ voice, disabled = false, onBusyChange }: Props) {
   const measuredLufs = analysis?.integratedLufs;
   const measurable = typeof measuredLufs === "number" && Number.isFinite(measuredLufs);
   const peakLimited = savedTarget !== null && measurable && measuredLufs < savedTarget - 0.2;
+  // Use the existing measurement only; opening details or changing the target
+  // never decodes the audio. This also explains the limit after reopening.
+  const estimatedLufs = measurable && analysis && analysis.samplePeak > 0
+    ? measuredLufs + voiceNormalizationGain(analysis, targetLufs).appliedGainDb : null;
+  const targetLimited = estimatedLufs !== null && estimatedLufs < targetLufs - 0.2;
 
   useEffect(() => {
     mounted.current = true;
@@ -94,6 +99,13 @@ function LoudnessForm({ voice, disabled = false, onBusyChange }: Props) {
         testID="voice-loudness-target-up" />
     </View>
     <AppText variant="muted">目標は−30〜−20 LUFSで選べます。−20に近いほど大きくなります。</AppText>
+    {targetLimited ? <View style={styles.limitNotice} testID="voice-loudness-limit" accessibilityLiveRegion="polite">
+      <AppText localize={false} testID="voice-loudness-estimate">
+        {`${t("音割れを避けた調整の目安：")} ${estimatedLufs.toFixed(1)} LUFS`}
+      </AppText>
+      <AppText variant="muted">大きな音の部分が音割れ防止の上限に達するため、目標まで上げられません。目標値を上げても、この上限は変わりません。</AppText>
+      <AppText variant="muted">圧縮保存後の実際の音量は、この目安より小さくなる場合があります。</AppText>
+    </View> : null}
     <AppText variant="muted">調整した音声はM4A（AAC）形式で圧縮保存します。モノラルは64kbps、ステレオは128kbpsです。容量は元の音声によって変わります。</AppText>
     <PrimaryButton title="音量を調整して保存" tone="save" disabled={locked || !measurable}
       onPress={() => void perform("saving")} testID="voice-loudness-save" />
@@ -122,6 +134,7 @@ function TargetButton({ label, accessibilityLabel, disabled, onPress, testID }: 
 
 const styles = StyleSheet.create({
   section: { gap: 12, borderTopWidth: 1, borderTopColor: "#52728e", paddingTop: 14 },
+  limitNotice: { gap: 6, padding: 12, borderWidth: 1, borderColor: "#a88c55", borderRadius: 4, backgroundColor: "#2b2418" },
   targetRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   targetValue: { flex: 1, textAlign: "center", fontWeight: "800" },
   targetButton: { minWidth: 58, minHeight: 44, paddingHorizontal: 12, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#fff", borderRadius: 4, backgroundColor: "#194770" },

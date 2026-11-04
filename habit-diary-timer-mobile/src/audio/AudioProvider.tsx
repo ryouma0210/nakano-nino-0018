@@ -12,7 +12,6 @@ import { translateText } from "@/i18n";
 import { loopMediaTitle } from "./loopAudioLabels";
 import { loopAudioSources } from "./loopAudioSources";
 import { roomVoiceStore } from "./roomVoiceStore";
-import { voiceStorageService, type StoredVoice } from "@/services/voiceStorageService";
 import { useSessionAudioPlayer } from "./useSessionAudioPlayer";
 import type { RhythmVoicePlaybackState } from "./rhythmVoicePlayback";
 
@@ -144,7 +143,6 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
     setRhythmVoices(rhythmState);
   }, []);
   const voicePreferences = useSyncExternalStore(roomVoiceStore.subscribe, roomVoiceStore.getSnapshot, roomVoiceStore.getSnapshot);
-  const [storedRoomVoices, setStoredRoomVoices] = useState<StoredVoice[]>([]);
   const [loopAudioNames, setLoopAudioNames] = useState<LoopAudioName[]>([]);
   const [bgmMode, setBgmMode] = useState<BgmMode>("default");
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
@@ -152,29 +150,8 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   const selectedRoom = roomAudioScene === "training" || roomAudioScene === "punishment" || roomAudioScene === "rhythm" ? roomAudioScene : null;
   const sceneReady = !selectedRoom || voicePreferences.ready;
   const roomAudioTracks = getRoomAudioTracks(voiceAudioActive || !sceneReady ? null : roomAudioScene, settings, appIsActive, loopAudioNames, voicePreferences.preferences, rhythmVoices);
-  const storedRoomTracks = selectedRoom && sceneReady && appIsActive && !voiceAudioActive && settings?.soundEnabled
-    ? storedRoomVoices.filter((voice) => voicePreferences.preferences.rooms[selectedRoom].storedIds.includes(voice.id))
-      .map(({ id, uri }) => ({ id, uri, volume: settings.soundVolume,
-        paused: selectedRoom === "rhythm" && rhythmVoices?.resting === true })) : [];
-  const roomAudioActive = roomAudioTracks.length > 0 || storedRoomTracks.length > 0;
+  const roomAudioActive = roomAudioTracks.length > 0;
   useEffect(() => { roomVoiceStore.load().catch(console.error); }, []);
-  useEffect(() => {
-    if (!selectedRoom) return;
-    let active = true;
-    let generation = 0;
-    const refresh = () => {
-      const request = ++generation;
-      voiceStorageService.load().then((library) => {
-        if (active && generation === request) setStoredRoomVoices(library.voices);
-      }).catch((error) => {
-        if (active && generation === request) setStoredRoomVoices([]);
-        console.error(error);
-      });
-    };
-    refresh();
-    const unsubscribe = voiceStorageService.subscribe(refresh);
-    return () => { active = false; unsubscribe(); };
-  }, [selectedRoom]);
   // Keep videos from reclaiming audio focus while room audio still needs it,
   // including when the last manual loop stops and its room copy takes over.
   const shouldMixVideoAudio = voiceAudioActive || loopAudioNames.length > 0 || sessionAudioActive || roomAudioActive;
@@ -409,7 +386,7 @@ function ActiveAudioProvider({ children }: PropsWithChildren) {
   );
   return (
     <AudioContext.Provider value={value}>
-      <RoomAudioPlayback tracks={roomAudioTracks} storedTracks={storedRoomTracks}
+      <RoomAudioPlayback tracks={roomAudioTracks}
         paused={roomAudioScene === "rhythm" && roomAudioPaused && !rhythmVoices?.resting} />
       {children}
     </AudioContext.Provider>
