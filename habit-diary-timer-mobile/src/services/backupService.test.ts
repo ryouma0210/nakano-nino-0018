@@ -251,27 +251,34 @@ describe("bounded backup export and import", () => {
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
 
-  it("exports shared media once and round-trips all usages with its physical identity", async () => {
-    const shared = { name: "shared.mp4", purpose: "training", usages: ["training", "punishment", "endurance"], size: 3, uri: "file:///shared.mp4" };
+  it.each(["android", "web"])("exports shared media once and round-trips its display name, usages and physical identity on %s", async (platform) => {
+    mocks.platform.OS = platform;
+    const shared = { name: "shared.mp4", displayName: "My favorite / evening video", purpose: "training", usages: ["training", "punishment", "endurance"], size: 3, uri: "file:///shared.mp4" };
     mocks.list.mockResolvedValue([shared]);
     mocks.sources.set(shared.uri, encoder.encode("one"));
     await backupService.export("complete");
     const bytes = join(mocks.chunks);
     const entries = await readBackupArchive(reader(bytes));
     expect(entries.map((entry) => entry.name)).toEqual(["manifest.json", "files/000000"]);
+    const manifest = JSON.parse(decoder.decode(await entries[0].read(0, entries[0].size)));
+    expect(manifest.files).toEqual([{ name: shared.name, displayName: shared.displayName, purpose: shared.purpose,
+      usages: shared.usages, size: 3, mimeType: "video/mp4", path: "files/000000" }]);
     select(bytes);
     const picked = (await backupService.pick())!;
-    expect(picked.files).toEqual([expect.objectContaining({ name: shared.name, purpose: "training", usages: shared.usages, size: 3 })]);
+    expect(picked.files).toEqual([expect.objectContaining({ name: shared.name, displayName: shared.displayName, purpose: "training", usages: shared.usages, size: 3 })]);
+    const restored = picked.files![0];
+    const restoredBytes = platform === "web" ? new Uint8Array(await restored.blob!.arrayBuffer()) : join(mocks.staged.get(restored.uri!)!);
+    expect(decoder.decode(restoredBytes)).toBe("one");
     await backupService.restore(picked);
     expect(mocks.prepare).toHaveBeenCalledWith(picked.files);
   });
 
-  it("accepts legacy JSON backups with no usages and new metadata without changing save-only files", async () => {
+  it("accepts legacy JSON backups with no optional metadata and display names without changing save-only files", async () => {
     const payload = await savePayload();
     payload.kind = "complete";
     payload.files = [
       { name: "old.mp4", purpose: "training", size: 3, mimeType: "video/mp4", data: "b25l" },
-      { name: "new.mp4", purpose: "endurance", usages: ["training", "endurance"], size: 3, mimeType: "video/mp4", data: "b25l" },
+      { name: "new.mp4", displayName: "New display name", purpose: "endurance", usages: ["training", "endurance"], size: 3, mimeType: "video/mp4", data: "b25l" },
     ];
     await backupService.restore(payload);
     expect(mocks.prepare).toHaveBeenCalledWith(payload.files);
@@ -291,6 +298,32 @@ describe("bounded backup export and import", () => {
     payload.kind = "complete";
     payload.files = [{ name: "shared.mp4", size: 3, mimeType: "video/mp4", data: "b25l", ...metadata } as never];
     await expect(backupService.restore(payload)).rejects.toThrow("不正");
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.multiSet).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { purpose: "training", displayName: null }, { purpose: "training", displayName: 42 },
+    { purpose: "training", displayName: "" }, { purpose: "training", displayName: " name " },
+    { purpose: "training", displayName: "a".repeat(256) }, { purpose: "training", displayName: "line\nbreak" },
+    { purpose: "training", displayName: "line\u2028break" },
+    { purpose: "profile", displayName: "Photo" }, { purpose: "chastity", displayName: "Attachment" },
+  ])("rejects invalid display-name metadata in JSON and ZIP before mutations: %j", async (metadata) => {
+    const payload = await savePayload();
+    payload.kind = "complete";
+    payload.files = [{ name: "file.png", size: 3, mimeType: "image/png", data: "b25l", ...metadata } as never];
+    await expect(backupService.restore(payload)).rejects.toThrow("不正");
+
+    mocks.chunks.length = 0;
+    const manifest = { ...payload, version: 2, files: [{ name: "file.png", size: 3, mimeType: "image/png", path: "files/000000", ...metadata }] };
+    await writeBackupArchive([
+      { name: "manifest.json", ...reader(encoder.encode(JSON.stringify(manifest))) },
+      { name: "files/000000", ...reader(encoder.encode("one")) },
+    ], { write: async (bytes) => { mocks.chunks.push(bytes.slice()); } });
+    select(join(mocks.chunks));
+    await expect(backupService.pick()).rejects.toThrow("バックアップ");
+    expect(mocks.stage).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.multiSet).not.toHaveBeenCalled();

@@ -12,7 +12,7 @@ import type { RhythmImages, RhythmImageState } from "@/services/rhythmChallengeS
 import { rhythmDefaultImages as defaultImages } from "./defaultImages";
 
 export const RHYTHM_IMAGE_LABELS: Record<RhythmImageState, string> = {
-  normal: "通常時", paused: "一時停止時", finished: "終了時",
+  normal: "通常時", paused: "休憩時", finished: "射精時",
 };
 export const RHYTHM_IMAGE_STATES: RhythmImageState[] = ["normal", "paused", "finished"];
 
@@ -95,9 +95,10 @@ export function RhythmImageSettings({ visible, images, files, loadingFiles, file
     <View style={[styles.backdrop, { paddingTop: Math.max(16, insets.top), paddingBottom: Math.max(16, insets.bottom) }]}>
       <View style={styles.dialog} testID="rhythm-images-dialog" accessibilityViewIsModal>
         <FlatList data={filterFilesByName(files, search)} keyExtractor={(file) => `${file.purpose}:${file.name}`}
+          numColumns={3} columnWrapperStyle={styles.fileRow}
           style={styles.list} contentContainerStyle={styles.fileList} keyboardShouldPersistTaps="handled"
           ListHeaderComponent={<View style={styles.section}>
-        <AppText variant="subtitle">チャレンジ画像の設定</AppText>
+        <AppText variant="subtitle">寸止め耐久チャレンジ画像の設定</AppText>
         <AppText variant="muted">状態ごとにデフォルト画像または格納した画像を選べます。</AppText>
         <View style={styles.tabs} accessibilityRole="radiogroup">
           {RHYTHM_IMAGE_STATES.map((value) => <Pressable key={value} accessibilityRole="radio"
@@ -133,17 +134,17 @@ export function RhythmImageSettings({ visible, images, files, loadingFiles, file
           ListEmptyComponent={!loadingFiles && !fileError ? <AppText variant="muted">選択できる格納画像がありません。</AppText> : null}
           renderItem={({ item }) => {
             const checked = item.name === reference?.name && item.purpose === reference.purpose;
-            return <Pressable accessibilityRole="radio" accessibilityState={{ checked, disabled: saving }} disabled={saving}
+            return <View style={styles.fileCell}><Pressable accessibilityRole="radio" accessibilityState={{ checked, disabled: saving }} disabled={saving}
               aria-checked={checked} aria-disabled={saving}
               testID={`rhythm-image-file-${item.purpose}-${item.name}`}
               onPress={() => {
                 if (item.purpose === "profile" || item.purpose === "chastity") return;
                 setDraft((previous) => ({ ...previous, [state]: { name: item.name, purpose: item.purpose } }));
-              }} style={[styles.file, checked && styles.selected]}>
-              <Image source={{ uri: item.uri }} style={styles.thumbnail} resizeMode="contain" />
-              <AppText style={styles.fileName} localize={false} numberOfLines={2}>{displayedFileName(item)}</AppText>
-              <AppText localize={false}>{checked ? "●" : "○"}</AppText>
-            </Pressable>;
+              }} style={[styles.fileTile, checked && styles.selected]}>
+              <Image source={{ uri: item.uri }} style={styles.fileTileThumbnail} resizeMode="contain" />
+              <AppText style={styles.fileTileName} localize={false} numberOfLines={2}>{displayedFileName(item)}</AppText>
+              <AppText style={styles.fileTileChoice} localize={false}>{checked ? "●" : "○"}</AppText>
+            </Pressable></View>;
           }} ListFooterComponent={<View style={styles.section}>
         {saveError ? <AppText accessibilityRole="alert">画像の設定を保存できませんでした。もう一度お試しください。</AppText> : null}
         <View style={styles.actions}>
@@ -174,6 +175,12 @@ const styles = StyleSheet.create({
   file: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 60, padding: 8, borderWidth: 1, borderColor: "#666", borderRadius: 5 },
   fileName: { flex: 1, minWidth: 0 },
   thumbnail: { width: 54, height: 40 },
+  fileRow: { marginHorizontal: -4 },
+  fileCell: { width: "33.333333%", paddingHorizontal: 4 },
+  fileTile: { flex: 1, minWidth: 0, gap: 6, padding: 6, borderWidth: 1, borderColor: "#666", borderRadius: 5 },
+  fileTileThumbnail: { width: "100%", aspectRatio: 1, borderRadius: 3, backgroundColor: "#08080e" },
+  fileTileName: { minHeight: 36, fontSize: 12, lineHeight: 18 },
+  fileTileChoice: { textAlign: "center" },
   list: { flex: 1, minHeight: 0 },
   fileList: { gap: 8 },
   error: { gap: 6 },

@@ -1,0 +1,7 @@
+{
+  "name": "voice-loudness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "On-demand local loudness analysis and PCM normalization",
+  "license": "UNLICENSED"
+}

@@ -2,6 +2,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { AppState, Platform } from "react-native";
 import { voiceStorageService, type StoredVoice, type VoicePlaybackMode, type VoiceFolder, type VoiceScope, type VoiceImportResult, type VoiceDeleteResult } from "@/services/voiceStorageService";
 import { voicesInScope } from "@/features/voices/library";
+import type { VoiceLoudnessAnalysis } from "@/features/voices/loudness";
 import { useAppAudio } from "./AudioProvider";
 import { setBackgroundAudioMode } from "./backgroundAudioMode";
 import { createVoicePlayback, type VoicePlaybackProgress, type VoicePlaybackState } from "./voicePlayback";
@@ -25,6 +26,8 @@ type VoiceLibrary = {
   sleepDeadline: number | null;
   sleepMinutes: number | null;
   importVoices(): Promise<VoiceImportResult | null>;
+  analyzeVoice(id: string): Promise<VoiceLoudnessAnalysis>;
+  normalizeVoice(id: string, targetLufs: number): Promise<VoiceLoudnessAnalysis>;
   renameVoice(id: string, name: string): Promise<void>;
   reorderVoices(orderedIds: string[], scope: VoiceScope): Promise<void>;
   removeVoice(id: string): Promise<void>;
@@ -197,6 +200,12 @@ export function VoiceLibraryProvider({ children }: PropsWithChildren) {
     sleepDeadline,
     sleepMinutes: sleepDeadline === null ? null : selectedSleepMinutes,
     importVoices: () => operate(() => voiceStorageService.importVoices(scopeRef.current === "all" || scopeRef.current === "unfiled" ? null : scopeRef.current)),
+    analyzeVoice: (id) => operate(() => voiceStorageService.analyzeLoudness(id)),
+    normalizeVoice: (id, targetLufs) => operate(async () => {
+      // Stop playback before replacing bytes; refresh rebuilds the queue afterward.
+      playback.stop();
+      return voiceStorageService.normalizeLoudness(id, targetLufs);
+    }),
     renameVoice: (id, name) => operate(() => voiceStorageService.rename(id, name)),
     reorderVoices: (orderedIds, scope) => operate(() => voiceStorageService.reorder(orderedIds, scope)),
     removeVoice: (id) => operate(async () => {

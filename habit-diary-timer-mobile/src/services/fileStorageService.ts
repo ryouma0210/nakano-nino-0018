@@ -5,7 +5,8 @@ import { base64ToBlob, webFileStorage } from "./webFileStorage";
 import { fileHasPurpose, fileUsageKey, isFilePurpose, isValidFileUsages, getFileUsages, type FilePurpose, type FileUsage } from "../features/files/usages";
 import { readNativeFileUsages, writeNativeFileUsages } from "./nativeFileUsages";
 import { invalidProfilePhotoMessage, isProfilePhotoMetadata, PROFILE_PHOTO_TYPES, profilePhotoMatchesSignature } from "../features/files/profilePhoto";
-import { displayedFileName } from "../features/files/fileList";
+import { originalFileName } from "../features/files/fileList";
+import { isValidFileDisplayName, normalizeFileDisplayName } from "../features/files/details";
 import { sameBlobContent, sameNativeFileContent } from "./fileContentComparison";
 
 const uploadDirectory = `${FileSystem.documentDirectory}private-room-files/`;
@@ -27,8 +28,8 @@ async function ensurePurposeDirectory(purpose: FilePurpose) {
   if (!info.exists) await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
 }
 
-export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose; usages?: FileUsage[] };
-export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; usages?: FileUsage[]; mimeType: string; data: string };
+export type StoredFile = { name: string; uri: string; size: number; purpose: FilePurpose; usages?: FileUsage[]; displayName?: string };
+export type BackupStoredFile = { name: string; size: number; purpose: FilePurpose; usages?: FileUsage[]; displayName?: string; mimeType: string; data: string };
 export type RestoreStoredFile = Omit<BackupStoredFile, "data"> & (
   { uri: string; data?: never; blob?: never }
   | { data: string; uri?: never; blob?: never }
@@ -81,7 +82,7 @@ function storedFileName(name: string) {
 function importFileIndex(files: StoredFile[]) {
   const byName = new Map<string, StoredFile[]>();
   const storedNames = new Set(files.map((file) => file.name));
-  const add = (file: StoredFile, originalName = displayedFileName(file)) => {
+  const add = (file: StoredFile, originalName = originalFileName(file)) => {
     const matches = byName.get(originalName) ?? [];
     matches.push(file);
     byName.set(originalName, matches);
@@ -253,6 +254,8 @@ function validateRestoreFiles(files: readonly RestoreStoredFile[]) {
     if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
       || /[\\/\u0000-\u001f]/.test(file.name)
       || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
+      || !isValidFileDisplayName(file.displayName)
+      || ((file.purpose === "profile" || file.purpose === "chastity") && file.displayName !== undefined)
       || !Number.isSafeInteger(file.size) || file.size < 0
       || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
       || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
@@ -296,7 +299,7 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
       const blob = file.blob ?? (typeof file.data === "string" ? base64ToBlob(file.data, file.mimeType, file.size) : undefined);
       if (!blob) throw new Error(invalidRestoreFilesMessage);
       return { name: file.name, size: file.size, purpose: file.purpose, mimeType: file.mimeType, blob,
-        ...(file.usages ? { usages: file.usages } : {}) };
+        ...(file.usages ? { usages: file.usages } : {}), ...(file.displayName !== undefined ? { displayName: file.displayName } : {}) };
     });
     return webFileStorage.prepareRestore(restored);
   }
@@ -322,7 +325,9 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
       const info = await FileSystem.getInfoAsync(destination);
       if (!info.exists || info.isDirectory || info.size !== file.size) throw new Error(invalidRestoreFilesMessage);
     }
-    const usages = files.filter((file) => file.usages).map((file) => [fileUsageKey(file), file.usages!] as const);
+    const usages = files.filter((file) => file.usages || file.displayName !== undefined).map((file) => [fileUsageKey(file), {
+      ...(file.usages ? { usages: file.usages } : {}), ...(file.displayName !== undefined ? { displayName: file.displayName } : {}),
+    }] as const);
     if (usages.length) await writeNativeFileUsages(stageDirectory, Object.fromEntries(usages));
   } catch (error) {
     await cleanupRestoreDirectory(stageDirectory);
@@ -434,7 +439,7 @@ export const fileStorageService = {
     const profileFiles = await readFiles(purposeDirectory("profile"), "profile");
     const usages = await readNativeFileUsages(uploadDirectory);
     return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...enduranceFiles, ...chastityFiles, ...profileFiles]
-      .map((file) => usages[fileUsageKey(file)] ? { ...file, usages: usages[fileUsageKey(file)] } : file)
+      .map((file) => usages[fileUsageKey(file)] ? { ...file, ...usages[fileUsageKey(file)] } : file)
       .filter((file) => !purpose || fileHasPurpose(file, purpose))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
@@ -449,7 +454,23 @@ export const fileStorageService = {
       const stored = (await this.list()).find((entry) => fileUsageKey(entry) === fileUsageKey(file));
       if (!stored) throw new Error("ファイルが見つかりません。");
       const metadata = await readNativeFileUsages(uploadDirectory);
-      metadata[fileUsageKey(file)] = next;
+      metadata[fileUsageKey(file)] = { ...metadata[fileUsageKey(file)], usages: next };
+      await writeNativeFileUsages(uploadDirectory, metadata);
+    });
+  },
+
+  async updateDetails(file: Pick<StoredFile, "name" | "purpose">, details: { displayName: string; usages: readonly FileUsage[] }): Promise<void> {
+    const displayName = normalizeFileDisplayName(details.displayName);
+    if (!isValidFileUsages(file.purpose, details.usages) || !Array.isArray(details.usages)) {
+      throw new Error("用途を1つ以上選択してください。");
+    }
+    const usages = getFileUsages({ purpose: file.purpose, usages: [...details.usages] });
+    return this.withExclusiveFiles(async () => {
+      if (webAvailable()) return webFileStorage.updateDetails(file, { displayName, usages });
+      const stored = (await this.list()).find((entry) => fileUsageKey(entry) === fileUsageKey(file));
+      if (!stored) throw new Error("ファイルが見つかりません。");
+      const metadata = await readNativeFileUsages(uploadDirectory);
+      metadata[fileUsageKey(file)] = { displayName, usages };
       await writeNativeFileUsages(uploadDirectory, metadata);
     });
   },

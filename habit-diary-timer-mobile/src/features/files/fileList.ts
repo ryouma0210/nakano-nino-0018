@@ -18,8 +18,13 @@ function storedNameParts(name: string) {
   };
 }
 
-export function displayedFileName(file: StoredFile) {
+/** Original import name, independent of the editable display name. */
+export function originalFileName(file: Pick<StoredFile, "name">) {
   return storedNameParts(file.name).name;
+}
+
+export function displayedFileName(file: StoredFile) {
+  return file.displayName ?? originalFileName(file);
 }
 
 /** Search does not reorder media or change selections owned by the caller. */
@@ -40,7 +45,7 @@ export function filterAndSortFiles(
   )).sort((left, right) => {
     const a = storedNameParts(left.name);
     const b = storedNameParts(right.name);
-    const byName = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+    const byName = displayedFileName(left).localeCompare(displayedFileName(right), undefined, { numeric: true, sensitivity: "base" })
       || storedFileKey(left).localeCompare(storedFileKey(right));
     if (sort === "name") return byName;
     if (sort === "size") return right.size - left.size || byName;

@@ -60,6 +60,7 @@ import { matchesGameResumeRequest } from "@/features/games/progress";
 import { orderEnduranceMedia } from "@/features/endurance/mediaOrder";
 import { EnduranceFilePicker } from "@/features/endurance/EnduranceFilePicker";
 import {
+  randomizeEnduranceFileSelection,
   reconcileEnduranceFileSelection,
   toggleEnduranceFileSelection,
   type EnduranceFileSelection,
@@ -904,6 +905,9 @@ export default function EnduranceScreen() {
         loading={loading}
         loadFailed={fileLoadFailed}
         onToggle={toggleFile}
+        onRandomSelect={() => {
+          if (!loading && !fileLoadFailed) setFileSelection((previous) => randomizeEnduranceFileSelection(previous));
+        }}
         onRetry={() => void refreshFiles()}
         onClose={() => setShowFilePicker(false)}
       />

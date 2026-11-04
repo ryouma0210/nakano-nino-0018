@@ -1,0 +1,21 @@
+Voice M4A encoding dependencies
+
+Mediabunny 1.65.0 and @mediabunny/aac-encoder 1.65.0
+Copyright (c) 2026-present, Vanilagy and contributors
+License: Mozilla Public License 2.0 (mediabunny-MPL-2.0.txt)
+Upstream: https://github.com/Vanilagy/mediabunny
+Exact source packages (including TypeScript and the AAC C bridge):
+https://registry.npmjs.org/mediabunny/-/mediabunny-1.65.0.tgz
+https://registry.npmjs.org/@mediabunny/aac-encoder/-/aac-encoder-1.65.0.tgz
+
+The browser AAC fallback includes unmodified FFmpeg libavcodec/libavutil,
+licensed under LGPL version 2.1 or later (ffmpeg-LGPL-2.1.txt).
+FFmpeg source revision: 60a2818f76dcd1fee3155b1791304af104a0fc1b
+Corresponding source:
+https://github.com/FFmpeg/FFmpeg/archive/60a2818f76dcd1fee3155b1791304af104a0fc1b.tar.gz
+The exact Emscripten version, build commands and bridge source are provided in
+the @mediabunny/aac-encoder source package above. No encoder source is modified.
+Rebuild the package and substitute it for @mediabunny/aac-encoder to use a
+modified encoder. This application's package-lock.json pins the versions.
+
+Android and iOS use the operating system's AAC encoders instead of this fallback.

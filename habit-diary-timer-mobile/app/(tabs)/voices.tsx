@@ -12,6 +12,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { TextField } from "@/components/TextField";
 import { VoiceSeekBar } from "@/components/VoiceSeekBar";
 import { VoiceSleepTimerSettings } from "@/components/VoiceSleepTimerSettings";
+import { VoiceLoudnessDetails } from "@/components/VoiceLoudnessDetails";
 import { useAppToast } from "@/components/AppToastProvider";
 import { secondsToClock } from "@/utils/date";
 import { VOICE_FOLDER_NAME_LIMIT, VOICE_NAME_LIMIT, voiceDisplayName, voiceFolderName } from "@/features/voices/library";
@@ -80,6 +81,7 @@ export default function VoicesScreen() {
     || editingFolderIds.some((id) => !dialog.voice.folderIds.includes(id)));
   const orderChanged = dialog?.kind === "reorder" && orderedVoices.some((voice, index) => voice.id !== dialog.voices[index]?.id);
   const reorderSource = orderedVoices.find((voice) => voice.id === reorderSourceId);
+  const detailVoice = dialog?.kind === "details" ? library.voices.find((voice) => voice.id === dialog.voice.id) ?? dialog.voice : null;
 
   function clearSelection() {
     setSelection({ scope: library.scope, search, ids: new Set() });
@@ -401,6 +403,8 @@ export default function VoicesScreen() {
               onPress={() => active && library.playing ? library.pause() : library.play(voice.id)} testID={`voice-play-${voice.id}`} />
             {compact ? <VoiceButton label="詳細" compact accessibilityLabel={`${t("詳細")}: ${voice.name}`} disabled={locked}
               onPress={() => openDialog({ kind: "details", voice })} testID={`voice-details-${voice.id}`} /> : <>
+            <VoiceButton label="詳細" accessibilityLabel={`${t("詳細")}: ${voice.name}`} disabled={locked}
+              onPress={() => openDialog({ kind: "details", voice })} testID={`voice-details-${voice.id}`} />
             <VoiceButton label="名前を変更" accessibilityLabel={`${t("名前を変更")}: ${voice.name}`} disabled={locked}
               onPress={() => openDialog({ kind: "renameVoice", voice })} testID={`voice-rename-${voice.id}`} />
             <VoiceButton label="削除" danger accessibilityLabel={`${t("削除")}: ${voice.name}`} disabled={locked}
@@ -435,18 +439,22 @@ export default function VoicesScreen() {
         <AppText>削除すると、使用するすべてのフォルダーから取り除かれます。</AppText>
         {dialog.voices.map((voice) => <AppText key={voice.id} localize={false}>{voice.name}</AppText>)}
       </> : null}
-      {dialog?.kind === "details" ? <>
-        <AppText localize={false} style={styles.voiceName}>{dialog.voice.name}</AppText>
-        <AppText localize={false} variant="muted">{dialog.voice.originalName}</AppText>
-        <AppText localize={false} variant="muted">{formatVoiceSize(dialog.voice.size)}</AppText>
+      {detailVoice ? <>
+        <AppText localize={false} style={styles.voiceName}>{detailVoice.name}</AppText>
+        <AppText localize={false} variant="muted">{detailVoice.originalName}</AppText>
+        <AppText localize={false} variant="muted">{formatVoiceSize(detailVoice.size)}</AppText>
         <View style={styles.folderLabels}>
-          {dialog.voice.folderIds.length > 0 ? library.folders.filter((folder) => dialog.voice.folderIds.includes(folder.id)).map((folder) =>
+          {detailVoice.folderIds.length > 0 ? library.folders.filter((folder) => detailVoice.folderIds.includes(folder.id)).map((folder) =>
             <AppText key={folder.id} localize={false} variant="muted" style={styles.folderLabel}>{folder.name}</AppText>)
             : <AppText variant="muted" style={styles.folderLabel}>未分類</AppText>}
         </View>
-        <VoiceButton label="名前を変更" disabled={locked} onPress={() => openDialog({ kind: "renameVoice", voice: dialog.voice })} testID={`voice-rename-${dialog.voice.id}`} />
-        <VoiceButton label="使用するフォルダー" disabled={locked} onPress={() => openDialog({ kind: "editFolders", voice: dialog.voice })} testID={`voice-folders-edit-${dialog.voice.id}`} />
-        <VoiceButton label="削除" danger disabled={locked} onPress={() => openDialog({ kind: "deleteVoice", voice: dialog.voice })} testID={`voice-delete-${dialog.voice.id}`} />
+        <VoiceButton label="名前を変更" disabled={locked} onPress={() => openDialog({ kind: "renameVoice", voice: detailVoice })} testID={`voice-rename-${detailVoice.id}`} />
+        <VoiceButton label="使用するフォルダー" disabled={locked} onPress={() => openDialog({ kind: "editFolders", voice: detailVoice })} testID={`voice-folders-edit-${detailVoice.id}`} />
+        <VoiceButton label="削除" danger disabled={locked} onPress={() => openDialog({ kind: "deleteVoice", voice: detailVoice })} testID={`voice-delete-${detailVoice.id}`} />
+        <VoiceLoudnessDetails voice={detailVoice} disabled={locked} onBusyChange={(busy) => {
+          operationPending.current = busy;
+          setWorking(busy);
+        }} />
       </> : null}
       {dialog?.kind === "deleteFolder" ? <>
         <AppText localize={false} style={styles.voiceName}>{dialog.folder.name}</AppText>
