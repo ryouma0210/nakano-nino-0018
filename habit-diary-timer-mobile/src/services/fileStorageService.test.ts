@@ -936,6 +936,101 @@ function installNativeRestoreFileSystem() {
 }
 
 describe("prepared file restoration", () => {
+  it("loads legacy native usage arrays, saves details together and preserves physical file references", async () => {
+    const { oldFile } = installNativeRestoreFileSystem();
+    const key = JSON.stringify(["training", "legacy.mp4"]);
+    nativeFiles.set(`${nativeDirectory}.usages/current.json`, JSON.stringify({ [key]: ["endurance"] }));
+    const [original] = await fileStorageService.list("endurance");
+    expect(original).toMatchObject({ name: "legacy.mp4", uri: oldFile, usages: ["endurance"] });
+    await fileStorageService.updateDetails(original, { displayName: "  新しい表示名  ", usages: ["training", "punishment"] });
+    const [updated] = await fileStorageService.list("punishment");
+    expect(updated).toEqual({ ...original, displayName: "新しい表示名", usages: ["training", "punishment"] });
+    expect(nativeFiles.get(oldFile)).toBe("old");
+    expect(mocks.copy).not.toHaveBeenCalled();
+    expect(mocks.move.mock.calls.every(([{ from, to }]) => from.includes(".usages/") && to.includes(".usages/"))).toBe(true);
+    // The passed file is stale; usages-only edits must read the current name.
+    await fileStorageService.setUsages(original, ["endurance"]);
+    vi.resetModules();
+    ({ fileStorageService } = await import("./fileStorageService"));
+    expect(await fileStorageService.list("endurance")).toEqual([{ ...original, displayName: "新しい表示名" }]);
+    await fileStorageService.remove(original);
+    expect(JSON.parse(nativeFiles.get(`${nativeDirectory}.usages/current.json`)!)).toEqual({});
+  });
+
+  it("preserves both native details if metadata installation fails, including previous-copy recovery", async () => {
+    installNativeRestoreFileSystem();
+    const [original] = await fileStorageService.list();
+    await fileStorageService.updateDetails(original, { displayName: "保存済み", usages: ["endurance"] });
+    const saved = await fileStorageService.list();
+    const move = mocks.move.getMockImplementation()!;
+    mocks.move.mockImplementation(async (paths) => {
+      if (paths.from.endsWith("pending.json")) throw new Error("metadata storage full");
+      await move(paths);
+    });
+    await expect(fileStorageService.updateDetails(original, { displayName: "失敗する名前", usages: ["training"] })).rejects.toThrow("metadata storage full");
+    expect(await fileStorageService.list()).toEqual(saved);
+    expect(fileStorageService.getMaintenanceState().active).toBe(false);
+    mocks.move.mockImplementation(move);
+    await mocks.move({ from: `${nativeDirectory}.usages/current.json`, to: `${nativeDirectory}.usages/previous.json` });
+    expect(await fileStorageService.list()).toEqual(saved);
+    await fileStorageService.updateDetails(original, { displayName: "再試行", usages: ["punishment"] });
+    expect(await fileStorageService.list("punishment")).toEqual([expect.objectContaining({ displayName: "再試行", usages: ["punishment"] })]);
+  });
+
+  it("restores and rolls back native names and usages together, including names without explicit usages", async () => {
+    const { replacement } = installNativeRestoreFileSystem();
+    const [old] = await fileStorageService.list();
+    await fileStorageService.updateDetails(old, { displayName: "元の名前", usages: ["endurance"] });
+    const originals = await fileStorageService.list();
+    const prepared = await fileStorageService.prepareRestore([{ ...replacement, displayName: "復元名" }]);
+    await prepared.activate();
+    expect(await fileStorageService.list("training")).toEqual([expect.objectContaining({ name: "new.mp4", displayName: "復元名" })]);
+    await prepared.rollback();
+    expect(await fileStorageService.list()).toEqual(originals);
+  });
+
+  it("rejects invalid native details and private-file edits before changing metadata", async () => {
+    const { replacement } = installNativeRestoreFileSystem();
+    const [old] = await fileStorageService.list();
+    for (const displayName of ["", "  ", "a".repeat(256), "bad\0name"]) {
+      await expect(fileStorageService.updateDetails(old, { displayName, usages: ["training"] })).rejects.toThrow("1〜255文字");
+    }
+    for (const purpose of ["profile", "chastity"] as const) {
+      await expect(fileStorageService.updateDetails({ ...old, purpose }, { displayName: "name", usages: ["training"] })).rejects.toThrow("用途");
+    }
+    await expect(fileStorageService.updateDetails(old, { displayName: "name", usages: [] })).rejects.toThrow("用途");
+    await expect(fileStorageService.updateDetails({ ...old, name: "absent" }, { displayName: "name", usages: ["training"] })).rejects.toThrow("見つかりません");
+    await fileStorageService.withExclusiveFiles(async () => {
+      await expect(fileStorageService.updateDetails(old, { displayName: "name", usages: ["training"] })).rejects.toThrow("処理中");
+    });
+    for (const displayName of ["", " padded ", "a".repeat(256), "bad\nname"]) {
+      await expect(fileStorageService.prepareRestore([{ ...replacement, displayName }])).rejects.toThrow("不正");
+    }
+    expect(await fileStorageService.list()).toEqual([old]);
+  });
+
+  it("still deduplicates native imports by original filename and bytes after changing the display name", async () => {
+    installNativeRestoreFileSystem();
+    const [original] = await fileStorageService.list();
+    await fileStorageService.updateDetails(original, { displayName: "表示名は違う", usages: ["endurance"] });
+    nativeFiles.set("file:///cache/legacy.mp4", "old");
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ name: "legacy.mp4", uri: "file:///cache/legacy.mp4", size: 3 }] });
+    await expect(fileStorageService.pickAndStore()).resolves.toEqual({ stored: 0, skipped: ["legacy.mp4"], failed: [] });
+    expect((await fileStorageService.list())[0]).toMatchObject({ name: "legacy.mp4", displayName: "表示名は違う" });
+  });
+
+  it("still deduplicates browser imports by original filename and bytes after changing the display name", async () => {
+    const web = createWebPicker();
+    await fileStorageService.restoreFromBackup([{ name: "1800000000000_0_original.mp4", size: 3, purpose: "training", mimeType: "video/mp4", data: "b2xk" }]);
+    const [original] = await fileStorageService.list();
+    await fileStorageService.updateDetails(original, { displayName: "別の表示名", usages: ["endurance"] });
+    const result = fileStorageService.pickAndStore();
+    web.input.files = [new File(["old"], "original.mp4", { type: "video/mp4" })];
+    await web.emit("change");
+    await expect(result).resolves.toEqual({ stored: 0, skipped: ["original.mp4"], failed: [] });
+    expect(await fileStorageService.list()).toEqual([{ ...original, displayName: "別の表示名", usages: ["endurance"] }]);
+  });
+
   it("shares a native file across all usages without copying bytes, moving media or double-counting capacity", async () => {
     const { oldFile } = installNativeRestoreFileSystem();
     const [original] = await fileStorageService.list("training");

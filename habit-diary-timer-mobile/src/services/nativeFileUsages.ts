@@ -1,7 +1,9 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { isFilePurpose, isValidFileUsages, type FileUsage } from "../features/files/usages";
+import { isValidFileDisplayName } from "../features/files/details";
 
-export type NativeFileUsages = Record<string, FileUsage[]>;
+export type NativeFileDetails = { usages?: FileUsage[]; displayName?: string };
+export type NativeFileUsages = Record<string, NativeFileDetails>;
 const directory = ".usages/";
 const filename = "current.json";
 const previousFilename = "previous.json";
@@ -19,13 +21,20 @@ export async function readNativeFileUsages(root: string): Promise<NativeFileUsag
   if (!uri) return {};
   const value: unknown = JSON.parse(await FileSystem.readAsStringAsync(uri));
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ファイルの用途データが不正です。");
-  for (const [key, usages] of Object.entries(value)) {
+  const result: NativeFileUsages = {};
+  for (const [key, entry] of Object.entries(value)) {
     const identity: unknown = JSON.parse(key);
+    // Older versions stored the usage array directly under each stable key.
+    const metadata: unknown = Array.isArray(entry) ? { usages: entry } : entry;
     if (!Array.isArray(identity) || identity.length !== 2 || !isFilePurpose(identity[0])
-      || identity[0] === "chastity" || typeof identity[1] !== "string" || !identity[1]
-      || !isValidFileUsages(identity[0], usages)) throw new Error("ファイルの用途データが不正です。");
+      || identity[0] === "chastity" || identity[0] === "profile" || typeof identity[1] !== "string" || !identity[1]
+      || !metadata || typeof metadata !== "object" || Array.isArray(metadata)
+      || !isValidFileUsages(identity[0], (metadata as NativeFileDetails).usages)
+      || !isValidFileDisplayName((metadata as NativeFileDetails).displayName)) throw new Error("ファイルの用途データが不正です。");
+    const { usages, displayName } = metadata as NativeFileDetails;
+    result[key] = { ...(usages ? { usages } : {}), ...(displayName !== undefined ? { displayName } : {}) };
   }
-  return value as NativeFileUsages;
+  return result;
 }
 
 /** Only small metadata is written. The media directory and bytes stay untouched. */

@@ -1,3 +1,7 @@
+import type { VoiceLoudnessAnalysis } from "./loudness";
+
+export type VoiceLoudness = { analysis: VoiceLoudnessAnalysis; targetLufs?: number };
+export type VoiceSourceFingerprint = { sha256: string; size: number };
 export type VoicePlaybackMode = "one" | "all";
 // "all", "unfiled", or the ID of an existing folder; validated when persisted.
 export type VoiceScope = string;
@@ -10,9 +14,10 @@ export type StoredVoice = {
   size: number;
   originalName: string;
   folderIds: string[];
+  loudness?: VoiceLoudness;
 };
 
-export type VoiceMetadata = Omit<StoredVoice, "uri"> & { fileName: string; mimeType: string };
+export type VoiceMetadata = Omit<StoredVoice, "uri"> & { fileName: string; mimeType: string; sourceFingerprint?: VoiceSourceFingerprint };
 export type VoiceLibrary = {
   version: 3;
   voices: VoiceMetadata[];
@@ -65,6 +70,23 @@ export function normalizedVoiceFolderName(name: string): string {
   return name.trim().normalize("NFKC").toLowerCase();
 }
 
+export function parseVoiceLoudness(value: unknown): VoiceLoudness {
+  if (!value || typeof value !== "object") throw new Error(invalidVoiceLibraryMessage);
+  const item = value as VoiceLoudness;
+  const a = item.analysis;
+  if (!a || (a.integratedLufs !== null && (typeof a.integratedLufs !== "number" || !Number.isFinite(a.integratedLufs)
+    || a.integratedLufs < -200 || a.integratedLufs > 100))
+    || typeof a.samplePeak !== "number" || !Number.isFinite(a.samplePeak) || a.samplePeak < 0
+    || typeof a.duration !== "number" || !Number.isFinite(a.duration) || a.duration <= 0
+    || !Number.isInteger(a.sampleRate) || a.sampleRate < 8000 || a.sampleRate > 384000
+    || (a.channels !== 1 && a.channels !== 2)
+    || (item.targetLufs !== undefined && (!Number.isInteger(item.targetLufs) || item.targetLufs < -30 || item.targetLufs > -20))) {
+    throw new Error(invalidVoiceLibraryMessage);
+  }
+  return { analysis: { integratedLufs: a.integratedLufs, samplePeak: a.samplePeak, duration: a.duration,
+    sampleRate: a.sampleRate, channels: a.channels }, ...(item.targetLufs === undefined ? {} : { targetLufs: item.targetLufs }) };
+}
+
 export function parseVoiceLibrary(value: unknown): VoiceLibrary {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(invalidVoiceLibraryMessage);
   const state = value as Record<string, unknown>;
@@ -102,7 +124,7 @@ export function parseVoiceLibrary(value: unknown): VoiceLibrary {
       || /[\u0000-\u001f\u007f]/.test(entry.name) || typeof entry.originalName !== "string" || !entry.originalName.trim()
       || entry.originalName.length > 1024 || /[\u0000-\u001f\u007f]/.test(entry.originalName)
       || !Number.isSafeInteger(entry.size) || entry.size <= 0 || typeof entry.fileName !== "string"
-      || !entry.fileName.startsWith(`${entry.id}.`) || !/^[a-zA-Z0-9_-]+\.[a-z0-9]{1,10}$/.test(entry.fileName)
+      || !entry.fileName.startsWith(`${entry.id}.`) || !/^[a-zA-Z0-9_-]+\.(?:loudness-[a-z0-9-]+\.)?[a-z0-9]{1,10}$/.test(entry.fileName)
       || typeof entry.mimeType !== "string" || !/^audio\/[a-z0-9.+-]+$/.test(entry.mimeType)) {
       throw new Error(invalidVoiceLibraryMessage);
     }
@@ -121,8 +143,17 @@ export function parseVoiceLibrary(value: unknown): VoiceLibrary {
       }
     }
     seen.add(entry.id);
+    let sourceFingerprint: VoiceSourceFingerprint | undefined;
+    if (entry.sourceFingerprint !== undefined) {
+      const source = entry.sourceFingerprint;
+      if (!source || typeof source !== "object" || typeof source.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.sha256)
+        || !Number.isSafeInteger(source.size) || source.size <= 0) throw new Error(invalidVoiceLibraryMessage);
+      sourceFingerprint = { sha256: source.sha256, size: source.size };
+    }
     return { id: entry.id, name: entry.name, originalName: entry.originalName, size: entry.size,
-      fileName: entry.fileName, mimeType: entry.mimeType, folderIds: memberships };
+      fileName: entry.fileName, mimeType: entry.mimeType, folderIds: memberships,
+      ...(entry.loudness === undefined ? {} : { loudness: parseVoiceLoudness(entry.loudness) }),
+      ...(sourceFingerprint ? { sourceFingerprint } : {}) };
   });
   return { version: 3, mode: state.mode, voices, folders, scope };
 }

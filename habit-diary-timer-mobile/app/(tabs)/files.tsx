@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Image as NativeImage, Modal, Platform, Pressable as NativePressable, ScrollView, StyleSheet, View } from "react-native";
+import { Image as NativeImage, KeyboardAvoidingView, Modal, Platform, Pressable as NativePressable, ScrollView, StyleSheet, View } from "react-native";
 import { LocalizedPressable as Pressable } from "@/components/LocalizedPressable";
 import { router, useFocusEffect } from "expo-router";
 import {
@@ -24,6 +24,7 @@ import { useFileListPreferences } from "@/features/files/useFileListPreferences"
 import { FileGalleryViewer } from "@/features/files/FileGalleryViewer";
 import { useCompletionNotice } from "@/features/files/useCompletionNotice";
 import { FILE_USAGES, getFileUsages, type FileUsage } from "@/features/files/usages";
+import { isValidFileDisplayName, MAX_FILE_DISPLAY_NAME_LENGTH, normalizeFileDisplayName } from "@/features/files/details";
 import { useAppModal } from "@/components/AppModalProvider";
 import { useAppToast } from "@/components/AppToastProvider";
 import {
@@ -35,6 +36,7 @@ import {
 import {
   displayedFileName,
   filterAndSortFiles,
+  originalFileName,
   selectedVisibleFiles,
   storedFileKey,
 } from "@/features/files/fileList";
@@ -60,7 +62,9 @@ export default function FilesScreen() {
     fileStorageService.getMaintenanceState,
     fileStorageService.getMaintenanceState,
   );
-  const filesBusy = importing || deleting || maintenance.active;
+  const [savingDetails, setSavingDetails] = useState(false);
+  const detailsSavePending = useRef(false);
+  const filesBusy = importing || deleting || maintenance.active || savingDetails;
   const showImportNotice = useCompletionNotice(importResult);
   const showDeleteNotice = useCompletionNotice(deleteResult);
   const listLocked = deleting || maintenance.active;
@@ -75,7 +79,10 @@ export default function FilesScreen() {
   const [selected, setSelected] = useState<StoredFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile[] | null>(null);
   const [editingFile, setEditingFile] = useState<StoredFile | null>(null);
+  const [editingName, setEditingName] = useState("");
   const [editingUsages, setEditingUsages] = useState<FileUsage[]>([]);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const validEditingName = isValidFileDisplayName(editingName.trim());
   const [videoThumbnails, setVideoThumbnails] = useState<
     Record<string, GeneratedVideoThumbnail>
   >({});
@@ -206,19 +213,29 @@ export default function FilesScreen() {
     if (!filesBusy) setPendingDelete([file]);
   }
 
-  function editUsages(file: StoredFile) {
+  function editDetails(file: StoredFile) {
     if (filesBusy) return;
     setEditingFile(file);
+    setEditingName(displayedFileName(file));
     setEditingUsages(getFileUsages(file));
+    setDetailsError(null);
   }
 
-  async function saveUsages() {
-    if (filesBusy || !editingFile || editingUsages.length === 0) return;
+  async function saveDetails() {
+    if (filesBusy || detailsSavePending.current || !editingFile || !validEditingName || editingUsages.length === 0) return;
+    detailsSavePending.current = true;
+    setSavingDetails(true);
+    setDetailsError(null);
     try {
-      await fileStorageService.setUsages(editingFile, editingUsages);
+      await fileStorageService.updateDetails(editingFile, {
+        displayName: normalizeFileDisplayName(editingName), usages: editingUsages,
+      });
       setEditingFile(null);
     } catch (error) {
-      showError("ファイルの用途を変更できませんでした。", error);
+      setDetailsError(error instanceof Error ? error.message : "ファイルの詳細を保存できませんでした。");
+    } finally {
+      detailsSavePending.current = false;
+      setSavingDetails(false);
     }
   }
 
@@ -515,8 +532,9 @@ export default function FilesScreen() {
             {getFileUsages(file).map((usage) => <AppText key={usage} style={styles.usageLabel}>{usageLabels[usage]}</AppText>)}
           </View>
           {!selectionMode ? (
-            <Pressable disabled={filesBusy} onPress={() => editUsages(file)} accessibilityRole="button" style={styles.usageEdit}>
-              <AppText style={styles.usageEditText}>用途を変更</AppText>
+            <Pressable disabled={filesBusy} onPress={() => editDetails(file)} accessibilityRole="button"
+              accessibilityState={{ disabled: filesBusy }} testID={`file-details-${storedFileKey(file)}`} style={styles.usageEdit}>
+              <AppText style={styles.usageEditText}>詳細</AppText>
             </Pressable>
           ) : null}
         </View>
@@ -538,15 +556,26 @@ export default function FilesScreen() {
         <FileGalleryViewer files={visibleFiles} selectedKey={storedFileKey(selected)} onSelect={setSelected} onClose={() => setSelected(null)} />
       ) : null}
       <Modal visible={editingFile !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!filesBusy) setEditingFile(null); }}>
-        <View style={styles.modalBackdrop}>
-          <ScrollView style={styles.usageDialog} contentContainerStyle={styles.usageDialogContent}>
-            <AppText variant="subtitle">用途を変更</AppText>
-            <AppText localize={false} numberOfLines={3}>{editingFile ? displayedFileName(editingFile) : ""}</AppText>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView style={styles.usageDialog} contentContainerStyle={styles.usageDialogContent}
+            keyboardShouldPersistTaps="handled" testID="file-details-dialog" accessibilityViewIsModal>
+            <AppText variant="subtitle">ファイルの詳細</AppText>
+            <TextField label="ファイル名" value={editingName} onChangeText={(value) => { setEditingName(value); setDetailsError(null); }}
+              editable={!filesBusy} maxLength={MAX_FILE_DISPLAY_NAME_LENGTH} autoCorrect={false} autoCapitalize="none"
+              returnKeyType="done" onSubmitEditing={() => void saveDetails()} testID="file-details-name"
+              error={editingFile && !validEditingName ? "ファイル名を1〜255文字で入力してください。" : undefined} />
+            <AppText variant="muted">一覧に表示する名前を変更します。元のファイル名は変更せず、取り込み時の重複確認に使います。</AppText>
+            <View style={styles.originalName}>
+              <AppText variant="label">元のファイル名</AppText>
+              <AppText localize={false} testID="file-details-original-name">{editingFile ? originalFileName(editingFile) : ""}</AppText>
+            </View>
             <AppText>用途を1つ以上選択してください。</AppText>
             {FILE_USAGES.map((usage) => (
               <Pressable key={usage} disabled={filesBusy} accessibilityRole="checkbox"
                 accessibilityState={{ checked: editingUsages.includes(usage), disabled: filesBusy }}
+                aria-checked={editingUsages.includes(usage)} aria-disabled={filesBusy}
                 accessibilityLabel={usageLabels[usage]}
+                testID={`file-details-usage-${usage}`}
                 onPress={() => setEditingUsages((previous) => previous.includes(usage) ? previous.filter((value) => value !== usage) : [...previous, usage])}
                 style={styles.usageChoice}>
                 <AppText localize={false}>{editingUsages.includes(usage) ? "☑" : "☐"}</AppText>
@@ -554,10 +583,12 @@ export default function FilesScreen() {
               </Pressable>
             ))}
             <AppText variant="muted">複数の用途を選んでも、ファイルの使用容量は増えません。</AppText>
-            <PrimaryButton title="保存" tone="save" disabled={filesBusy || editingUsages.length === 0} onPress={saveUsages} />
-            <PrimaryButton title="キャンセル" tone="secondary" disabled={filesBusy} onPress={() => setEditingFile(null)} />
+            {detailsError ? <AppText accessibilityRole="alert" style={styles.detailsError} testID="file-details-error">{detailsError}</AppText> : null}
+            <PrimaryButton title={savingDetails ? "保存中…" : "保存"} tone="save"
+              disabled={filesBusy || !validEditingName || editingUsages.length === 0} onPress={() => void saveDetails()} testID="file-details-save" />
+            <PrimaryButton title="キャンセル" tone="secondary" disabled={filesBusy} onPress={() => setEditingFile(null)} testID="file-details-cancel" />
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <ConfirmModal
         visible={pendingDelete !== null}
@@ -726,6 +757,7 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.88)" },
   usageDialog: { width: "100%", maxWidth: 420, maxHeight: "90%", backgroundColor: "#080808", borderWidth: 1, borderColor: "#fff" },
   usageDialogContent: { padding: 20, gap: 12 },
+  originalName: { gap: 6 }, detailsError: { color: "#ff8b91" },
   usageChoice: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#fff", paddingHorizontal: 12 },
   compactDelete: {
     width: 22,

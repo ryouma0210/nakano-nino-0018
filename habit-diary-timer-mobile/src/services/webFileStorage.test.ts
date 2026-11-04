@@ -43,6 +43,75 @@ function legacy(name: string, contents = "legacy", purpose: WebMediaFile["purpos
 }
 
 describe("IndexedDB media storage", () => {
+  it("atomically saves display name and usages without rewriting media or changing references", async () => {
+    const service = await backend();
+    await service.put(file("1800000000000_0_original.mp4", "original"));
+    const [original] = await service.list();
+    const add = vi.spyOn(IDBObjectStore.prototype, "add");
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    await service.updateDetails(original, { displayName: "  表示名 / 1  ", usages: ["punishment", "endurance"] });
+    const [renamed] = await service.list();
+    expect(renamed).toEqual({ ...original, displayName: "表示名 / 1", usages: ["punishment", "endurance"] });
+    expect(await (await service.getBlob(original)).text()).toBe("original");
+    expect(add).not.toHaveBeenCalled();
+    expect(put.mock.contexts.every((store) => (store as IDBObjectStore).name === "metadata")).toBe(true);
+    expect(createUrl).toHaveBeenCalledOnce();
+    expect(revokeUrl).not.toHaveBeenCalled();
+    // A stale caller updating usages must retain the newly saved display name.
+    await service.setUsages(original, ["training"]);
+    expect(await service.list()).toEqual([{ ...original, displayName: "表示名 / 1", usages: ["training"] }]);
+    vi.resetModules();
+    expect((await (await backend()).list())[0]).toMatchObject({ name: original.name, displayName: "表示名 / 1", usages: ["training"] });
+  });
+
+  it("retains both previous details after an aborted metadata save", async () => {
+    const service = await backend();
+    await service.put({ ...file("original.mp4"), displayName: "前の名前", usages: ["endurance"] });
+    const [original] = await service.list();
+    const put = IDBObjectStore.prototype.put;
+    const abort = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+      const request = put.call(this, value, key);
+      request.addEventListener("success", () => this.transaction.abort(), { once: true });
+      return request;
+    });
+    await expect(service.updateDetails(original, { displayName: "次の名前", usages: ["training"] })).rejects.toThrow("aborted");
+    abort.mockRestore();
+    expect(await service.list()).toEqual([original]);
+    expect(revokeUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid details and edits to private attachments without modifying storage", async () => {
+    const service = await backend();
+    await service.put(file("original.mp4"));
+    const [original] = await service.list();
+    for (const displayName of ["", " ", "a".repeat(256), "bad\nname"]) {
+      await expect(service.updateDetails(original, { displayName, usages: ["training"] })).rejects.toThrow("1〜255文字");
+    }
+    for (const usages of [[], ["training", "training"], ["profile"]]) {
+      await expect(service.updateDetails(original, { displayName: "name", usages: usages as never })).rejects.toThrow("不正");
+    }
+    for (const purpose of ["profile", "chastity"] as const) {
+      await expect(service.updateDetails({ ...original, purpose }, { displayName: "name", usages: ["training"] })).rejects.toThrow("不正");
+    }
+    await expect(service.updateDetails({ ...original, name: "absent" }, { displayName: "name", usages: ["training"] })).rejects.toThrow("no longer exists");
+    expect(await service.list()).toEqual([original]);
+  });
+
+  it("restores display names with usage metadata and rolls them back with the generation", async () => {
+    const service = await backend();
+    await service.put({ ...file("original.mp4"), displayName: "元の名前", usages: ["endurance"] });
+    const originals = await service.list();
+    const prepared = await service.prepareRestore([{ ...file("restored.mp4"), displayName: "復元した名前", usages: ["punishment"] }]);
+    await prepared.activate();
+    expect(await service.list()).toEqual([expect.objectContaining({ name: "restored.mp4", displayName: "復元した名前", usages: ["punishment"] })]);
+    await expect(service.updateDetails({ name: "restored.mp4", purpose: "training" }, { displayName: "blocked", usages: ["training"] })).rejects.toThrow("処理中");
+    await prepared.rollback();
+    expect(await service.list()).toEqual(originals);
+    await service.remove(originals[0]);
+    await service.put(file("original.mp4"));
+    expect((await service.list())[0].displayName).toBeUndefined();
+  });
+
   it("changes multiple usages using metadata only, keeping bytes, identity and object URL stable across reload", async () => {
     const service = await backend();
     await service.put(file("shared.mp4", "original"));

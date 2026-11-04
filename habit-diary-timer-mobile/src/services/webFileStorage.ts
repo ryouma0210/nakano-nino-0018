@@ -1,6 +1,7 @@
 import type { FilePurpose, PreparedFileRestore, StoredFile } from "./fileStorageService";
 import { fileUsageKey, isFilePurpose, isValidFileUsages, type FileUsage } from "../features/files/usages";
 import { isProfilePhotoMetadata } from "../features/files/profilePhoto";
+import { isValidFileDisplayName, normalizeFileDisplayName } from "../features/files/details";
 
 export type WebMediaFile = {
   name: string;
@@ -9,20 +10,23 @@ export type WebMediaFile = {
   mimeType: string;
   blob: Blob;
   usages?: FileUsage[];
+  displayName?: string;
 };
 
 type MediaRecord = WebMediaFile & { id: string; generation: string };
 type StorageState = { key: "state"; activeGeneration: string; legacyMigrated: true };
-type UsageRecord = { key: string; usages: FileUsage[] };
+type UsageRecord = { key: string; usages?: FileUsage[]; displayName?: string };
 
 function usageKey(generation: string, file: Pick<WebMediaFile, "purpose" | "name">) {
   return `usages:${generation}:${fileUsageKey(file)}`;
 }
 
-async function writeUsages(current: IDBTransaction, generation: string, file: Pick<WebMediaFile, "purpose" | "name" | "usages">) {
+async function writeUsages(current: IDBTransaction, generation: string, file: Pick<WebMediaFile, "purpose" | "name" | "usages" | "displayName">) {
   const store = current.objectStore("metadata");
   const key = usageKey(generation, file);
-  if (file.usages) await requestResult(store.put({ key, usages: file.usages } satisfies UsageRecord));
+  if (file.usages || file.displayName !== undefined) await requestResult(store.put({ key,
+    ...(file.usages ? { usages: file.usages } : {}), ...(file.displayName !== undefined ? { displayName: file.displayName } : {}),
+  } satisfies UsageRecord));
   else await requestResult(store.delete(key));
 }
 
@@ -136,6 +140,8 @@ function validateFile(file: WebMediaFile) {
   if (!file || typeof file.name !== "string" || !file.name || file.name === "." || file.name === ".."
     || /[\\/\u0000-\u001f]/.test(file.name)
     || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
+    || !isValidFileDisplayName(file.displayName)
+    || ((file.purpose === "profile" || file.purpose === "chastity") && file.displayName !== undefined)
     || !Number.isSafeInteger(file.size) || file.size < 0
     || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
     || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
@@ -155,7 +161,7 @@ function validateFiles(files: readonly WebMediaFile[]) {
 }
 
 function mediaRecord(file: WebMediaFile, generation: string): MediaRecord {
-  const { usages: _usages, ...media } = file;
+  const { usages: _usages, displayName: _displayName, ...media } = file;
   return {
     ...media, id: identifier(), generation,
     // ZIP entries may arrive as untyped Blobs; object URLs need their declared
@@ -252,13 +258,15 @@ function revoke(id: string) {
   objectUrls.delete(id);
 }
 
-function storedFile(file: MediaRecord, usages?: FileUsage[]): StoredFile {
+function storedFile(file: MediaRecord, metadata?: UsageRecord): StoredFile {
   let uri = objectUrls.get(file.id);
   if (!uri) {
     uri = URL.createObjectURL(file.blob);
     objectUrls.set(file.id, uri);
   }
-  return { name: file.name, purpose: file.purpose, size: file.size, uri, ...(usages ? { usages } : {}) };
+  return { name: file.name, purpose: file.purpose, size: file.size, uri,
+    ...(metadata?.usages ? { usages: metadata.usages } : {}), ...(metadata?.displayName !== undefined ? { displayName: metadata.displayName } : {}),
+  };
 }
 
 function assertMutable() {
@@ -301,15 +309,16 @@ export const webFileStorage = {
     const files = await transaction("readonly", async (current) => {
       const state = await requireState(current);
       const records = await generationRecords(current, state.activeGeneration);
-      const result: { record: MediaRecord; usages?: FileUsage[] }[] = [];
+      const result: { record: MediaRecord; metadata?: UsageRecord }[] = [];
       for (const record of records) {
         const metadata: UsageRecord | undefined = await requestResult(current.objectStore("metadata").get(usageKey(state.activeGeneration, record)));
-        if (metadata && !isValidFileUsages(record.purpose, metadata.usages)) throw new Error(invalidFilesMessage);
-        result.push({ record, ...(metadata ? { usages: metadata.usages } : {}) });
+        if (metadata && (!isValidFileUsages(record.purpose, metadata.usages) || !isValidFileDisplayName(metadata.displayName)
+          || ((record.purpose === "profile" || record.purpose === "chastity") && metadata.displayName !== undefined))) throw new Error(invalidFilesMessage);
+        result.push({ record, metadata });
       }
       return result;
     });
-    return files.map(({ record, usages }) => storedFile(record, usages));
+    return files.map(({ record, metadata }) => storedFile(record, metadata));
   }),
 
   getBlob: (file: Pick<StoredFile, "name" | "purpose">) => serialized(async (): Promise<Blob> => {
@@ -346,8 +355,25 @@ export const webFileStorage = {
       const state = await requireState(current);
       const record = await requestResult(current.objectStore("files").index("file").get([state.activeGeneration, file.purpose, file.name]));
       if (!record) throw new Error("The stored file no longer exists.");
+      const metadata: UsageRecord | undefined = await requestResult(current.objectStore("metadata").get(usageKey(state.activeGeneration, file)));
+      if (!isValidFileDisplayName(metadata?.displayName)) throw new Error(invalidFilesMessage);
       // Keep the Blob record and its object URL unchanged; only metadata is edited.
-      await writeUsages(current, state.activeGeneration, { ...file, usages });
+      await writeUsages(current, state.activeGeneration, { ...file, displayName: metadata?.displayName, usages });
+    });
+  }),
+
+  updateDetails: (file: Pick<StoredFile, "name" | "purpose">, details: { displayName: string; usages: readonly FileUsage[] }) => serialized(async (): Promise<void> => {
+    assertMutable();
+    const displayName = normalizeFileDisplayName(details.displayName);
+    if (!isValidFileUsages(file.purpose, details.usages) || !Array.isArray(details.usages)) throw new Error(invalidFilesMessage);
+    await ensureMigrated();
+    await transaction("readwrite", async (current) => {
+      const state = await requireState(current);
+      const record = await requestResult(current.objectStore("files").index("file").get([state.activeGeneration, file.purpose, file.name]));
+      if (!record) throw new Error("The stored file no longer exists.");
+      // One committed metadata write changes both details atomically. Neither
+      // the physical identity nor the media's Blob/object URL is replaced.
+      await writeUsages(current, state.activeGeneration, { ...file, displayName, usages: [...details.usages] });
     });
   }),
 

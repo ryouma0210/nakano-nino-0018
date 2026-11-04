@@ -18,6 +18,7 @@ type Props = {
   loading: boolean;
   loadFailed: boolean;
   onToggle: (file: StoredFile) => void;
+  onRandomSelect: () => void;
   onRetry: () => void;
   onClose: () => void;
 };
@@ -30,7 +31,7 @@ export function EnduranceFilePicker(props: Props) {
   );
 }
 
-function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, onRetry, onClose }: Props) {
+function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, onRandomSelect, onRetry, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
   const visibleFiles = useMemo(() => filterFilesByName(files, search), [files, search]);
@@ -38,71 +39,80 @@ function PickerContents({ files, selectedKeys, loading, loadFailed, onToggle, on
   return (
     <View style={[styles.dialog, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) }]}>
       <AppText variant="title">ファイル選択</AppText>
-      <AppText variant="muted">最大100件まで選択できます。</AppText>
-      <Disclosure title="検索" active={search.trim().length > 0} testID="endurance-file-search-toggle">
-      <TextField
-        testID="endurance-file-search"
-        label="ファイル名で検索"
-        placeholder="名前の一部を入力"
-        value={search}
-        onChangeText={setSearch}
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={!loading && !loadFailed}
-      />
-      </Disclosure>
-      <AppText>{`選択中：${selectedKeys.length}件`}</AppText>
-      {!loading && !loadFailed ? <AppText variant="muted">{`表示中：${visibleFiles.length}件`}</AppText> : null}
-      {loading ? <ActivityIndicator color="#fff" /> : null}
-      {loadFailed ? (
-        <>
-          <AppText style={styles.error}>ファイルを読み込めませんでした</AppText>
-          <PrimaryButton title="再試行" tone="secondary" onPress={onRetry} />
-        </>
-      ) : null}
       <FlatList
         style={styles.list}
         data={loading || loadFailed ? [] : visibleFiles}
         extraData={{ selectedKeys, thumbnails }}
         keyExtractor={storedFileKey}
+        numColumns={3}
+        columnWrapperStyle={styles.fileRow}
         contentContainerStyle={styles.listContents}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={5}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={<View style={styles.header}>
+          <AppText variant="muted">最大100件まで選択できます。</AppText>
+          <PrimaryButton title="ランダム選択" tone="secondary" testID="endurance-file-random"
+            disabled={loading || loadFailed || files.length === 0}
+            onPress={() => { setSearch(""); onRandomSelect(); }} />
+          <AppText variant="muted">全ファイルから、件数もランダムに選び直します（最大100件）。</AppText>
+          <Disclosure title="検索" active={search.trim().length > 0} testID="endurance-file-search-toggle">
+            <TextField
+              testID="endurance-file-search"
+              label="ファイル名で検索"
+              placeholder="名前の一部を入力"
+              value={search}
+              onChangeText={setSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!loading && !loadFailed}
+            />
+          </Disclosure>
+          <View style={styles.counts}>
+            <AppText testID="endurance-file-selected-count">{`選択中：${selectedKeys.length}件`}</AppText>
+            {!loading && !loadFailed ? <AppText variant="muted">{`表示中：${visibleFiles.length}件`}</AppText> : null}
+          </View>
+          {loading ? <ActivityIndicator color="#fff" /> : null}
+          {loadFailed ? <>
+            <AppText style={styles.error}>ファイルを読み込めませんでした</AppText>
+            <PrimaryButton title="再試行" tone="secondary" onPress={onRetry} />
+          </> : null}
+        </View>}
         renderItem={({ item }) => {
           const selected = selectedKeys.includes(storedFileKey(item));
           const disabled = !selected && selectedKeys.length >= MAX_CUSTOM_MEDIA;
           const video = mimeTypeForName(item.name).startsWith("video/");
           const label = displayedFileName(item);
           return (
-            <Pressable
+            <View style={styles.fileCell}><Pressable
               accessibilityRole="checkbox"
               accessibilityLabel={label}
               accessibilityState={{ checked: selected, disabled }}
               aria-checked={selected}
               aria-disabled={disabled}
+              testID={`endurance-file-${storedFileKey(item)}`}
               disabled={disabled}
               onPress={() => onToggle(item)}
               style={[styles.choice, selected && styles.selected, disabled && styles.disabled]}
             >
-              <AppText localize={false} style={styles.checkbox}>{selected ? "☑" : "□"}</AppText>
               <View style={styles.thumbnail} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                 {video ? (
                   thumbnails[item.uri]
                     ? <ExpoImage source={thumbnails[item.uri]} style={styles.fill} contentFit="contain" />
                     : <AppText variant="muted">動画</AppText>
                 ) : <Image source={{ uri: item.uri }} style={styles.fill} resizeMode="contain" />}
+                <AppText localize={false} style={styles.checkbox}>{selected ? "☑" : "□"}</AppText>
               </View>
-              <AppText localize={false} numberOfLines={3} style={styles.name}>{label}</AppText>
-            </Pressable>
+              <AppText localize={false} numberOfLines={2} style={styles.name}>{label}</AppText>
+            </Pressable></View>
           );
         }}
         ListEmptyComponent={!loading && !loadFailed ? (
           <AppText variant="muted">{files.length > 0 ? "該当するファイルはありません。" : "勃起我慢ゲーム用の画像・動画がありません。ファイル格納で用途を追加してください。"}</AppText>
         ) : null}
       />
-      <PrimaryButton title="選択完了" tone="preparation" onPress={onClose} />
+      <PrimaryButton title="選択完了" tone="preparation" onPress={onClose} testID="endurance-file-done" />
     </View>
   );
 }
@@ -213,8 +223,11 @@ function webVideoThumbnail(uri: string, signal: AbortSignal): Promise<string | n
 const styles = StyleSheet.create({
   dialog: { flex: 1, paddingHorizontal: 16, gap: 16, backgroundColor: "#000" },
   list: { flex: 1 }, listContents: { gap: 10, paddingBottom: 16 },
-  choice: { minHeight: 88, flexDirection: "row", alignItems: "center", gap: 12, padding: 10, borderWidth: 1, borderColor: "#888", borderRadius: 4 },
+  header: { gap: 12 }, counts: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  fileRow: { marginHorizontal: -5 }, fileCell: { width: "33.333333%", paddingHorizontal: 5 },
+  choice: { flex: 1, minWidth: 0, gap: 8, padding: 8, borderWidth: 1, borderColor: "#888", borderRadius: 4 },
   selected: { borderColor: "#ff69b4", backgroundColor: "#3d1529" }, disabled: { opacity: 0.5 },
-  checkbox: { fontSize: 24 }, thumbnail: { width: 76, height: 64, alignItems: "center", justifyContent: "center", backgroundColor: "#111" },
-  fill: { width: "100%", height: "100%" }, name: { flex: 1 }, error: { color: "#ff3b45" },
+  checkbox: { position: "absolute", top: 2, right: 2, minWidth: 24, fontSize: 22, lineHeight: 26, textAlign: "center", color: "#fff", backgroundColor: "rgba(0,0,0,0.75)", borderRadius: 3 },
+  thumbnail: { width: "100%", aspectRatio: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#111" },
+  fill: { width: "100%", height: "100%" }, name: { minHeight: 36, fontSize: 12, lineHeight: 18 }, error: { color: "#ff3b45" },
 });

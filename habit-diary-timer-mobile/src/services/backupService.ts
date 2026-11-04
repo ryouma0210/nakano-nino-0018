@@ -10,6 +10,7 @@ import { ROOM_VOICE_PREFERENCES_KEY, parseRoomVoicePreferences } from "../audio/
 import { CHASTITY_STORAGE_KEY, parseChastityHistory } from "./chastityHistoryStorage";
 import { validateCustomCommandSettings } from "./customCommandStorage";
 import { isFilePurpose, isValidFileUsages } from "../features/files/usages";
+import { isValidFileDisplayName } from "../features/files/details";
 import { profileSettingsSchema } from "../schemas/storage";
 import { isProfilePhotoMetadata } from "../features/files/profilePhoto";
 import { validateEnduranceSettings } from "../features/endurance/storage";
@@ -100,6 +101,7 @@ async function exportFile(kind: BackupKind, voiceAccess?: VoiceBackupAccess) {
     try {
       manifestFiles.push({ name: file.name, purpose: file.purpose, size: source.size,
         ...(file.usages ? { usages: file.usages } : {}),
+        ...(file.displayName !== undefined ? { displayName: file.displayName } : {}),
         mimeType: blob?.type || (file.uri.startsWith("data:") ? file.uri.slice(5, file.uri.indexOf(";")) : mimeTypeForName(file.name)),
         path: `files/${String(index).padStart(6, "0")}` });
     } finally { source.close(); }
@@ -194,6 +196,8 @@ function validatePayload(value: unknown): BackupPayload {
   validatePointMilestoneSettings(payload.database.app_settings);
   validateCollectionSeenSettings(payload.database.app_settings);
   if (payload.files?.some((file) => !file || typeof file.name !== "string" || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages)
+    || !isValidFileDisplayName(file.displayName)
+    || ((file.purpose === "profile" || file.purpose === "chastity") && file.displayName !== undefined)
     || typeof file.mimeType !== "string" || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
     || typeof file.data !== "string" || typeof file.size !== "number")) {
     throw new Error("格納ファイルのデータが不正です。");
@@ -208,6 +212,8 @@ function validateArchiveFiles(value: unknown): asserts value is ArchiveFile[] {
     if (!file || typeof file !== "object" || typeof file.name !== "string" || !file.name
       || file.name === "." || file.name === ".." || /[\\/\x00-\x1f\x7f]/.test(file.name)
       || !isFilePurpose(file.purpose) || !isValidFileUsages(file.purpose, file.usages) || typeof file.mimeType !== "string" || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mimeType)
+      || !isValidFileDisplayName(file.displayName)
+      || ((file.purpose === "profile" || file.purpose === "chastity") && file.displayName !== undefined)
       || (file.purpose === "profile" && !isProfilePhotoMetadata(file.name, file.mimeType))
       || !Number.isSafeInteger(file.size) || file.size < 0 || file.path !== `files/${String(index).padStart(6, "0")}`
       || names.has(`${file.purpose}/${file.name}`)) throw new Error(invalidBackupMessage);

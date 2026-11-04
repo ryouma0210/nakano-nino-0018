@@ -35,3 +35,22 @@ export function toggleEnduranceFileSelection(
       : previous.selectedKeys;
   return { ...previous, selectedKeys };
 }
+
+/** Replace the selection with a uniformly sized, unbiased sample of all files. */
+export function randomizeEnduranceFileSelection(
+  previous: EnduranceFileSelection,
+  random: () => number = Math.random,
+): EnduranceFileSelection {
+  const knownKeys = [...new Set(previous.knownKeys)];
+  if (knownKeys.length === 0) return { knownKeys, selectedKeys: [] };
+
+  const count = 1 + Math.floor(random() * Math.min(knownKeys.length, MAX_CUSTOM_MEDIA));
+  const candidates = [...knownKeys];
+  // Partial Fisher–Yates draws from the entire pool, including files past the
+  // selection limit. Keep knownKeys intact so reopening preserves exclusions.
+  for (let index = 0; index < count; index++) {
+    const chosen = index + Math.floor(random() * (candidates.length - index));
+    [candidates[index], candidates[chosen]] = [candidates[chosen], candidates[index]];
+  }
+  return { knownKeys, selectedKeys: candidates.slice(0, count) };
+}
