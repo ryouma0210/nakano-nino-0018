@@ -89,11 +89,11 @@ describe("endurance active session validation", () => {
 
   it("preserves a recovery checkpoint and custom file identities as detached snapshots", () => {
     const input = { ...current(), game: failEnduranceSlide(createEnduranceGame("custom", 2)),
-      mediaIds: ["training:second.jpg", "endurance:first.mp4"], extraTimer: startCountdown(180_000, 1000) };
+      mediaIds: ["confinement:second.jpg", "endurance:first.mp4"], extraTimer: startCountdown(180_000, 1000) };
     const session = createEnduranceSession(input, 11_000);
     input.mediaIds.reverse(); input.game.failures = 2;
     expect(session.game).toMatchObject({ recovering: true, failures: 1, failedIndex: 0 });
-    expect(session.mediaIds).toEqual(["training:second.jpg", "endurance:first.mp4"]);
+    expect(session.mediaIds).toEqual(["confinement:second.jpg", "endurance:first.mp4"]);
     expect(session.extraTimer).toMatchObject({ status: "paused", remainingMs: 170_000, deadline: null });
     expect(parseEnduranceCurrent(JSON.stringify(session))).toEqual(session);
   });

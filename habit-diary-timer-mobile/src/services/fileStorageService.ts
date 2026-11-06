@@ -2,7 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import { base64ToBlob, webFileStorage } from "./webFileStorage";
-import { fileHasPurpose, fileUsageKey, isFilePurpose, isValidFileUsages, getFileUsages, type FilePurpose, type FileUsage } from "../features/files/usages";
+import { FILE_USAGES, fileHasPurpose, fileUsageKey, isFilePurpose, isValidFileUsages, getFileUsages, type FilePurpose, type FileUsage } from "../features/files/usages";
 import { readNativeFileUsages, writeNativeFileUsages } from "./nativeFileUsages";
 import { invalidProfilePhotoMessage, isProfilePhotoMetadata, PROFILE_PHOTO_TYPES, profilePhotoMatchesSignature } from "../features/files/profilePhoto";
 import { originalFileName } from "../features/files/fileList";
@@ -309,7 +309,7 @@ async function prepareRestore(files: readonly RestoreStoredFile[]): Promise<Prep
   const previousDirectory = `${FileSystem.documentDirectory}private-room-files-previous-${token}/`;
   try {
     await FileSystem.makeDirectoryAsync(stageDirectory, { intermediates: true });
-    for (const purpose of ["training", "punishment", "endurance", "chastity", "profile"] as const) {
+    for (const purpose of [...FILE_USAGES, "chastity", "profile"] as const) {
       await FileSystem.makeDirectoryAsync(`${stageDirectory}${purpose}/`, { intermediates: true });
     }
     for (const file of files) {
@@ -432,13 +432,11 @@ export const fileStorageService = {
     }
     await ensureDirectory();
     const legacyFiles = await readFiles(uploadDirectory, "training");
-    const trainingFiles = await readFiles(purposeDirectory("training"), "training");
-    const punishmentFiles = await readFiles(purposeDirectory("punishment"), "punishment");
-    const enduranceFiles = await readFiles(purposeDirectory("endurance"), "endurance");
+    const publicFiles = (await Promise.all(FILE_USAGES.map((usage) => readFiles(purposeDirectory(usage), usage)))).flat();
     const chastityFiles = await readFiles(purposeDirectory("chastity"), "chastity");
     const profileFiles = await readFiles(purposeDirectory("profile"), "profile");
     const usages = await readNativeFileUsages(uploadDirectory);
-    return [...legacyFiles, ...trainingFiles, ...punishmentFiles, ...enduranceFiles, ...chastityFiles, ...profileFiles]
+    return [...legacyFiles, ...publicFiles, ...chastityFiles, ...profileFiles]
       .map((file) => usages[fileUsageKey(file)] ? { ...file, ...usages[fileUsageKey(file)] } : file)
       .filter((file) => !purpose || fileHasPurpose(file, purpose))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -552,9 +550,7 @@ export const fileStorageService = {
         // Private attachment directories do not participate in library deduplication.
         const existingFiles = compareContent ? (await Promise.all([
           readFiles(uploadDirectory, "training"),
-          readFiles(purposeDirectory("training"), "training"),
-          readFiles(purposeDirectory("punishment"), "punishment"),
-          readFiles(purposeDirectory("endurance"), "endurance"),
+          ...FILE_USAGES.map((usage) => readFiles(purposeDirectory(usage), usage)),
         ])).flat() : [];
         const index = importFileIndex(existingFiles);
         stored = await storeSelectedFiles(result.assets, async (asset) => {

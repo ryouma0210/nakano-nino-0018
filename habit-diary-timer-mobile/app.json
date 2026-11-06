@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nino Room",
     "slug": "habit-diary-timer-mobile",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "scheme": "habitdiarytimer",
@@ -27,12 +27,12 @@
       "expo-sharing"
     ],
     "ios": {
-      "buildNumber": "6",
+      "buildNumber": "7",
       "supportsTablet": false,
       "bundleIdentifier": "jp.local.habitdiarytimer"
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
       "package": "jp.local.habitdiarytimer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",

@@ -328,6 +328,7 @@ export default function TimerScreen() {
         />
         <PrimaryButton
           title={remaining === 0 ? "もう一度開始" : "お仕置き開始"}
+          tone="save"
           disabled={unsaved}
           onPress={start}
         />

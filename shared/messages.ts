@@ -53,6 +53,14 @@ export const roomMessages: Record<string, RoomMessages> = {
       plainMessage("マゾ犬なら、どの部屋でも私の命令が絶対よ♡"),
     ],
   },
+  // 地下の部屋一覧：app/(tabs)/basement.tsx
+  basement: {
+    lines: [
+      plainMessage("私が戻るまで、この部屋に入ってなさい。"),
+      plainMessage("いつ戻ってくるか分からないけど♡"),
+      plainMessage("心配しないで、いくら叫んでも、上にはちゃんと届かないから♡"),
+    ],
+  },
   // 二ノ様の控室：app/(tabs)/nino-room.tsx
   ninoRoom: {
     lines: [

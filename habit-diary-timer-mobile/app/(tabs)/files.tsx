@@ -41,7 +41,7 @@ import {
   storedFileKey,
 } from "@/features/files/fileList";
 
-const usageLabels: Record<FileUsage, string> = { training: "調教用", punishment: "お仕置き用", endurance: "勃起我慢用" };
+const usageLabels: Record<FileUsage, string> = { training: "調教用", punishment: "お仕置き用", endurance: "勃起我慢用", confinement: "監禁用" };
 
 export default function FilesScreen() {
   const { showError, showNotice } = useAppModal();
@@ -295,15 +295,9 @@ export default function FilesScreen() {
         />}
         header={<View style={styles.listSections}>
       <View style={styles.uploadButtons}>
-        <View style={styles.grow}>
-          <PrimaryButton title="調教用" tone="save" disabled={filesBusy} onPress={() => upload("training")} testID="file-import-training" />
-        </View>
-        <View style={styles.grow}>
-          <PrimaryButton title="お仕置き用" tone="save" disabled={filesBusy} onPress={() => upload("punishment")} testID="file-import-punishment" />
-        </View>
-        <View style={styles.grow}>
-          <PrimaryButton title="勃起我慢用" tone="save" disabled={filesBusy} onPress={() => upload("endurance")} testID="file-import-endurance" />
-        </View>
+        {FILE_USAGES.map((usage) => <View key={usage} style={styles.uploadButton}>
+          <PrimaryButton title={usageLabels[usage]} tone="save" disabled={filesBusy} onPress={() => upload(usage)} testID={`file-import-${usage}`} />
+        </View>)}
       </View>
       <AppText variant="muted">複数のファイルをまとめて選択できます。</AppText>
       <AppText variant="muted">格納後に用途を複数選べます。同じファイルを追加し直す必要はありません。</AppText>
@@ -364,6 +358,7 @@ export default function FilesScreen() {
             ["training", "調教用"],
             ["punishment", "お仕置き用"],
             ["endurance", "勃起我慢用"],
+            ["confinement", "監禁用"],
           ] as const).map(([value, label]) => (
             <Pressable
               key={value}
@@ -692,7 +687,8 @@ function VideoThumbnailPreview({ uri }: { uri: string }) {
 
 const styles = StyleSheet.create({
   importCount: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  uploadButtons: { flexDirection: "row", gap: 8 },
+  uploadButtons: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  uploadButton: { flexGrow: 1, flexBasis: 120 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   compactRow: { gap: 4, paddingTop: 5 },
   grow: { flex: 1 },

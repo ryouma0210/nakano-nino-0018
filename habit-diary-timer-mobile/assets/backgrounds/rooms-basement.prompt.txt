@@ -1,0 +1,5 @@
+Tool: built-in image_gen
+Asset: rooms-basement.png
+Purpose: Basement menu background
+
+Use case: stylized-concept. Asset type: background illustration for the basement menu of a dark gothic mansion mobile game. Primary request: a beautiful empty underground corridor beneath a luxurious gothic mansion. Scene: stone stairs descending into a vaulted stone hallway, dark carved wooden doors, a few warm wall lamps, subtly reflective worn stone floor. Style: polished Japanese visual-novel background art, architectural detail, cinematic perspective, elegant and mysterious rather than horror. Lighting: low amber lamps with restrained burgundy and cool charcoal shadows, enough light to read the architecture clearly. Composition: landscape 3:2, central corridor and doorway remain readable in a narrow phone crop, clean scene without text or UI. Constraints: no people, no characters, no restraints, no weapons, no blood, no sexual objects, no logos or watermark.

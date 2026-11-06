@@ -118,9 +118,9 @@ describe("IndexedDB media storage", () => {
     const [original] = await service.list();
     const add = vi.spyOn(IDBObjectStore.prototype, "add");
     const put = vi.spyOn(IDBObjectStore.prototype, "put");
-    await service.setUsages(original, ["training", "punishment", "endurance"]);
+    await service.setUsages(original, ["training", "punishment", "endurance", "confinement"]);
     const [shared] = await service.list();
-    expect(shared).toEqual({ ...original, usages: ["training", "punishment", "endurance"] });
+    expect(shared).toEqual({ ...original, usages: ["training", "punishment", "endurance", "confinement"] });
     expect(await (await service.getBlob(shared)).text()).toBe("original");
     expect(add).not.toHaveBeenCalled();
     expect(put.mock.contexts.every((store) => (store as IDBObjectStore).name === "metadata")).toBe(true);
@@ -308,10 +308,10 @@ describe("atomic file restoration", () => {
     await service.put({ ...file("same.mp4", "old"), usages: ["punishment", "endurance"] });
     await service.put(file("same.mp4", "other", "punishment"));
     const originals = await service.list();
-    const prepared = await service.prepareRestore([{ ...file("same.mp4", "new", "endurance"), usages: ["training", "endurance"] }]);
+    const prepared = await service.prepareRestore([{ ...file("same.mp4", "new", "confinement"), usages: ["training", "confinement"] }]);
     await prepared.activate();
-    expect(await service.list()).toEqual([expect.objectContaining({ purpose: "endurance", usages: ["training", "endurance"] })]);
-    await expect(service.setUsages({ purpose: "endurance", name: "same.mp4" }, ["training"])).rejects.toThrow("処理中");
+    expect(await service.list()).toEqual([expect.objectContaining({ purpose: "confinement", usages: ["training", "confinement"] })]);
+    await expect(service.setUsages({ purpose: "confinement", name: "same.mp4" }, ["training"])).rejects.toThrow("処理中");
     await prepared.rollback();
     expect(await service.list()).toEqual(originals);
     await service.remove(originals.find((item) => item.purpose === "training")!);

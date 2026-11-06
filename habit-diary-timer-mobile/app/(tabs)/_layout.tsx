@@ -13,6 +13,7 @@ export default function TabLayout() {
         <Stack.Screen name="index" options={{ title: t("ホーム") }} />
         <Stack.Screen name="tasks" options={{ title: t("タスク") }} />
         <Stack.Screen name="rooms" options={{ title: t("廊下") }} />
+        <Stack.Screen name="basement" options={{ title: t("地下") }} />
         <Stack.Screen name="games" options={{ title: t("ゲーム部屋") }} />
         <Stack.Screen name="rhythm-challenge" options={{ title: t("寸止め耐久チャレンジ") }} />
         <Stack.Screen name="sugoroku" options={{ title: t("すごろく") }} />
@@ -40,6 +41,7 @@ export default function TabLayout() {
         <Stack.Screen name="report" options={{ title: t("週間報告部屋") }} />
         <Stack.Screen name="report-details" options={{ title: t("集計の内訳") }} />
         <Stack.Screen name="contract" options={{ title: t("契約部屋") }} />
+        <Stack.Screen name="timer-room" options={{ title: t("監禁部屋") }} />
         <Stack.Screen name="files" options={{ title: t("ファイル格納部屋") }} />
         <Stack.Screen name="voices" options={{ title: t("ボイス格納") }} />
         <Stack.Screen name="settings" options={{ title: t("アプリ設定") }} />

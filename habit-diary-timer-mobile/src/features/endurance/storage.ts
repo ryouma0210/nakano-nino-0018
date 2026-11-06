@@ -47,7 +47,7 @@ export function isValidEnduranceSession(value: unknown): value is EnduranceSessi
   if (!Array.isArray(value.mediaIds) || value.mediaIds.length !== game.total || value.mediaIds.length > MAX_CUSTOM_MEDIA
     || new Set(value.mediaIds).size !== value.mediaIds.length
     || !value.mediaIds.every((id) => typeof id === "string" && (game.preset === "custom"
-      ? /^(?:training|punishment|endurance):[^/\\\u0000-\u001f]{1,1024}$/u.test(id)
+      ? /^(?:training|punishment|endurance|confinement):[^/\\\u0000-\u001f]{1,1024}$/u.test(id)
       : Array.from({ length: Number(game.total) }, (_, index) => `${game.preset}-${index + 1}`).includes(id)))) return false;
   if (!isSavedCountdown(value.slideTimer, SLIDE_DURATION_MS) || !isSavedCountdown(value.extraTimer, RECOVERY_DURATION_MS)) return false;
   const progress = value.videoProgress;

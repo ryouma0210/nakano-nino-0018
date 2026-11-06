@@ -7,6 +7,11 @@ import { RoomConversation } from "@/components/RoomConversation";
 import { useDesktopLayout } from "@/hooks/useDesktopLayout";
 import { DESKTOP_CONTENT_MAX_WIDTH, desktopConversationWidth } from "@/utils/desktopLayout";
 
+/** Explicitly place non-conversation content in the desktop screen's left pane. */
+export function ScreenSidePanel({ children }: PropsWithChildren) {
+  return <>{children}</>;
+}
+
 export function Screen({
   children,
   style,
@@ -16,10 +21,10 @@ export function Screen({
   const hasBottomNavigation = useHasBottomNavigation();
   const { isDesktop, width } = useDesktopLayout();
   const items = Children.toArray(children);
-  // Only an explicit, direct RoomConversation child opts into two panes.
+  // Only an explicit, direct RoomConversation or ScreenSidePanel child opts into two panes.
   // Fragments and nested components retain their existing layout.
   const conversationIndex = desktopLayout === "auto"
-    ? items.findIndex((item) => isValidElement(item) && item.type === RoomConversation)
+    ? items.findIndex((item) => isValidElement(item) && (item.type === RoomConversation || item.type === ScreenSidePanel))
     : -1;
   const hasConversation = conversationIndex >= 0;
   const split = isDesktop && hasConversation;

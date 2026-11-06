@@ -48,7 +48,7 @@ const templates = translationTemplates.map((entry) => {
       slots.push(Number(part.slice(1, -1)));
       const following = parts[index + 1] ?? "";
       const preceding = parts[index - 1] ?? "";
-      if (/^(pt|Pt|回|秒|分|日|か月|個|列|種類|体|枚|倍|位|レベル|HP|MP)/.test(following) || /(Lv\.|MP|HP|あと)$/.test(preceding)) {
+      if (/^(pt|Pt|回|秒|分|時間|日|か月|個|列|種類|体|枚|倍|位|レベル|HP|MP)/.test(following) || /(Lv\.|MP|HP|あと)$/.test(preceding)) {
         return "\\s*?(-?\\d[\\d,]*(?:\\.\\d+)?)\\s*?";
       }
       return "(.*?)";
@@ -88,7 +88,7 @@ export function translateWeekday(day: number, language: AppLanguage): string {
 
 function inflectTemplate(template: string, values: ReadonlyMap<number, string>, language: AppLanguage) {
   if (language !== "en") return template;
-  return template.replace(/\{(\d+)\}( more)? (times|days|months|years|items|files|columns|weak spots|levels)\b( were)?/g, (match, slot: string, more: string | undefined, unit: string, verb: string | undefined) =>
+  return template.replace(/\{(\d+)\}( more)? (times|hours|days|months|years|items|files|columns|weak spots|levels)\b( were)?/g, (match, slot: string, more: string | undefined, unit: string, verb: string | undefined) =>
     values.get(Number(slot)) === "1" ? `{${slot}}${more ?? ""} ${unit.slice(0, -1)}${verb ? " was" : ""}` : match);
 }
 

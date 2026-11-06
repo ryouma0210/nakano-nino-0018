@@ -18,6 +18,7 @@ export type ConversationLine = {
 };
 
 type Props = {
+  testID?: string;
   roomName: string;
   lines?: ConversationLine[];
   contractLines?: ConversationLine[];
@@ -33,6 +34,7 @@ const defaultLines: ConversationLine[] = [
 ];
 
 export function RoomConversation({
+  testID,
   roomName,
   lines,
   contractLines = [],
@@ -100,6 +102,7 @@ export function RoomConversation({
 
   return (
     <Pressable
+      testID={testID}
       onPress={next}
       style={({ pressed }) => [
         styles.panel,

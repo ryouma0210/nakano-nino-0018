@@ -467,7 +467,7 @@ describe("private profile photo storage", () => {
     vi.resetModules();
     ({ fileStorageService } = await import("./fileStorageService"));
     expect((await fileStorageService.list("profile")).map((file) => file.name)).toEqual([stored.name]);
-    for (const purpose of ["training", "punishment", "endurance", "chastity"] as const) {
+    for (const purpose of ["training", "punishment", "endurance", "confinement", "chastity"] as const) {
       expect(await fileStorageService.list(purpose)).toEqual([]);
     }
     expect(await fileStorageService.list()).toHaveLength(1);
@@ -681,13 +681,15 @@ describe("web file imports", () => {
 });
 
 describe("content-aware file imports", () => {
-  it("skips native identical content across usages and within a batch, preserving changed and differently named files", async () => {
+  it.each([
+    ["training", "confinement"], ["confinement", "training"],
+  ] as const)("deduplicates native %s files when importing to %s, preserving changed content", async (storedPurpose, importPurpose) => {
     installNativeRestoreFileSystem();
     const timestamp = 1_800_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(timestamp);
     const name = `${timestamp}_0_clip.mp4`;
     await fileStorageService.restoreFromBackup([
-      { name, size: 3, purpose: "training", usages: ["endurance"], mimeType: "video/mp4", data: "b2xk" },
+      { name, size: 3, purpose: storedPurpose, usages: ["endurance"], mimeType: "video/mp4", data: "b2xk" },
     ]);
     const [original] = await fileStorageService.list();
     const sources = [
@@ -704,7 +706,7 @@ describe("content-aware file imports", () => {
     });
     mocks.pick.mockResolvedValue({ canceled: false, assets });
     const onProgress = vi.fn();
-    await expect(fileStorageService.pickAndStore("training", onProgress)).resolves.toEqual({
+    await expect(fileStorageService.pickAndStore(importPurpose, onProgress)).resolves.toEqual({
       stored: 3, skipped: ["clip.mp4", "clip.mp4"], failed: [],
     });
     const files = await fileStorageService.list();
@@ -779,15 +781,17 @@ describe("content-aware file imports", () => {
     expect((await fileStorageService.list()).filter((file) => file.name.endsWith("changed.mp4"))).toHaveLength(1);
   });
 
-  it("skips matching browser blobs across usages and within a batch while preserving same-size changes", async () => {
+  it.each([
+    ["training", "confinement"], ["confinement", "training"],
+  ] as const)("deduplicates browser %s files when importing to %s, preserving same-size changes", async (storedPurpose, importPurpose) => {
     const web = createWebPicker();
     const timestamp = 1_800_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(timestamp);
     await fileStorageService.restoreFromBackup([
-      { name: `${timestamp}_0_clip.mp4`, size: 3, purpose: "training", usages: ["endurance"], mimeType: "video/mp4", data: "b2xk" },
+      { name: `${timestamp}_0_clip.mp4`, size: 3, purpose: storedPurpose, usages: ["endurance"], mimeType: "video/mp4", data: "b2xk" },
     ]);
     const [original] = await fileStorageService.list();
-    const result = fileStorageService.pickAndStore("training");
+    const result = fileStorageService.pickAndStore(importPurpose);
     expect(web.input.click).toHaveBeenCalledOnce();
     web.input.files = [
       new File(["old"], "clip.mp4", { type: "video/mp4" }),
@@ -1035,17 +1039,17 @@ describe("prepared file restoration", () => {
     const { oldFile } = installNativeRestoreFileSystem();
     const [original] = await fileStorageService.list("training");
     expect(original.uri).toBe(oldFile);
-    await fileStorageService.setUsages(original, ["training", "punishment", "endurance"]);
+    await fileStorageService.setUsages(original, ["training", "punishment", "endurance", "confinement"]);
     const [shared] = await fileStorageService.list();
-    expect(shared).toEqual({ ...original, usages: ["training", "punishment", "endurance"] });
-    for (const purpose of ["training", "punishment", "endurance"] as const) expect(await fileStorageService.list(purpose)).toEqual([shared]);
+    expect(shared).toEqual({ ...original, usages: ["training", "punishment", "endurance", "confinement"] });
+    for (const purpose of ["training", "punishment", "endurance", "confinement"] as const) expect(await fileStorageService.list(purpose)).toEqual([shared]);
     expect(await fileStorageService.totalSize()).toBe(original.size);
     expect(mocks.copy).not.toHaveBeenCalled();
     expect(mocks.move.mock.calls.every(([{ from, to }]) => from.includes(".usages/") && to.includes(".usages/"))).toBe(true);
     expect(nativeFiles.get(oldFile)).toBe("old");
     vi.resetModules();
     ({ fileStorageService } = await import("./fileStorageService"));
-    expect(await fileStorageService.list("endurance")).toEqual([shared]);
+    expect(await fileStorageService.list("confinement")).toEqual([shared]);
     await fileStorageService.setUsages(shared, ["endurance"]);
     expect(await fileStorageService.list("training")).toEqual([]);
     expect((await fileStorageService.list("endurance"))[0].uri).toBe(oldFile);
@@ -1082,11 +1086,11 @@ describe("prepared file restoration", () => {
     const [old] = await fileStorageService.list();
     await fileStorageService.setUsages(old, ["punishment", "endurance"]);
     const originals = await fileStorageService.list();
-    const restored = { ...replacement, purpose: "endurance" as const, usages: ["training", "endurance"] as ("training" | "endurance")[] };
+    const restored = { ...replacement, purpose: "confinement" as const, usages: ["training", "confinement"] as ("training" | "confinement")[] };
     const prepared = await fileStorageService.prepareRestore([restored]);
     expect(await fileStorageService.list()).toEqual(originals);
     await prepared.activate();
-    expect(await fileStorageService.list("training")).toEqual([expect.objectContaining({ name: "new.mp4", purpose: "endurance", usages: ["training", "endurance"] })]);
+    expect(await fileStorageService.list("training")).toEqual([expect.objectContaining({ name: "new.mp4", purpose: "confinement", usages: ["training", "confinement"] })]);
     await prepared.rollback();
     expect(await fileStorageService.list()).toEqual(originals);
     expect(await fileStorageService.list("training")).toEqual([]);
