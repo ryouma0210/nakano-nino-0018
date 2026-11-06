@@ -3,6 +3,9 @@
 export type TranslationTemplate = readonly [source: string, en: string, ko: string, zh: string, rawSlots?: readonly number[]];
 
 export const translationTemplates: readonly TranslationTemplate[] = [
+  ["セット {0}", "Set {0}", "세트 {0}", "组合 {0}"],
+  ["{0}時間", "{0} hours", "{0}시간", "{0}小时"],
+  ["{0}時間30分", "{0} hours 30 min", "{0}시간 30분", "{0}小时30分钟"],
   ["累計{0}Pt達成", "{0} total earned Pt reached", "누적 {0}Pt 달성", "累计获得{0}Pt"],
   ["累計獲得：{0}Pt", "Total earned: {0} Pt", "누적 획득: {0}Pt", "累计获得：{0}Pt"],
   ["次の解放まであと{0}Pt", "{0} Pt until the next message", "다음 해제까지 {0}Pt", "距离下次解锁还差{0}Pt"],
@@ -105,6 +108,7 @@ export const translationTemplates: readonly TranslationTemplate[] = [
   ["{0}にビンタ", "Slap: {0}", "{0} 때리기", "拍打{0}"],
   ["格納ファイル {0}/{1}", "Stored file {0}/{1}", "보관 파일 {0}/{1}", "本地文件 {0}/{1}"],
   ["格納ファイル ({0})", "Stored files ({0})", "보관 파일 ({0})", "本地文件（{0}）"],
+  ["デフォルト動画 ({0})", "Default Video ({0})", "기본 영상 ({0})", "默认视频（{0}）"],
   ["{0}を削除", "Delete {0}", "{0} 삭제", "删除{0}", [0]],
   ["{0}列", "{0} columns", "{0}열", "{0}列"],
   ["画像を保存できます。", "You can save images.", "이미지를 저장할 수 있습니다.", "可保存图片。"],

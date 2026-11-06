@@ -10,6 +10,7 @@ import { HomePointsCard } from "@/features/points/HomePointsCard";
 const rooms = [
   ["本日のタスク", "/(tabs)/tasks"],
   ["部屋に移動（廊下）", "/(tabs)/rooms"],
+  ["部屋に移動（地下）", "/(tabs)/basement"],
   ["ゲーム部屋", "/(tabs)/games"],
   ["二ノ様の控室", "/(tabs)/nino-room"],
   ["館の外へ", "/(tabs)/outside"],
@@ -40,18 +41,21 @@ export default function HomeScreen() {
                 tone={
                   href === "/(tabs)/tasks"
                     ? "order"
-                    : href === "/(tabs)/games"
-                      ? "preparation"
-                      : href.includes("section=record")
-                        ? "secondary"
-                        : href.includes("section=management")
+                    : href === "/(tabs)/basement"
+                      ? "punishment"
+                      : href === "/(tabs)/games"
+                        ? "preparation"
+                        : href.includes("section=record")
                           ? "secondary"
-                          : href === "/(tabs)/outside"
-                            ? "collection"
-                            : href === "/(tabs)/nino-room"
-                              ? "defeat"
-                              : "contract"
+                          : href.includes("section=management")
+                            ? "secondary"
+                            : href === "/(tabs)/outside"
+                              ? "collection"
+                              : href === "/(tabs)/nino-room"
+                                ? "defeat"
+                                : "contract"
                 }
+                testID={href === "/(tabs)/rooms" ? "home-hallway" : href === "/(tabs)/basement" ? "home-basement" : undefined}
                 onPress={() => router.push(href)}
               />
             </View>

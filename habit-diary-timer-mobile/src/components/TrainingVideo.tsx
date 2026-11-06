@@ -516,7 +516,7 @@ export function TrainingVideo({
             <AppText variant="muted">
               難易度を選択してから開始してください。
             </AppText>
-            <PrimaryButton title="調教開始" disabled={disabled} onPress={startTraining} />
+            <PrimaryButton title="調教開始" tone="save" disabled={disabled} onPress={startTraining} />
           </>
         ) : (
           <AppText style={styles.startedText}>

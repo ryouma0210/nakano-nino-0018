@@ -19,6 +19,7 @@ const roomItems = [
   ["お仕置き部屋", "/(tabs)/timer"],
   ["ゲーム部屋", "/(tabs)/games"],
   ["契約部屋", "/(tabs)/contract"],
+  ["地下へ移動", "/(tabs)/basement"],
 ] as const;
 
 export default function RoomsScreen() {
@@ -60,7 +61,7 @@ export default function RoomsScreen() {
                 ? "defeatRoom"
                 : href === "/(tabs)/brainwash"
                   ? "defeat"
-                : href === "/(tabs)/timer"
+                : href === "/(tabs)/timer" || href === "/(tabs)/basement"
                   ? "punishment"
                 : href === "/(tabs)/contract"
                   ? "contract"

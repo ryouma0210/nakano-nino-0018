@@ -25,7 +25,7 @@ const destinations = [
   { id: "mypage", label: "マイページ", accessibilityLabel: "マイページ", icon: "person-circle-outline", href: "/(tabs)/mypage" },
 ] as const;
 
-const roomScreens = new Set(["rooms", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello", "endurance", "rhythm-challenge"]);
+const roomScreens = new Set(["rooms", "basement", "timer-room", "habits", "timer", "preparation", "defeat", "brainwash", "management", "orders", "contract", "games", "sugoroku", "othello", "endurance", "rhythm-challenge"]);
 const recordScreens = new Set(["records", "tribute", "disposal-history", "chastity-history", "rewards", "collection", "today", "report", "report-details"]);
 const managementScreens = new Set(["loop-audio", "files", "voices", "settings", "custom-orders", "manual", "external-links", "slave-contract"]);
 const BottomNavigationVisibleContext = createContext(false);
@@ -88,15 +88,17 @@ export function BottomNavigationLayout({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const keyboardVisible = useKeyboardVisible();
   const { isDesktop } = useDesktopLayout();
-  const isOutside = pathname.split("/").filter(Boolean).at(-1) === "outside";
-  const showNavigation = !isOutside && (isDesktop || !keyboardVisible);
+  const currentScreen = pathname.split("/").filter(Boolean).at(-1);
+  const isOutside = currentScreen === "outside";
+  const isTimerRoom = currentScreen === "timer-room";
+  const showNavigation = !isOutside && !isTimerRoom && (isDesktop || !keyboardVisible);
   return (
     <BottomNavigationVisibleContext.Provider value={showNavigation && !isDesktop}>
       <View style={[styles.layout, isDesktop && styles.desktopLayout]}>
         <View style={styles.content}>
           {children}
-          {!isOutside ? <LoopAudioMiniPlayer bottomInset={!showNavigation || isDesktop} /> : null}
-          <VoiceMiniPlayer bottomInset={!showNavigation || isDesktop} />
+          {!isOutside && !isTimerRoom ? <LoopAudioMiniPlayer bottomInset={!showNavigation || isDesktop} /> : null}
+          {!isTimerRoom ? <VoiceMiniPlayer bottomInset={!showNavigation || isDesktop} /> : null}
         </View>
         {showNavigation ? <BottomNavigation sidebar={isDesktop} /> : null}
       </View>

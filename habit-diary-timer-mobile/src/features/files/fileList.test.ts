@@ -8,13 +8,14 @@ function file(name: string, purpose: StoredFile["purpose"] = "training", size = 
 
 describe("stored file list", () => {
   it("uses editable usages without changing stable identity or exposing private daily photos", () => {
-    const shared = { ...file("shared.mp4"), usages: ["punishment", "endurance"] as const };
+    const shared = { ...file("shared.mp4"), usages: ["punishment", "endurance", "confinement"] as const };
     const stored: StoredFile = { ...shared, usages: [...shared.usages] };
     const privatePhoto = file("daily.png", "chastity");
     const profilePhoto = file("profile.png", "profile");
     expect(filterAndSortFiles([stored, privatePhoto], "training", "", "name")).toEqual([]);
     expect(filterAndSortFiles([stored, privatePhoto], "punishment", "", "name")).toEqual([stored]);
     expect(filterAndSortFiles([stored, privatePhoto], "endurance", "", "name")).toEqual([stored]);
+    expect(filterAndSortFiles([stored, privatePhoto, profilePhoto], "confinement", "", "name")).toEqual([stored]);
     expect(filterAndSortFiles([stored, privatePhoto, profilePhoto], "all", "", "name")).toEqual([stored]);
     expect(filterAndSortFiles([profilePhoto], "training", "", "name")).toEqual([]);
     expect(storedFileKey(stored)).toBe("training:shared.mp4");

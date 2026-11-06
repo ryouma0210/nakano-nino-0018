@@ -59,6 +59,20 @@ describe("translateText", () => {
     expect(translateText("  画像\n", "ko")).toBe("  이미지\n");
   });
 
+  it.each(languages)("translates every half-hour timer option through one day in %s", (language) => {
+    for (let minutes = 30; minutes <= 1440; minutes += 30) {
+      const hours = Math.floor(minutes / 60), halfHour = minutes % 60 !== 0;
+      const source = minutes === 1440 ? "24時間（1日）" : hours === 0 ? "30分"
+        : halfHour ? `${hours}時間30分` : `${hours}時間`;
+      const expected = language === "en"
+        ? minutes === 1440 ? "24 hours (1 day)" : hours === 0 ? "30 min" : `${hours} ${hours === 1 ? "hour" : "hours"}${halfHour ? " 30 min" : ""}`
+        : language === "ko"
+          ? minutes === 1440 ? "24시간 (1일)" : hours === 0 ? "30분" : `${hours}시간${halfHour ? " 30분" : ""}`
+          : minutes === 1440 ? "24小时（1天）" : hours === 0 ? "30分钟" : `${hours}小时${halfHour ? "30分钟" : ""}`;
+      expect(translateText(source, language)).toBe(expected);
+    }
+  });
+
   it.each([
     ["ja", (rank: number) => `${rank}位`],
     ["en", (rank: number) => `#${rank}`],

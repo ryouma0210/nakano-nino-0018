@@ -1,4 +1,4 @@
-export const FILE_USAGES = ["training", "punishment", "endurance"] as const;
+export const FILE_USAGES = ["training", "punishment", "endurance", "confinement"] as const;
 export type FileUsage = typeof FILE_USAGES[number];
 /** The physical location is also the stable identity used by existing records. */
 export type FilePurpose = FileUsage | "chastity" | "profile";

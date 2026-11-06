@@ -16,6 +16,7 @@ import { AppModalProvider } from "@/components/AppModalProvider";
 import { AppToastProvider } from "@/components/AppToastProvider";
 import { appendWebErrorLog } from "@/utils/webErrorLog";
 import { LoopAudioMiniPlayer } from "@/components/LoopAudioMiniPlayer";
+import { TimerRoomResumeGuard } from "@/components/TimerRoomResumeGuard";
 
 type ErrorHandler = (error: Error, isFatal?: boolean) => void;
 type ErrorUtilsApi = { getGlobalHandler?: () => ErrorHandler; setGlobalHandler: (handler: ErrorHandler) => void };
@@ -116,6 +117,7 @@ function RootContent() {
           <AppToastProvider>
             <StatusBar style="light" />
             <Stack screenOptions={{ headerShown: false }} />
+            <TimerRoomResumeGuard />
             <NonTabAudioPlayer />
           </AppToastProvider>
           </AppModalProvider>

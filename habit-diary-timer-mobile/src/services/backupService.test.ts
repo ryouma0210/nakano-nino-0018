@@ -253,7 +253,7 @@ describe("bounded backup export and import", () => {
 
   it.each(["android", "web"])("exports shared media once and round-trips its display name, usages and physical identity on %s", async (platform) => {
     mocks.platform.OS = platform;
-    const shared = { name: "shared.mp4", displayName: "My favorite / evening video", purpose: "training", usages: ["training", "punishment", "endurance"], size: 3, uri: "file:///shared.mp4" };
+    const shared = { name: "shared.mp4", displayName: "My favorite / evening video", purpose: "training", usages: ["training", "punishment", "endurance", "confinement"], size: 3, uri: "file:///shared.mp4" };
     mocks.list.mockResolvedValue([shared]);
     mocks.sources.set(shared.uri, encoder.encode("one"));
     await backupService.export("complete");
@@ -279,6 +279,7 @@ describe("bounded backup export and import", () => {
     payload.files = [
       { name: "old.mp4", purpose: "training", size: 3, mimeType: "video/mp4", data: "b25l" },
       { name: "new.mp4", displayName: "New display name", purpose: "endurance", usages: ["training", "endurance"], size: 3, mimeType: "video/mp4", data: "b25l" },
+      { name: "room.mp4", purpose: "confinement", usages: ["training", "confinement"], size: 3, mimeType: "video/mp4", data: "b25l" },
     ];
     await backupService.restore(payload);
     expect(mocks.prepare).toHaveBeenCalledWith(payload.files);

@@ -4,9 +4,9 @@ import { createFileListPreferenceStore, DEFAULT_FILE_LIST_PREFERENCES, FILE_LIST
 describe("file list preferences", () => {
   it("restores each display choice without carrying search terms or selections", () => {
     expect(parseFileListPreferences(JSON.stringify({
-      version: 1, purpose: "endurance", sort: "size", columns: 1,
+      version: 1, purpose: "confinement", sort: "size", columns: 1,
       search: "private name", selectedKeys: ["training:file.mp4"],
-    }))).toEqual({ purpose: "endurance", sort: "size", columns: 1 });
+    }))).toEqual({ purpose: "confinement", sort: "size", columns: 1 });
   });
 
   it("keeps valid choices while rejecting private-purpose filters and invalid column counts", () => {
